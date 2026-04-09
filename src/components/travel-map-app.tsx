@@ -6,8 +6,8 @@ import { MapView } from "@/components/map-view";
 import {
   countByStatus,
   filterPlaces,
+  getAvailableCategories,
   getAreas,
-  getCategories,
 } from "@/lib/filtering";
 import type { Place, PlaceFilterState } from "@/lib/place";
 
@@ -57,15 +57,21 @@ export function TravelMapApp({
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(
     places[0]?.id ?? null,
   );
-  const [openMapPlaceId, setOpenMapPlaceId] = useState<string | null>(
-    places[0]?.id ?? null,
-  );
+  const [openMapPlaceId, setOpenMapPlaceId] = useState<string | null>(null);
 
   useEffect(() => {
     setFilters(initialFilters);
   }, [initialFilters]);
 
-  const categories = useMemo(() => getCategories(places), [places]);
+  const categories = useMemo(
+    () =>
+      getAvailableCategories(places, {
+        status: filters.status,
+        area: filters.area,
+        loved: filters.loved,
+      }),
+    [places, filters.area, filters.loved, filters.status],
+  );
   const areas = useMemo(() => getAreas(places), [places]);
   const counts = useMemo(() => countByStatus(places), [places]);
   const filteredPlaces = useMemo(
@@ -80,6 +86,15 @@ export function TravelMapApp({
   }, [filteredPlaces, selectedPlaceId]);
 
   useEffect(() => {
+    if (filters.category !== "all" && !categories.includes(filters.category)) {
+      commitFilters({
+        ...filters,
+        category: "all",
+      });
+    }
+  }, [categories, filters]);
+
+  useEffect(() => {
     if (openMapPlaceId && !filteredPlaces.some((place) => place.id === openMapPlaceId)) {
       setOpenMapPlaceId(null);
     }
@@ -87,6 +102,10 @@ export function TravelMapApp({
 
   useEffect(() => {
     if (!selectedPlaceId) {
+      return;
+    }
+
+    if (!window.matchMedia("(min-width: 1081px)").matches) {
       return;
     }
 

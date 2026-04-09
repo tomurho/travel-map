@@ -4,6 +4,20 @@ export function getCategories(places: Place[]) {
   return Array.from(new Set(places.map((place) => place.category))).sort();
 }
 
+export function getAvailableCategories(
+  places: Place[],
+  filters: Omit<PlaceFilterState, "category">,
+) {
+  return Array.from(
+    new Set(
+      filterPlaces(places, {
+        ...filters,
+        category: "all",
+      }).map((place) => place.category),
+    ),
+  ).sort();
+}
+
 export function getAreas(places: Place[]) {
   return Array.from(
     new Set(
