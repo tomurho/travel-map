@@ -52,7 +52,9 @@ function normalizeStatus(value: string): PlaceStatus | null {
     normalized === "been" ||
     normalized === "visited" ||
     normalized === "been to" ||
-    normalized === "done"
+    normalized === "done" ||
+    normalized === "loved" ||
+    normalized === "loved it"
   ) {
     return "been";
   }
@@ -92,7 +94,9 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
     "Location Name",
     "name",
     "location",
+    "Location",
   ]);
+  const city = readText(row, ["city", "City"]) || "Uncategorized";
   const category =
     readText(row, ["category", "Category", "Verified Category", "type"]) ||
     "Uncategorized";
@@ -108,6 +112,8 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
   const address = readText(row, ["address", "Address"]);
   const latitude = readNumber(row, ["latitude", "Latitude", "lat"]);
   const longitude = readNumber(row, ["longitude", "Longitude", "lng", "lon"]);
+  const tabelog = readText(row, ["tabelog", "Tabelog"]);
+  const subway = readText(row, ["subway", "Subway"]);
 
   if (!name) {
     return { ok: false, reason: "Missing location name." };
@@ -123,7 +129,7 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
   }
 
   const loved = normalizeLoved(
-    readText(row, ["loved it", "Loved it", "loved", "favorite"]),
+    readText(row, ["loved it", "Loved it", "loved", "favorite"]) || statusRaw,
     status,
   );
   const coordinateFallback = `${latitude.toFixed(4)}-${longitude.toFixed(4)}`;
@@ -136,6 +142,7 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
     place: {
       id: slugify(idBase) || coordinateFallback,
       name,
+      city,
       category,
       status,
       loved,
@@ -143,6 +150,8 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
       address,
       latitude,
       longitude,
+      tabelog,
+      subway,
     },
   };
 }

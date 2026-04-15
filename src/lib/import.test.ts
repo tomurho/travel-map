@@ -5,6 +5,7 @@ import { normalizePlaceRow, normalizePlaces } from "@/lib/import";
 test("normalizePlaceRow parses been rows with loved flag", () => {
   const result = normalizePlaceRow({
     "location name": "Tiong Bahru Bakery",
+    City: "Singapore",
     category: "Cafe",
     status: "Been To",
     "loved it": "Yes",
@@ -16,6 +17,7 @@ test("normalizePlaceRow parses been rows with loved flag", () => {
 
   assert.equal(result.ok, true);
   if (result.ok) {
+    assert.equal(result.place.city, "Singapore");
     assert.equal(result.place.status, "been");
     assert.equal(result.place.loved, true);
     assert.equal(result.place.latitude, 1.2854);
@@ -36,6 +38,47 @@ test("normalizePlaceRow blanks loved for want to go rows", () => {
   if (result.ok) {
     assert.equal(result.place.status, "want_to_go");
     assert.equal(result.place.loved, null);
+  }
+});
+
+test("normalizePlaceRow treats status loved it as been and loved", () => {
+  const result = normalizePlaceRow({
+    "Location Name": "Astea",
+    City: "Taipei",
+    "Verified Category": "Tea house",
+    Status: "Loved it",
+    Area: "Daan",
+    Address: "No. 1, Taipei",
+    Latitude: 25.03,
+    Longitude: 121.53,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.place.status, "been");
+    assert.equal(result.place.loved, true);
+  }
+});
+
+test("normalizePlaceRow imports Kyoto metadata", () => {
+  const result = normalizePlaceRow({
+    "Location Name": "京極かねよ (Kaneyo)",
+    City: "Kyoto",
+    "Verified Category": "Unagi",
+    Status: "Been to",
+    Area: "Nakagyo Ward",
+    Address: "京都市中京区新京極六角",
+    Subway: "Kyoto Shiyakusho-mae Sta.",
+    Tabelog: 3.49,
+    Latitude: 35.00759227,
+    Longitude: 135.76794884,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.place.city, "Kyoto");
+    assert.equal(result.place.subway, "Kyoto Shiyakusho-mae Sta.");
+    assert.equal(result.place.tabelog, "3.49");
   }
 });
 

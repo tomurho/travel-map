@@ -35,6 +35,7 @@ export default async function Home({ searchParams }: PageProps) {
   const loved = readLoved(readSearchParam(params.loved));
 
   const initialFilters: PlaceFilterState = {
+    city: readSearchParam(params.city) ?? "all",
     status,
     category: readSearchParam(params.category) ?? "all",
     area: readSearchParam(params.area) ?? "all",

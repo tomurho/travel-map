@@ -4,6 +4,7 @@ export type LovedFilter = "all" | "loved" | "unrated";
 export interface Place {
   id: string;
   name: string;
+  city: string;
   category: string;
   status: PlaceStatus;
   loved: boolean | null;
@@ -11,9 +12,12 @@ export interface Place {
   address: string;
   latitude: number;
   longitude: number;
+  tabelog: string;
+  subway: string;
 }
 
 export interface PlaceFilterState {
+  city: string | "all";
   status: PlaceStatus | "all";
   category: string | "all";
   area: string | "all";

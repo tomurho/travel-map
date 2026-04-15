@@ -4,6 +4,10 @@ export function getCategories(places: Place[]) {
   return Array.from(new Set(places.map((place) => place.category))).sort();
 }
 
+export function getCities(places: Place[]) {
+  return Array.from(new Set(places.map((place) => place.city))).sort();
+}
+
 export function getAvailableCategories(
   places: Place[],
   filters: Omit<PlaceFilterState, "category">,
@@ -28,8 +32,28 @@ export function getAreas(places: Place[]) {
   ).sort();
 }
 
+export function getAvailableAreas(
+  places: Place[],
+  filters: Omit<PlaceFilterState, "area">,
+) {
+  return Array.from(
+    new Set(
+      filterPlaces(places, {
+        ...filters,
+        area: "all",
+      })
+        .map((place) => place.district)
+        .filter((district) => district.trim().length > 0),
+    ),
+  ).sort();
+}
+
 export function filterPlaces(places: Place[], filters: PlaceFilterState) {
   return places.filter((place) => {
+    if (filters.city !== "all" && place.city !== filters.city) {
+      return false;
+    }
+
     if (filters.status !== "all" && place.status !== filters.status) {
       return false;
     }

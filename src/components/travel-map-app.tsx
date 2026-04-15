@@ -6,8 +6,9 @@ import { MapView } from "@/components/map-view";
 import {
   countByStatus,
   filterPlaces,
+  getAvailableAreas,
   getAvailableCategories,
-  getAreas,
+  getCities,
 } from "@/lib/filtering";
 import type { Place, PlaceFilterState } from "@/lib/place";
 
@@ -17,6 +18,7 @@ type TravelMapAppProps = {
 };
 
 const defaultFilters: PlaceFilterState = {
+  city: "all",
   status: "all",
   category: "all",
   area: "all",
@@ -25,6 +27,10 @@ const defaultFilters: PlaceFilterState = {
 
 function buildQuery(filters: PlaceFilterState) {
   const params = new URLSearchParams();
+
+  if (filters.city !== "all") {
+    params.set("city", filters.city);
+  }
 
   if (filters.status !== "all") {
     params.set("status", filters.status);
@@ -66,13 +72,24 @@ export function TravelMapApp({
   const categories = useMemo(
     () =>
       getAvailableCategories(places, {
+        city: filters.city,
         status: filters.status,
         area: filters.area,
         loved: filters.loved,
       }),
-    [places, filters.area, filters.loved, filters.status],
+    [places, filters.area, filters.city, filters.loved, filters.status],
   );
-  const areas = useMemo(() => getAreas(places), [places]);
+  const cities = useMemo(() => getCities(places), [places]);
+  const areas = useMemo(
+    () =>
+      getAvailableAreas(places, {
+        city: filters.city,
+        status: filters.status,
+        category: filters.category,
+        loved: filters.loved,
+      }),
+    [places, filters.category, filters.city, filters.loved, filters.status],
+  );
   const counts = useMemo(() => countByStatus(places), [places]);
   const filteredPlaces = useMemo(
     () => filterPlaces(places, filters),
@@ -80,8 +97,11 @@ export function TravelMapApp({
   );
 
   useEffect(() => {
-    if (!filteredPlaces.some((place) => place.id === selectedPlaceId)) {
-      setSelectedPlaceId(filteredPlaces[0]?.id ?? null);
+    if (
+      selectedPlaceId &&
+      !filteredPlaces.some((place) => place.id === selectedPlaceId)
+    ) {
+      setSelectedPlaceId(null);
     }
   }, [filteredPlaces, selectedPlaceId]);
 
@@ -93,6 +113,15 @@ export function TravelMapApp({
       });
     }
   }, [categories, filters]);
+
+  useEffect(() => {
+    if (filters.area !== "all" && !areas.includes(filters.area)) {
+      commitFilters({
+        ...filters,
+        area: "all",
+      });
+    }
+  }, [areas, filters]);
 
   useEffect(() => {
     if (openMapPlaceId && !filteredPlaces.some((place) => place.id === openMapPlaceId)) {
@@ -128,6 +157,8 @@ export function TravelMapApp({
           };
 
     setFilters(normalizedFilters);
+    setSelectedPlaceId(null);
+    setOpenMapPlaceId(null);
 
     startTransition(() => {
       const nextQuery = buildQuery(normalizedFilters);
@@ -144,7 +175,7 @@ export function TravelMapApp({
 
   const selectedPlace =
     filteredPlaces.find((place) => place.id === selectedPlaceId) ?? null;
-  const lovedFilterDisabled = filters.status !== "been";
+  const lovedFilterActive = filters.loved === "loved";
 
   return (
     <main className="shell">
@@ -181,12 +212,6 @@ export function TravelMapApp({
 
       <section className="app-grid">
         <div className="panel map-panel">
-          <div className="map-panel-header">
-            <div>
-              <h2>Travel map</h2>
-              <p>The map lives here. Click a marker or choose a place from the list.</p>
-            </div>
-          </div>
           <div className="map-frame">
             <MapView
               places={filteredPlaces}
@@ -206,9 +231,7 @@ export function TravelMapApp({
             <div className="controls-header">
               <div>
                 <h2>Shape the map</h2>
-                <p>
-                  {isPending ? "Refreshing your view..." : "Filters update the map and the list together."}
-                </p>
+                {isPending ? <p>Refreshing your view...</p> : null}
               </div>
               <button
                 className="reset-button"
@@ -218,7 +241,43 @@ export function TravelMapApp({
                 Reset filters
               </button>
             </div>
+            <button
+              aria-pressed={lovedFilterActive}
+              className={`loved-filter-button${lovedFilterActive ? " is-active" : ""}`}
+              onClick={() =>
+                commitFilters({
+                  ...filters,
+                  status: lovedFilterActive ? filters.status : "been",
+                  loved: lovedFilterActive ? "all" : "loved",
+                })
+              }
+              type="button"
+            >
+              <span className="loved-filter-mark" aria-hidden="true" />
+              <strong>Loved it</strong>
+            </button>
+
             <div className="filter-grid">
+              <label>
+                City
+                <select
+                  value={filters.city}
+                  onChange={(event) =>
+                    commitFilters({
+                      ...filters,
+                      city: event.target.value,
+                    })
+                  }
+                >
+                  <option value="all">All cities</option>
+                  {cities.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label>
                 Status
                 <select
@@ -276,23 +335,6 @@ export function TravelMapApp({
                   ))}
                 </select>
               </label>
-
-              <label>
-                <span className="checkbox-row">
-                  <span className="checkbox-label">Loved it</span>
-                  <input
-                    checked={filters.loved === "loved"}
-                    onChange={(event) =>
-                      commitFilters({
-                        ...filters,
-                        status: event.target.checked ? "been" : filters.status,
-                        loved: event.target.checked ? "loved" : "all",
-                      })
-                    }
-                    type="checkbox"
-                  />
-                </span>
-              </label>
             </div>
           </section>
 
@@ -332,13 +374,12 @@ export function TravelMapApp({
                         <h3>{place.name}</h3>
                         <div className="eyebrow">
                           <span>{place.category}</span>
-                          {place.status === "been" || place.status === "want_to_go" ? (
+                          {place.loved === true ? (
+                            <span className="loved-badge">Loved it</span>
+                          ) : place.status === "been" || place.status === "want_to_go" ? (
                             <span className={`badge ${place.status}`}>
                               {place.status === "been" ? "Been" : "Want to go"}
                             </span>
-                          ) : null}
-                          {place.loved === true ? (
-                            <span className="loved-badge">Loved it</span>
                           ) : null}
                         </div>
                       </div>

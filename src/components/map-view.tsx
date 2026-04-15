@@ -215,14 +215,23 @@ export function MapView({
     minWidth: "220px",
     width: "max-content",
     maxWidth: "min(92vw, 520px)",
-    display: "grid",
-    gap: "6px",
-    padding: "16px",
+    maxHeight: "280px",
+    overflow: "hidden",
+    display: "block",
+    padding: "16px 16px 18px",
     border: "1px solid rgba(31, 42, 47, 0.08)",
     borderRadius: "18px",
     background: "rgba(255, 250, 243, 0.98)",
     boxShadow: "0 18px 42px rgba(31, 42, 47, 0.18)",
     color: "var(--ink)",
+  };
+  const popupContentStyle: CSSProperties = {
+    maxHeight: "232px",
+    overflowY: "scroll",
+    overscrollBehavior: "contain",
+    display: "grid",
+    gap: "6px",
+    paddingRight: "6px",
   };
   const popupCloseStyle: CSSProperties = {
     position: "absolute",
@@ -304,6 +313,7 @@ export function MapView({
       center={defaultCenter}
       mapContainerClassName="map-canvas google-map"
       mapContainerStyle={containerStyle}
+      onClick={onClosePlace}
       onLoad={setMap}
       onUnmount={() => setMap(null)}
       options={{
@@ -316,7 +326,7 @@ export function MapView({
       zoom={2}
     >
       {places.map((place) => {
-        const isActive = place.id === selectedPlaceId;
+        const isActive = place.id === openPlaceId;
 
         return (
           <MarkerF
@@ -362,7 +372,12 @@ export function MapView({
             lng: openPlace.longitude,
           }}
         >
-          <div className="map-popup-shell" style={popupShellStyle}>
+          <div
+            className="map-popup-shell"
+            onWheel={(event) => event.stopPropagation()}
+            onTouchMove={(event) => event.stopPropagation()}
+            style={popupShellStyle}
+          >
             <div className="map-popup" style={popupStyle}>
               <button
                 aria-label="Close place details"
@@ -373,99 +388,104 @@ export function MapView({
               >
                 ×
               </button>
-              <strong style={popupTitleStyle}>{openPlace.name}</strong>
-              <p>
-                {openPlace.category}
-                {openPlace.status === "been"
-                  ? " • Been"
-                  : openPlace.status === "want_to_go"
-                    ? " • Want to go"
-                    : openPlace.district
-                      ? ` • ${openPlace.district}`
-                      : ""}
-              </p>
-              {openPlace.loved === true ? <p>Loved it</p> : null}
-              {openPlace.address ? <address>{openPlace.address}</address> : null}
-              {openPlaceDetails?.status === "loading" ? (
-                <p>Loading Google details...</p>
-              ) : null}
-              {openPlaceDetails?.status === "loaded" &&
-              openPlaceDetails.photoUrls.length === 0 &&
-              !openPlaceDetails.openingHours?.length ? (
+              <div className="map-popup-content" style={popupContentStyle}>
+                <strong style={popupTitleStyle}>{openPlace.name}</strong>
                 <p>
-                  {openPlaceDetails.matched
-                    ? "Google found this place, but no photo or opening hours were available."
-                    : "Google could not find a matching place for this location."}
+                  {openPlace.category}
+                  {openPlace.loved === true
+                    ? " • Loved it"
+                    : openPlace.status === "been"
+                      ? " • Been"
+                      : openPlace.status === "want_to_go"
+                        ? " • Want to go"
+                        : openPlace.district
+                          ? ` • ${openPlace.district}`
+                          : ""}
                 </p>
-              ) : null}
-              {openPlaceDetails?.status === "loaded" &&
-              openPlaceDetails.photoUrls.length > 0 ? (
-                <div className="map-popup-photo-group">
-                  <div className="map-popup-photo-carousel" style={photoCarouselStyle}>
-                    <button
-                      className="map-popup-photo-nav"
-                      aria-label="Previous photos"
-                      disabled={!canShowPreviousPhotos}
-                      onClick={() =>
-                        setPhotoStartIndex((current) => Math.max(0, current - 6))
-                      }
-                      style={photoNavStyle}
-                      type="button"
-                    >
-                      &#8249;
-                    </button>
-                    <div className="map-popup-photos" style={photoStripStyle}>
-                      {visiblePhotoUrls.map((photoUrl, index) => (
-                        <button
-                          key={photoUrl}
-                          className="map-popup-photo-link"
-                          onClick={() => setActivePhotoUrl(photoUrl)}
-                          style={photoThumbStyle}
-                          type="button"
-                        >
-                          <img
-                            alt={`${openPlace.name} photo ${photoStartIndex + index + 1}`}
-                            className="map-popup-photo"
-                            src={photoUrl}
-                            style={photoImageStyle}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      className="map-popup-photo-nav"
-                      aria-label="More photos"
-                      disabled={!canShowMorePhotos}
-                      onClick={() =>
-                        setPhotoStartIndex((current) =>
-                          Math.min(
-                            current + 6,
-                            Math.max(openPlaceDetails.photoUrls.length - 6, 0),
-                          ),
+                {openPlace.address ? <address>{openPlace.address}</address> : null}
+                {openPlace.subway ? <p>Subway: {openPlace.subway}</p> : null}
+                {openPlace.tabelog ? <p>Tabelog: {openPlace.tabelog}</p> : null}
+                {openPlaceDetails?.status === "loading" ? (
+                  <p>Loading Google details...</p>
+                ) : null}
+                {openPlaceDetails?.status === "loaded" &&
+                openPlaceDetails.photoUrls.length === 0 &&
+                !openPlaceDetails.openingHours?.length ? (
+                  <p>
+                    {openPlaceDetails.matched
+                      ? "Google found this place, but no photo or opening hours were available."
+                      : "Google could not find a matching place for this location."}
+                  </p>
+                ) : null}
+                {openPlaceDetails?.status === "loaded" &&
+                openPlaceDetails.photoUrls.length > 0 ? (
+                  <div className="map-popup-photo-group">
+                    <div className="map-popup-photo-carousel" style={photoCarouselStyle}>
+                      <button
+                        className="map-popup-photo-nav"
+                        aria-label="Previous photos"
+                        disabled={!canShowPreviousPhotos}
+                        onClick={() =>
+                          setPhotoStartIndex((current) => Math.max(0, current - 6))
+                        }
+                        style={photoNavStyle}
+                        type="button"
+                      >
+                        &#8249;
+                      </button>
+                      <div className="map-popup-photos" style={photoStripStyle}>
+                        {visiblePhotoUrls.map((photoUrl, index) => (
+                          <button
+                            key={photoUrl}
+                            className="map-popup-photo-link"
+                            onClick={() => setActivePhotoUrl(photoUrl)}
+                            style={photoThumbStyle}
+                            type="button"
+                          >
+                            <img
+                              alt={`${openPlace.name} photo ${photoStartIndex + index + 1}`}
+                              className="map-popup-photo"
+                              src={photoUrl}
+                              style={photoImageStyle}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        className="map-popup-photo-nav"
+                        aria-label="More photos"
+                        disabled={!canShowMorePhotos}
+                        onClick={() =>
+                          setPhotoStartIndex((current) =>
+                            Math.min(
+                              current + 6,
+                              Math.max(openPlaceDetails.photoUrls.length - 6, 0),
+                            ),
                           )
-                      }
-                      style={photoNavStyle}
-                      type="button"
-                    >
-                      &#8250;
-                    </button>
+                        }
+                        style={photoNavStyle}
+                        type="button"
+                      >
+                        &#8250;
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : null}
-              {openPlaceDetails?.status === "loaded" &&
-              openPlaceDetails.openingHours?.length ? (
-                <div className="map-popup-hours">
-                  <strong>Opening hours</strong>
-                  <ul>
-                    {openPlaceDetails.openingHours.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {openPlaceDetails?.status === "error" ? (
-                <p>Google details could not be loaded for this place.</p>
-              ) : null}
+                ) : null}
+                {openPlaceDetails?.status === "loaded" &&
+                openPlaceDetails.openingHours?.length ? (
+                  <div className="map-popup-hours">
+                    <strong>Opening hours</strong>
+                    <ul>
+                      {openPlaceDetails.openingHours.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {openPlaceDetails?.status === "error" ? (
+                  <p>Google details could not be loaded for this place.</p>
+                ) : null}
+              </div>
             </div>
           </div>
         </OverlayViewF>
