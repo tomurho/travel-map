@@ -35,7 +35,7 @@ function readRowsFromStructuredSheet(
 
   const looksLikeStructuredSheet =
     (headerIndexes.has("location") || headerIndexes.has("location name")) &&
-    headerIndexes.has("verified category") &&
+    (headerIndexes.has("verified category") || headerIndexes.has("category")) &&
     headerIndexes.has("status") &&
     headerIndexes.has("area") &&
     headerIndexes.has("address") &&

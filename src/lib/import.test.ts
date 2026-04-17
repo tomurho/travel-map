@@ -82,6 +82,52 @@ test("normalizePlaceRow imports Kyoto metadata", () => {
   }
 });
 
+test("normalizePlaceRow supports Tokyo status values", () => {
+  const result = normalizePlaceRow({
+    "Location Name": "ぶち旨屋 (Buchi Umaya)",
+    City: "Tokyo",
+    Category: "Okonomiyaki",
+    Status: "Been there",
+    Area: "Shinjuku",
+    Address: "東京都新宿区西新宿7-22-34 新宿東海ビル 1F",
+    Subway: "Seibu Shinjuku",
+    Tabelog: 3.45,
+    Latitude: 35.6966,
+    Longitude: 139.69659,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.place.city, "Tokyo");
+    assert.equal(result.place.status, "been");
+    assert.equal(result.place.category, "Okonomiyaki");
+    assert.equal(result.place.subway, "Seibu Shinjuku");
+    assert.equal(result.place.tabelog, "3.45");
+  }
+});
+
+test("normalizePlaceRow treats Tabelog resolution notes as neutral locations", () => {
+  const result = normalizePlaceRow({
+    "Location Name": "うどん 慎 (Udon Shin)",
+    City: "Tokyo",
+    Category: "Udon",
+    Status:
+      "Resolved via matched Tabelog listing; category, ward, address, rating, and nearest station confirmed.",
+    Area: "Shibuya",
+    Address: "東京都渋谷区代々木2-20-16 相馬ビル1F",
+    Subway: "Shinjuku",
+    Tabelog: 3.74,
+    Latitude: 35.685535,
+    Longitude: 139.698743,
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.place.status, "location");
+    assert.equal(result.place.city, "Tokyo");
+  }
+});
+
 test("normalizePlaceRow treats blank status as a neutral location", () => {
   const result = normalizePlaceRow({
     "Location Name": "Terry Oolong roaster",

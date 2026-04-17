@@ -52,6 +52,7 @@ function normalizeStatus(value: string): PlaceStatus | null {
     normalized === "been" ||
     normalized === "visited" ||
     normalized === "been to" ||
+    normalized === "been there" ||
     normalized === "done" ||
     normalized === "loved" ||
     normalized === "loved it"
@@ -66,6 +67,14 @@ function normalizeStatus(value: string): PlaceStatus | null {
     normalized === "bucket list"
   ) {
     return "want_to_go";
+  }
+
+  if (
+    normalized.startsWith("resolved via ") ||
+    normalized.startsWith("re-verified via ") ||
+    normalized.startsWith("tabelog listing ")
+  ) {
+    return "location";
   }
 
   return null;
