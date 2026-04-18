@@ -54,6 +54,7 @@ export function MapView({
   >({});
   const [activePhotoUrl, setActivePhotoUrl] = useState<string | null>(null);
   const [photoStartIndex, setPhotoStartIndex] = useState(0);
+  const [isCompactPopup, setIsCompactPopup] = useState(false);
   const { isLoaded, loadError } = useJsApiLoader({
     id: "travel-map-google-maps",
     googleMapsApiKey,
@@ -102,6 +103,16 @@ export function MapView({
   useEffect(() => {
     setPhotoStartIndex(0);
   }, [openPlaceId]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 720px)");
+    const updateCompactPopup = () => setIsCompactPopup(mediaQuery.matches);
+
+    updateCompactPopup();
+    mediaQuery.addEventListener("change", updateCompactPopup);
+
+    return () => mediaQuery.removeEventListener("change", updateCompactPopup);
+  }, []);
 
   useEffect(() => {
     if (!openPlace) {
@@ -195,38 +206,50 @@ export function MapView({
   }
 
   const openPlaceDetails = openPlace ? placeDetails[openPlace.id] : undefined;
+  const photoWindowSize = isCompactPopup ? 3 : 6;
   const visiblePhotoUrls =
     openPlaceDetails?.status === "loaded"
-      ? openPlaceDetails.photoUrls.slice(photoStartIndex, photoStartIndex + 6)
+      ? openPlaceDetails.photoUrls.slice(
+          photoStartIndex,
+          photoStartIndex + photoWindowSize,
+        )
       : [];
   const canShowPreviousPhotos = photoStartIndex > 0;
   const canShowMorePhotos =
     openPlaceDetails?.status === "loaded"
-      ? photoStartIndex + 6 < openPlaceDetails.photoUrls.length
+      ? photoStartIndex + photoWindowSize < openPlaceDetails.photoUrls.length
       : false;
+  const popupMaxWidth = isCompactPopup ? "min(88vw, 300px)" : "min(92vw, 520px)";
+  const popupMaxHeight = isCompactPopup ? "220px" : "280px";
+  const popupContentMaxHeight = isCompactPopup ? "172px" : "232px";
+  const photoThumbSize = isCompactPopup ? 48 : 56;
+  const photoGap = isCompactPopup ? 6 : 8;
+  const photoNavWidth = isCompactPopup ? 24 : 28;
+  const photoStripWidth =
+    photoWindowSize * photoThumbSize + (photoWindowSize - 1) * photoGap;
   const popupShellStyle: CSSProperties = {
     position: "relative",
     width: "max-content",
-    maxWidth: "min(92vw, 520px)",
+    maxWidth: popupMaxWidth,
     pointerEvents: "auto",
   };
   const popupStyle: CSSProperties = {
     position: "relative",
-    minWidth: "220px",
+    minWidth: isCompactPopup ? "0" : "220px",
     width: "max-content",
-    maxWidth: "min(92vw, 520px)",
-    maxHeight: "280px",
+    maxWidth: popupMaxWidth,
+    maxHeight: popupMaxHeight,
     overflow: "hidden",
     display: "block",
-    padding: "16px 16px 18px",
+    padding: isCompactPopup ? "12px 12px 14px" : "16px 16px 18px",
     border: "1px solid rgba(31, 42, 47, 0.08)",
-    borderRadius: "18px",
+    borderRadius: isCompactPopup ? "16px" : "18px",
     background: "rgba(255, 250, 243, 0.98)",
     boxShadow: "0 18px 42px rgba(31, 42, 47, 0.18)",
     color: "var(--ink)",
   };
   const popupContentStyle: CSSProperties = {
-    maxHeight: "232px",
+    maxHeight: popupContentMaxHeight,
     overflowY: "scroll",
     overscrollBehavior: "contain",
     display: "grid",
@@ -248,22 +271,22 @@ export function MapView({
     lineHeight: "1",
   };
   const popupTitleStyle: CSSProperties = {
-    fontSize: "1rem",
+    fontSize: isCompactPopup ? "0.92rem" : "1rem",
     lineHeight: 1.2,
     paddingRight: "32px",
   };
   const photoCarouselStyle: CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "28px 376px 28px",
+    gridTemplateColumns: `${photoNavWidth}px ${photoStripWidth}px ${photoNavWidth}px`,
     alignItems: "center",
-    columnGap: "8px",
+    columnGap: `${photoGap}px`,
     width: "max-content",
     maxWidth: "100%",
   };
   const photoNavStyle: CSSProperties = {
     border: 0,
-    width: "28px",
-    height: "56px",
+    width: `${photoNavWidth}px`,
+    height: `${photoThumbSize}px`,
     display: "grid",
     placeItems: "center",
     borderRadius: "999px",
@@ -277,18 +300,18 @@ export function MapView({
   const photoStripStyle: CSSProperties = {
     display: "grid",
     gridAutoFlow: "column",
-    gridAutoColumns: "56px",
-    gap: "8px",
+    gridAutoColumns: `${photoThumbSize}px`,
+    gap: `${photoGap}px`,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "start",
     minWidth: 0,
-    width: "376px",
-    maxWidth: "376px",
+    width: `${photoStripWidth}px`,
+    maxWidth: `${photoStripWidth}px`,
   };
   const photoThumbStyle: CSSProperties = {
-    width: "56px",
-    height: "56px",
+    width: `${photoThumbSize}px`,
+    height: `${photoThumbSize}px`,
     padding: 0,
     border: 0,
     background: "transparent",
@@ -299,8 +322,8 @@ export function MapView({
     cursor: "pointer",
   };
   const photoImageStyle: CSSProperties = {
-    width: "56px",
-    height: "56px",
+    width: `${photoThumbSize}px`,
+    height: `${photoThumbSize}px`,
     maxWidth: "none",
     maxHeight: "none",
     objectFit: "cover",
@@ -364,7 +387,9 @@ export function MapView({
         <OverlayViewF
           getPixelPositionOffset={(width, height) => ({
             x: Math.round(-width / 2),
-            y: Math.round(-(height + 18)),
+            y: isCompactPopup
+              ? Math.round(-height / 2)
+              : Math.round(-(height + 18)),
           })}
           mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
           position={{
