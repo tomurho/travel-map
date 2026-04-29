@@ -63,6 +63,13 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
     return `${draft.city}-${draft.name}-${draft.sourceLabel}`;
   }
 
+  function setDraftStatus(draftKey: string, status: DraftStatus) {
+    setDraftStatuses((currentStatuses) => ({
+      ...currentStatuses,
+      [draftKey]: status,
+    }));
+  }
+
   function authHeaders() {
     return adminPassword
       ? {
@@ -92,6 +99,7 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
         body: formData,
         headers: authHeaders(),
       });
+
       const payload = (await response.json()) as ResolveResponse & {
         error?: string;
       };
@@ -131,6 +139,7 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
           draftStatus: draftStatuses[draftKey] ?? "location",
         }),
       });
+
       const payload = (await response.json()) as {
         error?: string;
         places?: StagedPlace[];
@@ -192,7 +201,11 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
   }
 
   async function publishStagedPlaces() {
-    if (!window.confirm("Publish all staged places into the live local map dataset?")) {
+    const confirmed = window.confirm(
+      "Publish all staged places into the live local map dataset?",
+    );
+
+    if (!confirmed) {
       return;
     }
 
@@ -228,7 +241,9 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
   }
 
   async function deleteStagedPlace(place: StagedPlace) {
-    if (!window.confirm(`Remove ${place.name} from staging?`)) {
+    const confirmed = window.confirm(`Remove ${place.name} from staging?`);
+
+    if (!confirmed) {
       return;
     }
 
@@ -265,7 +280,9 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
   }
 
   async function clearAllStagedPlaces() {
-    if (!window.confirm("Clear all approved staged places?")) {
+    const confirmed = window.confirm("Clear all approved staged places?");
+
+    if (!confirmed) {
       return;
     }
 
@@ -306,7 +323,7 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
         <h1>Place intake.</h1>
         <p>
           Paste names, drop in a place URL, or upload a screenshot. The workflow
-          turns that into a structured draft with address, area, category,
+          will turn that into a structured draft with address, area, category,
           coordinates, and city-specific extra fields.
         </p>
       </section>
@@ -405,30 +422,46 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
                       <span className="badge admin-city-badge">{draft.city}</span>
                     </div>
 
-                    <div className="admin-status-group" aria-label={`Status for ${draft.name}`}>
-                      {(["location", "been", "loved", "want_to_go"] as const).map(
-                        (status) => (
-                          <button
-                            className={`admin-status-pill${
-                              status === "loved" ? " loved" : ""
-                            }${draftStatus === status ? " is-active" : ""}`}
-                            key={status}
-                            onClick={() =>
-                              setDraftStatuses((currentStatuses) => ({
-                                ...currentStatuses,
-                                [draftKey]: status,
-                              }))
-                            }
-                            type="button"
-                          >
-                            {status === "want_to_go"
-                              ? "Want to go"
-                              : status === "loved"
-                                ? "Loved it"
-                                : status.charAt(0).toUpperCase() + status.slice(1)}
-                          </button>
-                        ),
-                      )}
+                    <div
+                      className="admin-status-group"
+                      aria-label={`Status for ${draft.name}`}
+                    >
+                      <button
+                        className={`admin-status-pill${
+                          draftStatus === "location" ? " is-active" : ""
+                        }`}
+                        onClick={() => setDraftStatus(draftKey, "location")}
+                        type="button"
+                      >
+                        Location
+                      </button>
+                      <button
+                        className={`admin-status-pill${
+                          draftStatus === "been" ? " is-active" : ""
+                        }`}
+                        onClick={() => setDraftStatus(draftKey, "been")}
+                        type="button"
+                      >
+                        Been
+                      </button>
+                      <button
+                        className={`admin-status-pill loved${
+                          draftStatus === "loved" ? " is-active" : ""
+                        }`}
+                        onClick={() => setDraftStatus(draftKey, "loved")}
+                        type="button"
+                      >
+                        Loved it
+                      </button>
+                      <button
+                        className={`admin-status-pill${
+                          draftStatus === "want_to_go" ? " is-active" : ""
+                        }`}
+                        onClick={() => setDraftStatus(draftKey, "want_to_go")}
+                        type="button"
+                      >
+                        Want to go
+                      </button>
                     </div>
 
                     <dl className="admin-draft-fields">
@@ -519,7 +552,6 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
               </button>
             </div>
           </div>
-
           {stagedPlaces.length ? (
             <div className="admin-staged-list">
               {stagedPlaces.map((place) => (

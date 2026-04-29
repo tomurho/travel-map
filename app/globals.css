@@ -1093,6 +1093,10 @@ select {
   .list-panel {
     height: auto;
   }
+
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {

@@ -53,18 +53,26 @@ const GOOGLE_TYPE_CATEGORY_LABELS: Record<string, string> = {
   bakery: "Bakery",
   bar: "Bar",
   cafe: "Coffee shop",
+  candy_store: "Sweets",
   cat_cafe: "Cafe",
   coffee_roastery: "Coffee",
   coffee_shop: "Coffee shop",
   coffee_stand: "Coffee shop",
   dessert_restaurant: "Dessert shop",
   dessert_shop: "Dessert shop",
+  dog_cafe: "Cafe",
   food_store: "Food store",
+  ice_cream_shop: "Ice cream",
+  internet_cafe: "Cafe",
   japanese_restaurant: "Japanese restaurant",
+  japanese_sweets_restaurant: "Japanese sweets",
   ramen_restaurant: "Ramen restaurant",
   restaurant: "Restaurant",
+  seafood_restaurant: "Seafood restaurant",
   sushi_restaurant: "Sushi restaurant",
   tea_house: "Tea house",
+  vegan_restaurant: "Vegan restaurant",
+  vegetarian_restaurant: "Vegetarian restaurant",
   wine_bar: "Wine bar",
 };
 
@@ -74,7 +82,9 @@ const CATEGORY_PRIORITY_TYPES = [
   "coffee_stand",
   "cafe",
   "cat_cafe",
+  "dog_cafe",
   "tea_house",
+  "japanese_sweets_restaurant",
   "dessert_shop",
   "dessert_restaurant",
   "bakery",
@@ -139,9 +149,8 @@ function deriveArea(city: string, address: string, fallbackArea = "") {
     return fallbackArea.trim();
   }
 
-  const japaneseWardMatch = address.match(/([^\s、,]+区)/);
-  if (japaneseWardMatch) {
-    return japaneseWardMatch[1];
+  if (!address.trim()) {
+    return "";
   }
 
   const districtMatch = address.match(/([A-Za-z'’.-]+\sDistrict)/i);
@@ -152,6 +161,11 @@ function deriveArea(city: string, address: string, fallbackArea = "") {
   const wardMatch = address.match(/([A-Za-z'’.-]+\sWard)/i);
   if (wardMatch) {
     return wardMatch[1];
+  }
+
+  const japaneseWardMatch = address.match(/([^\s、,]+区)/);
+  if (japaneseWardMatch) {
+    return japaneseWardMatch[1];
   }
 
   if (city === "Taipei") {
@@ -207,7 +221,8 @@ async function resolvePlaceUrl(placeUrl: string) {
     });
     clearTimeout(timeout);
 
-    const finalText = response.url ? extractUsefulTextFromUrl(response.url) : "";
+    const finalUrl = response.url;
+    const finalText = finalUrl ? extractUsefulTextFromUrl(finalUrl) : "";
 
     if (finalText && finalText !== directText) {
       return {
@@ -323,14 +338,20 @@ async function extractFromImage(
             type: "object",
             additionalProperties: false,
             properties: {
-              place_names: { type: "array", items: { type: "string" } },
+              place_names: {
+                type: "array",
+                items: { type: "string" },
+              },
               city_hint: { type: "string" },
               area_hint: { type: "string" },
               address_hint: { type: "string" },
               category_hint: { type: "string" },
               subway_hint: { type: "string" },
               tabelog_hint: { type: "string" },
-              notes: { type: "array", items: { type: "string" } },
+              notes: {
+                type: "array",
+                items: { type: "string" },
+              },
             },
             required: [
               "place_names",
@@ -352,7 +373,8 @@ async function extractFromImage(
     throw new Error("OpenAI image extraction failed.");
   }
 
-  const outputText = getOutputText(await response.json());
+  const data = await response.json();
+  const outputText = getOutputText(data);
 
   return JSON.parse(outputText || "{}") as OpenAIExtraction;
 }
@@ -491,20 +513,28 @@ export async function POST(request: NextRequest) {
 
     const resolvedCity = cityHint || imageExtraction?.city_hint || "Unknown";
     const address = match?.formattedAddress ?? imageExtraction?.address_hint ?? "";
-    const googleCategory = deriveCategoryFromGooglePlace(match, query);
+    const derivedGoogleCategory = deriveCategoryFromGooglePlace(match, query);
+    const area = deriveArea(
+      resolvedCity,
+      address,
+      imageExtraction?.area_hint ?? "",
+    );
 
     drafts.push({
       sourceLabel: query,
       city: resolvedCity,
       name: match?.displayName?.text ?? query,
       address,
-      category: imageExtraction?.category_hint || googleCategory,
-      area: deriveArea(resolvedCity, address, imageExtraction?.area_hint ?? ""),
+      category:
+        imageExtraction?.category_hint ||
+        derivedGoogleCategory ||
+        "",
+      area,
       latitude: match?.location?.latitude ?? null,
       longitude: match?.location?.longitude ?? null,
       subway: imageExtraction?.subway_hint ?? "",
       tabelog: imageExtraction?.tabelog_hint ?? "",
-      googleCategory,
+      googleCategory: derivedGoogleCategory,
       notes: [
         ...(imageExtraction?.notes ?? []),
         ...(urlNotes.get(query) ? [urlNotes.get(query) as string] : []),

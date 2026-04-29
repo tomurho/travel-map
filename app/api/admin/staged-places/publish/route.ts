@@ -17,5 +17,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
-  return NextResponse.json(publishStagedPlaces());
+  const result = publishStagedPlaces();
+
+  return NextResponse.json(result);
 }
