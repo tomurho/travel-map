@@ -693,8 +693,389 @@ select {
   padding: 14px 14px 12px;
 }
 
+.admin-shell {
+  display: grid;
+  gap: 18px;
+  max-width: 1280px;
+  margin: 0 auto;
+  color: var(--ink);
+}
+
+.admin-hero {
+  margin-bottom: 0;
+  padding: 22px 24px;
+}
+
+.admin-hero h1 {
+  max-width: none;
+  font-family: var(--font-body);
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+.admin-hero p {
+  margin-top: 10px;
+  max-width: 78ch;
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-form-panel,
+.admin-results-panel {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.admin-form-panel h2,
+.admin-results-panel h2,
+.admin-section-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.admin-form {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.admin-form select,
+.admin-form textarea,
+.admin-form input[type="url"],
+.admin-form input[type="password"],
+.admin-form input[type="file"] {
+  width: 100%;
+  border: 1px solid rgba(31, 42, 47, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  font: inherit;
+}
+
+.admin-form select,
+.admin-form input[type="url"],
+.admin-form input[type="password"] {
+  min-height: 48px;
+  padding: 0 14px;
+}
+
+.admin-form textarea {
+  min-height: 180px;
+  padding: 14px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.admin-form input[type="file"] {
+  padding: 12px 14px;
+}
+
+.admin-form select:focus,
+.admin-form textarea:focus,
+.admin-form input[type="url"]:focus,
+.admin-form input[type="password"]:focus,
+.admin-form input[type="file"]:focus {
+  outline: 0;
+  border-color: rgba(10, 132, 255, 0.45);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.12);
+}
+
+.admin-submit {
+  min-height: 46px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 18px;
+  justify-self: start;
+  background: linear-gradient(135deg, #1f3f5b 0%, #0a84ff 100%);
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgba(10, 132, 255, 0.18);
+}
+
+.admin-submit:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.admin-error,
+.admin-success,
+.admin-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.admin-error {
+  color: #b42318;
+}
+
+.admin-success {
+  color: #0b7a35;
+  font-weight: 700;
+}
+
+.admin-warning-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 244, 226, 0.95);
+  color: #8a5a0c;
+}
+
+.admin-warning-list p {
+  margin: 0;
+}
+
+.admin-draft-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-draft-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(31, 42, 47, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.admin-draft-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-draft-header h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.28;
+}
+
+.admin-city-badge {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.admin-source {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-status-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.admin-status-pill {
+  border: 1px solid rgba(31, 42, 47, 0.14);
+  border-radius: 999px;
+  min-height: 34px;
+  padding: 0 11px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.admin-status-pill.is-active {
+  border-color: rgba(10, 132, 255, 0.72);
+  background: rgba(10, 132, 255, 0.1);
+  color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.08);
+}
+
+.admin-status-pill.loved.is-active {
+  border-color: var(--loved);
+  background: rgba(48, 209, 88, 0.1);
+  box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.12);
+}
+
+.admin-draft-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  margin: 0;
+}
+
+.admin-draft-fields div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-draft-fields dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-draft-fields dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.94rem;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.admin-note-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.admin-approve {
+  justify-self: start;
+  border: 0;
+  border-radius: 999px;
+  min-height: 38px;
+  padding: 0 14px;
+  background: var(--ink);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.admin-approve:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.admin-staged-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.admin-staged-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-staged-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.admin-staged-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.admin-staged-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-staged-actions button {
+  border: 1px solid rgba(31, 42, 47, 0.14);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.admin-staged-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.admin-staged-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-staged-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(31, 42, 47, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.admin-staged-row div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-staged-row span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.admin-staged-row button {
+  flex: 0 0 auto;
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #b42318;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.admin-staged-row button:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
 @media (max-width: 1080px) {
   .app-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-grid {
     grid-template-columns: 1fr;
   }
 
@@ -740,6 +1121,23 @@ select {
   }
 
   .place-card-header {
+    flex-direction: column;
+  }
+
+  .admin-draft-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-staged-header {
+    flex-direction: column;
+  }
+
+  .admin-staged-actions {
+    justify-content: flex-start;
+  }
+
+  .admin-staged-row {
+    align-items: flex-start;
     flex-direction: column;
   }
 }

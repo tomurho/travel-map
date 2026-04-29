@@ -4,3 +4,6 @@ node_modules
 dist
 .env.local
 .env*.local
+.DS_Store
+tsconfig.tsbuildinfo
+src/data/admin-staged-places.json
