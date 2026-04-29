@@ -789,6 +789,12 @@ select {
   padding: 12px 14px;
 }
 
+.admin-file-count {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 .admin-form select:focus,
 .admin-form textarea:focus,
 .admin-form input[type="url"]:focus,

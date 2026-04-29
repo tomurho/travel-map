@@ -428,8 +428,12 @@ export function MapView({
                           : ""}
                 </p>
                 {openPlace.address ? <address>{openPlace.address}</address> : null}
-                {openPlace.subway ? <p>Subway: {openPlace.subway}</p> : null}
-                {openPlace.tabelog ? <p>Tabelog: {openPlace.tabelog}</p> : null}
+                {openPlace.subway ? (
+                  <p>Nearest subway: {openPlace.subway}</p>
+                ) : null}
+                {openPlace.tabelog ? (
+                  <p>Tabelog score: {openPlace.tabelog}</p>
+                ) : null}
                 {openPlaceDetails?.status === "loading" ? (
                   <p>Loading Google details...</p>
                 ) : null}

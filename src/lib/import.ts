@@ -97,6 +97,20 @@ function normalizeLoved(value: string, status: PlaceStatus): boolean | null {
   return null;
 }
 
+export function normalizeArea(city: string, value: string) {
+  const area = value.trim();
+
+  if (city.trim().toLowerCase() !== "taipei") {
+    return area;
+  }
+
+  return area
+    .replace(/\s+District$/i, "")
+    .replace(/^Daan$/i, "Da’an")
+    .replace(/^Da['’]an$/i, "Da’an")
+    .trim();
+}
+
 export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
   const name = readText(row, [
     "location name",
@@ -110,7 +124,7 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
     readText(row, ["category", "Category", "Verified Category", "type"]) ||
     "Uncategorized";
   const statusRaw = readText(row, ["status", "Status"]);
-  const district = readText(row, [
+  const rawDistrict = readText(row, [
     "district/neighborhood",
     "District/Neighborhood",
     "district",
@@ -123,6 +137,7 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
   const longitude = readNumber(row, ["longitude", "Longitude", "lng", "lon"]);
   const tabelog = readText(row, ["tabelog", "Tabelog"]);
   const subway = readText(row, ["subway", "Subway"]);
+  const district = normalizeArea(city, rawDistrict);
 
   if (!name) {
     return { ok: false, reason: "Missing location name." };

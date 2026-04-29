@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeArea } from "@/lib/import";
 
 type OpenAIExtraction = {
   place_names?: string[];
@@ -39,7 +40,24 @@ type DraftPlace = {
   notes: string[];
 };
 
+type TabelogExtraction = {
+  name: string;
+  address: string;
+  station: string;
+  score: string;
+  sourceUrl: string;
+  notes: string[];
+};
+
+type QueryContext = {
+  query: string;
+  imageExtraction?: OpenAIExtraction;
+  tabelogExtraction?: TabelogExtraction;
+  sourceNote?: string;
+};
+
 const MAX_TEXT_QUERIES = 20;
+const MAX_IMAGE_FILES = 10;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -105,6 +123,304 @@ function normalizeCityHint(cityHint: string) {
   return cityHint && cityHint !== "all" ? cityHint : "";
 }
 
+function firstNonEmpty(...values: Array<string | null | undefined>) {
+  return values.find((value) => value?.trim())?.trim() ?? "";
+}
+
+function isTabelogUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname.endsWith("tabelog.com");
+  } catch {
+    return false;
+  }
+}
+
+function inferCityFromText(...values: string[]) {
+  const text = values.filter(Boolean).join(" ").toLowerCase();
+
+  if (/\b(taipei|taipei city)\b|台北|臺北/.test(text)) {
+    return "Taipei";
+  }
+
+  if (/\b(kyoto|kyoto city)\b|京都/.test(text)) {
+    return "Kyoto";
+  }
+
+  if (/\b(tokyo|tokyo-to|tokyo metropolis)\b|東京都|東京/.test(text)) {
+    return "Tokyo";
+  }
+
+  return "";
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#x([0-9a-f]+);/gi, (_match, codePoint: string) =>
+      String.fromCodePoint(Number.parseInt(codePoint, 16)),
+    )
+    .replace(/&#(\d+);/g, (_match, codePoint: string) =>
+      String.fromCodePoint(Number.parseInt(codePoint, 10)),
+    );
+}
+
+function stripTags(value: string) {
+  return decodeHtmlEntities(value.replace(/<[^>]*>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getFirstMatch(value: string, patterns: RegExp[]) {
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match?.[1]) {
+      return stripTags(match[1]);
+    }
+  }
+
+  return "";
+}
+
+function parseJsonLdObjects(html: string) {
+  const scripts = html.match(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi,
+  );
+
+  if (!scripts) {
+    return [];
+  }
+
+  return scripts.flatMap((script) => {
+    const content = script
+      .replace(/^<script[^>]*>/i, "")
+      .replace(/<\/script>$/i, "")
+      .trim();
+
+    try {
+      const parsed = JSON.parse(decodeHtmlEntities(content)) as unknown;
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function getStringProperty(value: unknown, key: string) {
+  if (!value || typeof value !== "object" || !(key in value)) {
+    return "";
+  }
+
+  const property = (value as Record<string, unknown>)[key];
+  return typeof property === "string" || typeof property === "number"
+    ? String(property)
+    : "";
+}
+
+function getJsonLdAddress(value: unknown) {
+  if (!value || typeof value !== "object" || !("address" in value)) {
+    return "";
+  }
+
+  const address = (value as Record<string, unknown>).address;
+
+  if (typeof address === "string") {
+    return address;
+  }
+
+  if (!address || typeof address !== "object") {
+    return "";
+  }
+
+  const addressParts = [
+    "postalCode",
+    "addressRegion",
+    "addressLocality",
+    "streetAddress",
+  ].map((key) => getStringProperty(address, key));
+
+  return addressParts.filter(Boolean).join(" ");
+}
+
+function getJsonLdRating(value: unknown) {
+  if (!value || typeof value !== "object" || !("aggregateRating" in value)) {
+    return "";
+  }
+
+  const rating = (value as Record<string, unknown>).aggregateRating;
+  return getStringProperty(rating, "ratingValue");
+}
+
+function parseTabelogHtml(html: string): TabelogExtraction {
+  const jsonLdObjects = parseJsonLdObjects(html);
+  const primaryJsonLd =
+    jsonLdObjects.find((item) => getStringProperty(item, "name")) ?? null;
+  const name =
+    getStringProperty(primaryJsonLd, "name") ||
+    getFirstMatch(html, [
+      /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+      /<title[^>]*>([\s\S]*?)<\/title>/i,
+    ]).replace(/\s*-\s*食べログ.*$/i, "");
+  const address =
+    getJsonLdAddress(primaryJsonLd) ||
+    getFirstMatch(html, [
+      /<meta[^>]+property=["']restaurant:contact_info:street_address["'][^>]+content=["']([^"']+)["']/i,
+      /<th[^>]*>\s*住所\s*<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/i,
+    ]);
+  const score =
+    getJsonLdRating(primaryJsonLd) ||
+    getFirstMatch(html, [
+      /"ratingValue"\s*:\s*"?([0-9.]+)"?/i,
+      /<span[^>]+class=["'][^"']*rdheader-rating__score-val-dtl[^"']*["'][^>]*>([\s\S]*?)<\/span>/i,
+      /<b[^>]+class=["'][^"']*rdheader-rating__score-val[^"']*["'][^>]*>([\s\S]*?)<\/b>/i,
+      /<span[^>]+class=["'][^"']*rdheader-rating__score-val[^"']*["'][^>]*>([\s\S]*?)<\/span>/i,
+    ]);
+  const station = getFirstMatch(html, [
+    /<dt[^>]*class=["'][^"']*rdheader-subinfo__item-title[^"']*["'][^>]*>\s*最寄り駅：?\s*<\/dt>\s*<dd[^>]*class=["'][^"']*rdheader-subinfo__item-text[^"']*["'][^>]*>([\s\S]*?)<\/dd>/i,
+    /<th[^>]*>\s*最寄り駅\s*<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/i,
+    /最寄り駅[\s\S]{0,300}?<a[^>]*>([\s\S]*?)<\/a>/i,
+  ]).replace(/駅×.*$/u, "駅");
+  const normalizedStation = normalizeStationName(station);
+
+  return {
+    name,
+    address,
+    station: normalizedStation,
+    score,
+    sourceUrl: "",
+    notes: [
+      ...(score ? [] : ["Review needed: Tabelog score was not found on page."]),
+      ...(station ? [] : ["Review needed: nearest subway was not found on page."]),
+    ],
+  };
+}
+
+async function fetchTabelogExtraction(tabelogUrl: string) {
+  const response = await fetch(tabelogUrl, {
+    headers: {
+      "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
+    },
+    redirect: "follow",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Tabelog lookup failed with status ${response.status}.`);
+  }
+
+  return parseTabelogHtml(await response.text());
+}
+
+function extractStationFromAreaGenre(value: string) {
+  const stationText = value.split("/")[0]?.trim() ?? "";
+
+  return normalizeStationName(stationText
+    .replace(/\s+\d+(?:\.\d+)?\s*(?:m|km)\b/i, "")
+    .trim());
+}
+
+function normalizeStationName(value: string) {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  const japaneseStationMatch = trimmed.match(/^(.+?駅)(?:\s+\1)+$/u);
+
+  if (japaneseStationMatch?.[1]) {
+    return japaneseStationMatch[1];
+  }
+
+  const parts = trimmed.split(/\s{2,}| \/ /).filter(Boolean);
+  return parts[0] ?? trimmed;
+}
+
+function parseTabelogSearchHtml(html: string): TabelogExtraction | null {
+  const match = html.match(
+    /<div class="list-rst js-bookmark[\s\S]*?(?=<div class="list-rst js-bookmark|<div class="rstlist-info__paginate-wrap|$)/,
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const block = match[0];
+  const nameMatch = block.match(
+    /<a[^>]+class="[^"]*list-rst__rst-name-target[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i,
+  );
+  const areaGenre = getFirstMatch(block, [
+    /<div[^>]+class="[^"]*list-rst__area-genre[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+  ]);
+  const score = getFirstMatch(block, [
+    /<span[^>]+class="[^"]*list-rst__rating-val[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
+  ]);
+  const name = nameMatch?.[2] ? stripTags(nameMatch[2]) : "";
+  const sourceUrl = nameMatch?.[1] ? decodeHtmlEntities(nameMatch[1]) : "";
+
+  return {
+    name,
+    address: "",
+    station: extractStationFromAreaGenre(areaGenre),
+    score,
+    sourceUrl,
+    notes: [
+      ...(name ? [`Tabelog search matched: ${name}.`] : []),
+      ...(sourceUrl ? [`Tabelog listing: ${sourceUrl}`] : []),
+      ...(score ? [] : ["Review needed: Tabelog score was not found in search result."]),
+      ...(areaGenre ? [] : ["Review needed: nearest subway was not found in search result."]),
+    ],
+  };
+}
+
+async function searchTabelog(city: string, query: string) {
+  const cityPath = getTabelogCityPath(city);
+
+  if (!cityPath || !query.trim()) {
+    return null;
+  }
+
+  const response = await fetch(
+    `https://tabelog.com/en/${cityPath}/rstLst/?sw=${encodeURIComponent(query)}`,
+    {
+      headers: {
+        "Accept-Language": "en-US,en;q=0.9,ja;q=0.8",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
+      },
+      redirect: "follow",
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Tabelog search failed with status ${response.status}.`);
+  }
+
+  return parseTabelogSearchHtml(await response.text());
+}
+
+function isJapanCity(city: string) {
+  return ["kyoto", "tokyo"].includes(city.trim().toLowerCase());
+}
+
+function getTabelogCityPath(city: string) {
+  const normalizedCity = city.trim().toLowerCase();
+
+  if (normalizedCity === "kyoto") {
+    return "kyoto";
+  }
+
+  if (normalizedCity === "tokyo") {
+    return "tokyo";
+  }
+
+  return "";
+}
+
 function formatGoogleType(type: string) {
   return type
     .split("_")
@@ -146,7 +462,7 @@ function deriveCategoryFromGooglePlace(
 
 function deriveArea(city: string, address: string, fallbackArea = "") {
   if (fallbackArea.trim()) {
-    return fallbackArea.trim();
+    return normalizeArea(city, fallbackArea);
   }
 
   if (!address.trim()) {
@@ -155,23 +471,23 @@ function deriveArea(city: string, address: string, fallbackArea = "") {
 
   const districtMatch = address.match(/([A-Za-z'’.-]+\sDistrict)/i);
   if (districtMatch) {
-    return districtMatch[1];
+    return normalizeArea(city, districtMatch[1]);
   }
 
   const wardMatch = address.match(/([A-Za-z'’.-]+\sWard)/i);
   if (wardMatch) {
-    return wardMatch[1];
+    return normalizeArea(city, wardMatch[1]);
   }
 
   const japaneseWardMatch = address.match(/([^\s、,]+区)/);
   if (japaneseWardMatch) {
-    return japaneseWardMatch[1];
+    return normalizeArea(city, japaneseWardMatch[1]);
   }
 
   if (city === "Taipei") {
     const taipeiMatch = address.match(/([A-Za-z'’.-]+\sDistrict)/i);
     if (taipeiMatch) {
-      return taipeiMatch[1];
+      return normalizeArea(city, taipeiMatch[1]);
     }
   }
 
@@ -320,7 +636,7 @@ async function extractFromImage(
             {
               type: "input_text",
               text:
-                "Extract place-intake data from this image. Return strict JSON with keys: place_names (array of strings), city_hint, area_hint, address_hint, category_hint, subway_hint, tabelog_hint, notes (array of strings). If unsure, leave fields empty. City hint provided: " +
+                "Extract place-intake data from this image. Return strict JSON with keys: place_names (array of strings), city_hint, area_hint, address_hint, category_hint, subway_hint, tabelog_hint, notes (array of strings). For Japan places, subway_hint must be the nearest station/subway shown by Tabelog, and tabelog_hint must be the Tabelog score/rating. Do not invent Tabelog values; if unsure, leave fields empty and add a note. City hint provided: " +
                 (cityHint || "unknown"),
             },
             {
@@ -418,7 +734,10 @@ export async function POST(request: NextRequest) {
   const cityHint = normalizeCityHint(String(formData.get("cityHint") ?? ""));
   const plainText = String(formData.get("plainText") ?? "").trim();
   const placeUrl = String(formData.get("placeUrl") ?? "").trim();
-  const imageFile = formData.get("image");
+  const imageFiles = [
+    ...formData.getAll("images"),
+    ...formData.getAll("image"),
+  ].filter((file): file is File => file instanceof File && file.size > 0);
 
   const warnings: string[] = [];
   const textQueries = plainText
@@ -433,21 +752,52 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const queries = [...textQueries];
-  const urlNotes = new Map<string, string>();
+  const queryContexts: QueryContext[] = textQueries.map((query) => ({ query }));
 
   if (placeUrl) {
-    const urlResult = await resolvePlaceUrl(placeUrl);
-    queries.push(urlResult.query);
+    if (isTabelogUrl(placeUrl)) {
+      try {
+        const tabelogExtraction = {
+          ...(await fetchTabelogExtraction(placeUrl)),
+          sourceUrl: placeUrl,
+        };
+        const query =
+          [tabelogExtraction.name, tabelogExtraction.address]
+            .filter(Boolean)
+            .join(", ") || placeUrl;
 
-    if (urlResult.note) {
-      urlNotes.set(urlResult.query, urlResult.note);
+        queryContexts.push({
+          query,
+          tabelogExtraction,
+          sourceNote: "Parsed from Tabelog URL.",
+        });
+      } catch (error) {
+        const urlResult = await resolvePlaceUrl(placeUrl);
+        queryContexts.push({
+          query: urlResult.query,
+          sourceNote:
+            error instanceof Error
+              ? `Review needed: ${error.message}`
+              : "Review needed: Tabelog lookup failed.",
+        });
+      }
+    } else {
+      const urlResult = await resolvePlaceUrl(placeUrl);
+      queryContexts.push({
+        query: urlResult.query,
+        sourceNote: urlResult.note,
+      });
     }
   }
 
-  let imageExtraction: OpenAIExtraction | null = null;
+  if (imageFiles.length > MAX_IMAGE_FILES) {
+    return NextResponse.json(
+      { error: `Resolve up to ${MAX_IMAGE_FILES} images at a time.` },
+      { status: 400 },
+    );
+  }
 
-  if (imageFile instanceof File && imageFile.size > 0) {
+  for (const imageFile of imageFiles) {
     if (!ACCEPTED_IMAGE_TYPES.has(imageFile.type)) {
       return NextResponse.json(
         { error: "Upload a JPEG, PNG, WebP, HEIC, or HEIF image." },
@@ -464,27 +814,37 @@ export async function POST(request: NextRequest) {
 
     if (!process.env.OPENAI_API_KEY) {
       warnings.push(
-        "Image uploads require OPENAI_API_KEY. Text and URL inputs still work without it.",
+        `${imageFile.name}: image uploads require OPENAI_API_KEY. Text and URL inputs still work without it.`,
       );
     } else {
       try {
-        imageExtraction = await extractFromImage(imageFile, cityHint);
-        queries.push(
-          ...(imageExtraction.place_names ?? [])
-            .map((placeName) => placeName.trim())
-            .filter(Boolean),
+        const imageExtraction = await extractFromImage(imageFile, cityHint);
+        const imageQueries = (imageExtraction.place_names ?? [])
+          .map((placeName) => placeName.trim())
+          .filter(Boolean);
+
+        if (imageQueries.length === 0) {
+          warnings.push(`${imageFile.name}: no place names were found.`);
+        }
+
+        queryContexts.push(
+          ...imageQueries.map((query) => ({
+            query,
+            imageExtraction,
+            sourceNote: `Parsed from image: ${imageFile.name}`,
+          })),
         );
       } catch (error) {
         warnings.push(
           error instanceof Error
-            ? error.message
-            : "Image extraction failed. Text and URL inputs still work.",
+            ? `${imageFile.name}: ${error.message}`
+            : `${imageFile.name}: image extraction failed. Text and URL inputs still work.`,
         );
       }
     }
   }
 
-  if (queries.length === 0) {
+  if (queryContexts.length === 0) {
     return NextResponse.json(
       { error: "Add at least one place name, URL, or image to resolve." },
       { status: 400 },
@@ -493,8 +853,10 @@ export async function POST(request: NextRequest) {
 
   const drafts: DraftPlace[] = [];
 
-  for (const query of queries) {
-    const searchQuery = [query, cityHint || imageExtraction?.city_hint || ""]
+  for (const context of queryContexts) {
+    const extraction = context.imageExtraction;
+    const tabelogExtraction = context.tabelogExtraction;
+    const searchQuery = [context.query, cityHint || extraction?.city_hint || ""]
       .filter(Boolean)
       .join(", ");
 
@@ -511,34 +873,81 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const resolvedCity = cityHint || imageExtraction?.city_hint || "Unknown";
-    const address = match?.formattedAddress ?? imageExtraction?.address_hint ?? "";
-    const derivedGoogleCategory = deriveCategoryFromGooglePlace(match, query);
+    const inferredCity = inferCityFromText(
+      match?.formattedAddress ?? "",
+      context.query,
+      extraction?.city_hint ?? "",
+      tabelogExtraction?.address ?? "",
+    );
+    const resolvedCity = cityHint || inferredCity || extraction?.city_hint || "Unknown";
+    const address =
+      match?.formattedAddress ??
+      extraction?.address_hint ??
+      tabelogExtraction?.address ??
+      "";
+    const derivedGoogleCategory = deriveCategoryFromGooglePlace(
+      match,
+      context.query,
+    );
     const area = deriveArea(
       resolvedCity,
       address,
-      imageExtraction?.area_hint ?? "",
+      extraction?.area_hint ?? "",
     );
+    let resolvedTabelogExtraction = tabelogExtraction;
+
+    if (
+      isJapanCity(resolvedCity) &&
+      (!resolvedTabelogExtraction?.station || !resolvedTabelogExtraction?.score)
+    ) {
+      try {
+        const tabelogSearchQuery =
+          match?.displayName?.text || context.query.split(",")[0] || context.query;
+        resolvedTabelogExtraction =
+          (await searchTabelog(resolvedCity, tabelogSearchQuery)) ??
+          resolvedTabelogExtraction;
+      } catch (error) {
+        notes.push(
+          error instanceof Error
+            ? `Review needed: ${error.message}`
+            : "Review needed: Tabelog search failed.",
+        );
+      }
+    }
 
     drafts.push({
-      sourceLabel: query,
+      sourceLabel: context.query,
       city: resolvedCity,
-      name: match?.displayName?.text ?? query,
+      name: match?.displayName?.text ?? context.query,
       address,
-      category:
-        imageExtraction?.category_hint ||
-        derivedGoogleCategory ||
-        "",
+      category: extraction?.category_hint || derivedGoogleCategory || "",
       area,
       latitude: match?.location?.latitude ?? null,
       longitude: match?.location?.longitude ?? null,
-      subway: imageExtraction?.subway_hint ?? "",
-      tabelog: imageExtraction?.tabelog_hint ?? "",
+      subway: firstNonEmpty(
+        extraction?.subway_hint,
+        resolvedTabelogExtraction?.station,
+      ),
+      tabelog: firstNonEmpty(
+        extraction?.tabelog_hint,
+        resolvedTabelogExtraction?.score,
+      ),
       googleCategory: derivedGoogleCategory,
       notes: [
-        ...(imageExtraction?.notes ?? []),
-        ...(urlNotes.get(query) ? [urlNotes.get(query) as string] : []),
+        ...(extraction?.notes ?? []),
+        ...(resolvedTabelogExtraction?.notes ?? []),
+        ...(context.sourceNote ? [context.sourceNote] : []),
         ...notes,
+        ...(isJapanCity(resolvedCity) &&
+        !extraction?.subway_hint &&
+        !resolvedTabelogExtraction?.station
+          ? ["Review needed: add nearest subway from Tabelog."]
+          : []),
+        ...(isJapanCity(resolvedCity) &&
+        !extraction?.tabelog_hint &&
+        !resolvedTabelogExtraction?.score
+          ? ["Review needed: add Tabelog score."]
+          : []),
         ...(match ? [] : ["Review needed: no confident Google Places match."]),
       ],
     });

@@ -48,7 +48,7 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
   const [plainText, setPlainText] = useState("");
   const [placeUrl, setPlaceUrl] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ResolveResponse | null>(null);
   const [draftStatuses, setDraftStatuses] = useState<Record<string, DraftStatus>>({});
   const [stagedPlaces, setStagedPlaces] = useState<StagedPlace[]>([]);
@@ -89,8 +89,8 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
     formData.set("plainText", plainText);
     formData.set("placeUrl", placeUrl);
 
-    if (file) {
-      formData.set("image", file);
+    for (const file of files) {
+      formData.append("images", file);
     }
 
     try {
@@ -379,12 +379,20 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
             </label>
 
             <label>
-              Screenshot or image
+              Screenshots or images
               <input
                 accept="image/*"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                multiple
+                onChange={(event) =>
+                  setFiles(Array.from(event.target.files ?? []))
+                }
                 type="file"
               />
+              {files.length ? (
+                <span className="admin-file-count">
+                  {files.length} image{files.length === 1 ? "" : "s"} selected
+                </span>
+              ) : null}
             </label>
 
             <button className="admin-submit" disabled={isLoading} type="submit">
@@ -486,11 +494,11 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
                         <dd>{draft.longitude ?? "-"}</dd>
                       </div>
                       <div>
-                        <dt>Subway</dt>
+                        <dt>Nearest subway</dt>
                         <dd>{draft.subway || "-"}</dd>
                       </div>
                       <div>
-                        <dt>Tabelog</dt>
+                        <dt>Tabelog score</dt>
                         <dd>{draft.tabelog || "-"}</dd>
                       </div>
                     </dl>

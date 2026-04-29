@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizePlaceRow, normalizePlaces } from "@/lib/import";
+import { normalizeArea, normalizePlaceRow, normalizePlaces } from "@/lib/import";
 
 test("normalizePlaceRow parses been rows with loved flag", () => {
   const result = normalizePlaceRow({
@@ -194,4 +194,11 @@ test("normalizePlaceRow supports workbook headers", () => {
     assert.equal(result.place.category, "Cafe");
     assert.equal(result.place.district, "Daan");
   }
+});
+
+test("normalizeArea removes Taipei District suffix and normalizes Daan spelling", () => {
+  assert.equal(normalizeArea("Taipei", "Daan"), "Da’an");
+  assert.equal(normalizeArea("Taipei", "Da’an District"), "Da’an");
+  assert.equal(normalizeArea("Taipei", "Zhongshan District"), "Zhongshan");
+  assert.equal(normalizeArea("Kyoto", "Nakagyo Ward"), "Nakagyo Ward");
 });
