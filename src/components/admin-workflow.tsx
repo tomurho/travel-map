@@ -40,10 +40,45 @@ type ResolveResponse = {
 };
 
 type AdminWorkflowProps = {
+  categoryOptions: string[];
   cityOptions: string[];
 };
 
-export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
+const CATEGORY_ALIASES: Record<string, string> = {
+  coffee: "Coffee",
+  "coffee roaster": "Coffee",
+  "coffee roasters": "Coffee",
+  "coffee shop": "Coffee",
+  "coffee store": "Coffee",
+  pastry: "Pastries",
+  patisserie: "Pastries",
+  "wine bar": "Wine bar",
+};
+
+function normalizeCategoryInput(category: string, categoryOptions: string[]) {
+  const trimmedCategory = category.trim();
+  const lowerCategory = trimmedCategory.toLowerCase();
+
+  if (!trimmedCategory) {
+    return "";
+  }
+
+  const alias = CATEGORY_ALIASES[lowerCategory];
+  if (alias) {
+    return alias;
+  }
+
+  const existingCategory = categoryOptions.find(
+    (option) => option.toLowerCase() === lowerCategory,
+  );
+
+  return existingCategory ?? trimmedCategory;
+}
+
+export function AdminWorkflow({
+  categoryOptions,
+  cityOptions,
+}: AdminWorkflowProps) {
   const [cityHint, setCityHint] = useState("all");
   const [plainText, setPlainText] = useState("");
   const [placeUrl, setPlaceUrl] = useState("");
@@ -51,6 +86,10 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ResolveResponse | null>(null);
   const [draftStatuses, setDraftStatuses] = useState<Record<string, DraftStatus>>({});
+  const [draftCategories, setDraftCategories] = useState<Record<string, string>>({});
+  const [approvedDraftKeys, setApprovedDraftKeys] = useState<Record<string, boolean>>(
+    {},
+  );
   const [stagedPlaces, setStagedPlaces] = useState<StagedPlace[]>([]);
   const [stagedMessage, setStagedMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +106,13 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
     setDraftStatuses((currentStatuses) => ({
       ...currentStatuses,
       [draftKey]: status,
+    }));
+  }
+
+  function setDraftCategory(draftKey: string, category: string) {
+    setDraftCategories((currentCategories) => ({
+      ...currentCategories,
+      [draftKey]: category,
     }));
   }
 
@@ -110,6 +156,8 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
 
       setResult(payload);
       setDraftStatuses({});
+      setDraftCategories({});
+      setApprovedDraftKeys({});
     } catch (submissionError) {
       setError(
         submissionError instanceof Error
@@ -136,6 +184,10 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
         },
         body: JSON.stringify({
           ...draft,
+          category: normalizeCategoryInput(
+            draftCategories[draftKey] ?? draft.category,
+            categoryOptions,
+          ),
           draftStatus: draftStatuses[draftKey] ?? "location",
         }),
       });
@@ -151,6 +203,10 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
 
       setStagedPlaces(payload.places ?? []);
       setStagedMessage(`Approved ${draft.name}.`);
+      setApprovedDraftKeys((currentKeys) => ({
+        ...currentKeys,
+        [draftKey]: true,
+      }));
     } catch (approvalError) {
       setError(
         approvalError instanceof Error
@@ -333,21 +389,6 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
           <h2>Capture input</h2>
           <form className="admin-form" onSubmit={handleSubmit}>
             <label>
-              City hint
-              <select
-                value={cityHint}
-                onChange={(event) => setCityHint(event.target.value)}
-              >
-                <option value="all">Auto-detect / all cities</option>
-                {cityOptions.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
               Admin password
               <input
                 autoComplete="current-password"
@@ -395,6 +436,21 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
               ) : null}
             </label>
 
+            <label>
+              City hint
+              <select
+                value={cityHint}
+                onChange={(event) => setCityHint(event.target.value)}
+              >
+                <option value="all">Auto-detect / all cities</option>
+                {cityOptions.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <button className="admin-submit" disabled={isLoading} type="submit">
               {isLoading ? "Resolving places..." : "Resolve places"}
             </button>
@@ -419,9 +475,17 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
               {result.drafts.map((draft) => {
                 const draftKey = getDraftKey(draft);
                 const draftStatus = draftStatuses[draftKey] ?? "location";
+                const draftCategory =
+                  draftCategories[draftKey] ?? draft.category ?? draft.googleCategory ?? "";
+                const isApproved = approvedDraftKeys[draftKey] ?? false;
 
                 return (
-                  <article className="admin-draft-card" key={draftKey}>
+                  <article
+                    className={`admin-draft-card${
+                      isApproved ? " is-approved" : ""
+                    }`}
+                    key={draftKey}
+                  >
                     <div className="admin-draft-header">
                       <div>
                         <h3>{draft.name || "Unresolved place"}</h3>
@@ -479,7 +543,28 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
                       </div>
                       <div>
                         <dt>Category</dt>
-                        <dd>{draft.category || draft.googleCategory || "-"}</dd>
+                        <dd>
+                          <input
+                            aria-label={`Category for ${draft.name}`}
+                            className="admin-draft-input"
+                            list="admin-category-options"
+                            onChange={(event) =>
+                              setDraftCategory(draftKey, event.target.value)
+                            }
+                            onBlur={(event) =>
+                              setDraftCategory(
+                                draftKey,
+                                normalizeCategoryInput(
+                                  event.target.value,
+                                  categoryOptions,
+                                ),
+                              )
+                            }
+                            placeholder="Category"
+                            type="text"
+                            value={draftCategory}
+                          />
+                        </dd>
                       </div>
                       <div>
                         <dt>Area</dt>
@@ -512,12 +597,18 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
                     ) : null}
 
                     <button
-                      className="admin-approve"
+                      className={`admin-approve${
+                        isApproved ? " is-approved" : ""
+                      }`}
                       disabled={stagingDraftKey === draftKey}
                       onClick={() => approveDraft(draft)}
                       type="button"
                     >
-                      {stagingDraftKey === draftKey ? "Approving..." : "Approve draft"}
+                      {stagingDraftKey === draftKey
+                        ? "Approving..."
+                        : isApproved
+                          ? "Approved"
+                          : "Approve draft"}
                     </button>
                   </article>
                 );
@@ -589,6 +680,11 @@ export function AdminWorkflow({ cityOptions }: AdminWorkflowProps) {
           )}
         </section>
       </section>
+      <datalist id="admin-category-options">
+        {categoryOptions.map((category) => (
+          <option key={category} value={category} />
+        ))}
+      </datalist>
     </main>
   );
 }

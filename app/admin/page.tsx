@@ -11,6 +11,14 @@ export default function AdminPage() {
   const cityOptions = Array.from(
     new Set((places as Place[]).map((place) => place.city)),
   ).sort();
+  const categoryOptions = Array.from(
+    new Set((places as Place[]).map((place) => place.category).filter(Boolean)),
+  ).sort();
 
-  return <AdminWorkflow cityOptions={cityOptions} />;
+  return (
+    <AdminWorkflow
+      categoryOptions={categoryOptions}
+      cityOptions={cityOptions}
+    />
+  );
 }

@@ -358,36 +358,49 @@ export function TravelMapApp({
               </div>
             ) : (
               <div className="place-list">
-                {filteredPlaces.map((place) => (
-                  <button
-                    key={place.id}
-                    data-place-id={place.id}
-                    className={`place-card ${selectedPlace?.id === place.id ? "is-active" : ""}`}
-                    onClick={() => {
-                      setSelectedPlaceId(place.id);
-                      setOpenMapPlaceId(place.id);
-                    }}
-                    type="button"
-                  >
-                    <div className="place-card-header">
-                      <div>
-                        <h3>{place.name}</h3>
-                        <div className="eyebrow">
-                          <span>{place.category}</span>
-                          {place.loved === true ? (
-                            <span className="loved-badge">Loved it</span>
-                          ) : place.status === "been" || place.status === "want_to_go" ? (
-                            <span className={`badge ${place.status}`}>
-                              {place.status === "been" ? "Been" : "Want to go"}
-                            </span>
-                          ) : null}
+                {filteredPlaces.map((place) => {
+                  const selectPlace = () => {
+                    setSelectedPlaceId(place.id);
+                    setOpenMapPlaceId(place.id);
+                  };
+
+                  return (
+                    <article
+                      key={place.id}
+                      data-place-id={place.id}
+                      className={`place-card ${selectedPlace?.id === place.id ? "is-active" : ""}`}
+                      onClick={selectPlace}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") {
+                          return;
+                        }
+
+                        event.preventDefault();
+                        selectPlace();
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="place-card-header">
+                        <div>
+                          <h3>{place.name}</h3>
+                          <div className="eyebrow">
+                            <span>{place.category}</span>
+                            {place.loved === true ? (
+                              <span className="loved-badge">Loved it</span>
+                            ) : place.status === "been" || place.status === "want_to_go" ? (
+                              <span className={`badge ${place.status}`}>
+                                {place.status === "been" ? "Been" : "Want to go"}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
+                        {place.district ? <span className="badge">{place.district}</span> : null}
                       </div>
-                      {place.district ? <span className="badge">{place.district}</span> : null}
-                    </div>
-                    <address>{place.address || "Address to be added"}</address>
-                  </button>
-                ))}
+                      <address>{place.address || "Address to be added"}</address>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>

@@ -387,6 +387,7 @@ select {
   background: var(--surface-strong);
   text-align: left;
   cursor: pointer;
+  user-select: text;
   transition:
     transform 180ms ease,
     border-color 180ms ease,
@@ -865,6 +866,16 @@ select {
   border: 1px solid rgba(31, 42, 47, 0.1);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.admin-draft-card.is-approved {
+  border-color: rgba(48, 209, 88, 0.42);
+  background: rgba(236, 253, 243, 0.9);
+  box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.1);
 }
 
 .admin-draft-header {
@@ -953,6 +964,24 @@ select {
   overflow-wrap: anywhere;
 }
 
+.admin-draft-input {
+  width: 100%;
+  border: 1px solid rgba(31, 42, 47, 0.14);
+  border-radius: 12px;
+  min-height: 38px;
+  padding: 0 11px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.94rem;
+}
+
+.admin-draft-input:focus {
+  outline: 0;
+  border-color: rgba(10, 132, 255, 0.45);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.12);
+}
+
 .admin-note-list {
   margin: 0;
   padding-left: 18px;
@@ -978,6 +1007,10 @@ select {
 .admin-approve:disabled {
   cursor: progress;
   opacity: 0.7;
+}
+
+.admin-approve.is-approved {
+  background: #0b7a35;
 }
 
 .admin-staged-panel {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import places from "@/data/places.json";
 import { normalizeArea } from "@/lib/import";
+import type { Place } from "@/lib/place";
 
 type OpenAIExtraction = {
   place_names?: string[];
@@ -125,6 +127,74 @@ function normalizeCityHint(cityHint: string) {
 
 function firstNonEmpty(...values: Array<string | null | undefined>) {
   return values.find((value) => value?.trim())?.trim() ?? "";
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function normalizeDuplicateText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function coordinatesAreClose(
+  firstLatitude: number | null,
+  firstLongitude: number | null,
+  secondLatitude: number,
+  secondLongitude: number,
+) {
+  if (firstLatitude === null || firstLongitude === null) {
+    return false;
+  }
+
+  return (
+    Math.abs(firstLatitude - secondLatitude) < 0.00025 &&
+    Math.abs(firstLongitude - secondLongitude) < 0.00025
+  );
+}
+
+function getDuplicateNote(
+  city: string,
+  name: string,
+  address: string,
+  latitude: number | null,
+  longitude: number | null,
+) {
+  const normalizedCity = normalizeDuplicateText(city);
+  const normalizedName = normalizeDuplicateText(name);
+  const normalizedAddress = normalizeDuplicateText(address);
+  const existingPlace = (places as Place[]).find((place) => {
+    if (normalizeDuplicateText(place.city) !== normalizedCity) {
+      return false;
+    }
+
+    const existingName = normalizeDuplicateText(place.name);
+    const existingAddress = normalizeDuplicateText(place.address);
+
+    return (
+      (normalizedName && existingName === normalizedName) ||
+      (normalizedAddress && existingAddress === normalizedAddress) ||
+      coordinatesAreClose(
+        latitude,
+        longitude,
+        place.latitude,
+        place.longitude,
+      )
+    );
+  });
+
+  if (!existingPlace) {
+    return "";
+  }
+
+  return `Possible duplicate: already in dataset as ${existingPlace.name} (${existingPlace.city}, ${existingPlace.category}).`;
 }
 
 function isTabelogUrl(value: string) {
@@ -383,6 +453,20 @@ async function searchTabelog(city: string, query: string) {
     return null;
   }
 
+  const searchQueries = buildTabelogSearchQueries(query);
+
+  for (const searchQuery of searchQueries) {
+    const result = await searchTabelogOnce(cityPath, searchQuery);
+
+    if (result && isLikelyTabelogMatch(searchQuery, result.name)) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+async function searchTabelogOnce(cityPath: string, query: string) {
   const response = await fetch(
     `https://tabelog.com/en/${cityPath}/rstLst/?sw=${encodeURIComponent(query)}`,
     {
@@ -401,6 +485,45 @@ async function searchTabelog(city: string, query: string) {
   }
 
   return parseTabelogSearchHtml(await response.text());
+}
+
+function buildTabelogSearchQueries(query: string) {
+  const cleanedQuery = query
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutCategoryTerms = cleanedQuery
+    .replace(
+      /\b(?:coffee\s+roaster(?:y|s)?|coffee\s+shop|coffee|cafe|café|wine\s*bar|bar|restaurant)\b/gi,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return uniqueValues([cleanedQuery, withoutCategoryTerms]);
+}
+
+function normalizeSearchToken(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelyTabelogMatch(query: string, resultName: string) {
+  const queryTokens = normalizeSearchToken(query)
+    .split(" ")
+    .filter((token) => token.length > 2);
+  const resultNameNormalized = normalizeSearchToken(resultName);
+
+  if (!queryTokens.length || !resultNameNormalized) {
+    return Boolean(resultNameNormalized);
+  }
+
+  return queryTokens.every((token) => resultNameNormalized.includes(token));
 }
 
 function isJapanCity(city: string) {
@@ -460,11 +583,53 @@ function deriveCategoryFromGooglePlace(
   return match.primaryTypeDisplayName?.text || formatGoogleType(selectedType);
 }
 
+function normalizeCategoryHint(value: string) {
+  const category = value.trim();
+
+  if (!category) {
+    return "";
+  }
+
+  if (hasCoffeeSignal(category)) {
+    return "Coffee shop";
+  }
+
+  return category;
+}
+
+function isGenericGoogleCategory(value: string) {
+  return ["Food store", "Store"].includes(value.trim());
+}
+
+function chooseCategory(googleCategory: string, extractionCategory = "") {
+  const normalizedExtractionCategory = normalizeCategoryHint(extractionCategory);
+
+  if (
+    normalizedExtractionCategory &&
+    (!googleCategory || isGenericGoogleCategory(googleCategory))
+  ) {
+    return normalizedExtractionCategory;
+  }
+
+  return googleCategory || normalizedExtractionCategory || "";
+}
+
 function deriveArea(city: string, address: string, fallbackArea = "") {
-  if (fallbackArea.trim()) {
+  const fallback = fallbackArea.trim();
+  const addressArea = deriveAreaFromAddress(city, address);
+
+  if (city === "Taipei" && addressArea) {
+    return addressArea;
+  }
+
+  if (fallback && !isLikelyStreetLevelArea(fallback)) {
     return normalizeArea(city, fallbackArea);
   }
 
+  return addressArea;
+}
+
+function deriveAreaFromAddress(city: string, address: string) {
   if (!address.trim()) {
     return "";
   }
@@ -483,15 +648,13 @@ function deriveArea(city: string, address: string, fallbackArea = "") {
   if (japaneseWardMatch) {
     return normalizeArea(city, japaneseWardMatch[1]);
   }
-
-  if (city === "Taipei") {
-    const taipeiMatch = address.match(/([A-Za-z'’.-]+\sDistrict)/i);
-    if (taipeiMatch) {
-      return normalizeArea(city, taipeiMatch[1]);
-    }
-  }
-
   return "";
+}
+
+function isLikelyStreetLevelArea(value: string) {
+  return /\b(road|rd\.?|street|st\.?|avenue|ave\.?|lane|ln\.?|alley|section|sec\.?|boulevard|blvd\.?)\b/i.test(
+    value,
+  );
 }
 
 function extractUsefulTextFromUrl(placeUrl: string) {
@@ -915,15 +1078,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const draftName = match?.displayName?.text ?? context.query;
+    const latitude = match?.location?.latitude ?? null;
+    const longitude = match?.location?.longitude ?? null;
+    const duplicateNote = getDuplicateNote(
+      resolvedCity,
+      draftName,
+      address,
+      latitude,
+      longitude,
+    );
+
     drafts.push({
       sourceLabel: context.query,
       city: resolvedCity,
-      name: match?.displayName?.text ?? context.query,
+      name: draftName,
       address,
-      category: extraction?.category_hint || derivedGoogleCategory || "",
+      category: chooseCategory(
+        derivedGoogleCategory,
+        extraction?.category_hint,
+      ),
       area,
-      latitude: match?.location?.latitude ?? null,
-      longitude: match?.location?.longitude ?? null,
+      latitude,
+      longitude,
       subway: firstNonEmpty(
         extraction?.subway_hint,
         resolvedTabelogExtraction?.station,
@@ -937,6 +1114,7 @@ export async function POST(request: NextRequest) {
         ...(extraction?.notes ?? []),
         ...(resolvedTabelogExtraction?.notes ?? []),
         ...(context.sourceNote ? [context.sourceNote] : []),
+        ...(duplicateNote ? [duplicateNote] : []),
         ...notes,
         ...(isJapanCity(resolvedCity) &&
         !extraction?.subway_hint &&
