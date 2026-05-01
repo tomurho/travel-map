@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MapView } from "@/components/map-view";
+import { type CityCenter, MapView } from "@/components/map-view";
 import {
   countByStatus,
   filterPlaces,
@@ -51,6 +51,36 @@ function buildQuery(filters: PlaceFilterState) {
   return params.toString();
 }
 
+function getCityCenters(places: Place[]): CityCenter[] {
+  const cityGroups = new Map<
+    string,
+    {
+      latitudeTotal: number;
+      longitudeTotal: number;
+      count: number;
+    }
+  >();
+
+  for (const place of places) {
+    const existingGroup = cityGroups.get(place.city) ?? {
+      latitudeTotal: 0,
+      longitudeTotal: 0,
+      count: 0,
+    };
+
+    existingGroup.latitudeTotal += place.latitude;
+    existingGroup.longitudeTotal += place.longitude;
+    existingGroup.count += 1;
+    cityGroups.set(place.city, existingGroup);
+  }
+
+  return Array.from(cityGroups, ([city, group]) => ({
+    city,
+    latitude: group.latitudeTotal / group.count,
+    longitude: group.longitudeTotal / group.count,
+  }));
+}
+
 export function TravelMapApp({
   places,
   initialFilters,
@@ -80,6 +110,7 @@ export function TravelMapApp({
     [places, filters.area, filters.city, filters.loved, filters.status],
   );
   const cities = useMemo(() => getCities(places), [places]);
+  const cityCenters = useMemo(() => getCityCenters(places), [places]);
   const areas = useMemo(
     () =>
       getAvailableAreas(places, {
@@ -215,6 +246,7 @@ export function TravelMapApp({
           <div className="map-frame">
             <MapView
               places={filteredPlaces}
+              cityCenters={cityCenters}
               selectedPlaceId={selectedPlaceId}
               openPlaceId={openMapPlaceId}
               onSelectPlace={(placeId) => {
@@ -222,6 +254,18 @@ export function TravelMapApp({
                 setOpenMapPlaceId(placeId);
               }}
               onClosePlace={() => setOpenMapPlaceId(null)}
+              onNearbyCityDetected={(city) => {
+                if (city === filters.city) {
+                  return;
+                }
+
+                commitFilters({
+                  ...filters,
+                  city,
+                  area: "all",
+                  category: "all",
+                });
+              }}
             />
           </div>
         </div>

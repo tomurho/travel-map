@@ -492,7 +492,11 @@ function buildTabelogSearchQueries(query: string) {
     .replace(/\([^)]*\)/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const withoutCategoryTerms = cleanedQuery
+  const withoutCityTerms = cleanedQuery
+    .replace(/\b(?:kyoto|tokyo|japan)\b|京都|東京|日本/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutCategoryTerms = withoutCityTerms
     .replace(
       /\b(?:coffee\s+roaster(?:y|s)?|coffee\s+shop|coffee|cafe|café|wine\s*bar|bar|restaurant)\b/gi,
       " ",
@@ -500,7 +504,7 @@ function buildTabelogSearchQueries(query: string) {
     .replace(/\s+/g, " ")
     .trim();
 
-  return uniqueValues([cleanedQuery, withoutCategoryTerms]);
+  return uniqueValues([cleanedQuery, withoutCityTerms, withoutCategoryTerms]);
 }
 
 function normalizeSearchToken(value: string) {

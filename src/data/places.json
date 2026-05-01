@@ -3136,20 +3136,6 @@
     "subway": ""
   },
   {
-    "id": "taipei-chi-yuan-songjiang-shop-no-106-section-2-nanjing-e-rd-zhongshan-district-",
-    "name": "季緣 CHI YUAN",
-    "city": "Taipei",
-    "category": "Tea shop",
-    "status": "been",
-    "loved": true,
-    "district": "Zhongshan",
-    "address": "No. 106號, Section 2, Nanjing E Rd, Zhongshan District, Taipei City, Taiwan 104",
-    "latitude": 25.0517957,
-    "longitude": 121.5320462,
-    "tabelog": "",
-    "subway": "Songjiang Nanjing"
-  },
-  {
     "id": "chubby-burger-no-165-section-1-keelung-rd-xinyi-district-taipei-city-taiwan-110",
     "name": "Chubby burger",
     "city": "Taipei",
@@ -4606,6 +4592,20 @@
     "subway": ""
   },
   {
+    "id": "taipei-chi-yuan-songjiang-shop-no-106-section-2-nanjing-e-rd-zhongshan-district-",
+    "name": "季緣 CHI YUAN",
+    "city": "Taipei",
+    "category": "Tea shop",
+    "status": "been",
+    "loved": true,
+    "district": "Zhongshan",
+    "address": "No. 106號, Section 2, Nanjing E Rd, Zhongshan District, Taipei City, Taiwan 104",
+    "latitude": 25.0517957,
+    "longitude": 121.5320462,
+    "tabelog": "",
+    "subway": "Songjiang Nanjing"
+  },
+  {
     "id": "no-2-2-alley-14-lane-150-section-5-xinyi-rd-xinyi-district-taipei-city-110",
     "name": "実正拉面",
     "city": "Taipei",
@@ -4910,6 +4910,20 @@
     "address": "1F, No. 20, Lane 165, Dunhua N Rd, Songshan District, Taipei City 105",
     "latitude": 25.0552314,
     "longitude": 121.5483707,
+    "tabelog": "",
+    "subway": ""
+  },
+  {
+    "id": "taipei-shun-restaurant-no-490-changchun-rd-songshan-district-taipei-city-taiwan-",
+    "name": "有旬食事所Shun Restaurant",
+    "city": "Taipei",
+    "category": "Sushi",
+    "status": "been",
+    "loved": false,
+    "district": "Songshan",
+    "address": "No. 490號, Changchun Rd, Songshan District, Taipei City, Taiwan 105",
+    "latitude": 25.0543513,
+    "longitude": 121.5469972,
     "tabelog": "",
     "subway": ""
   },

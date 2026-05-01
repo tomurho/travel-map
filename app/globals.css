@@ -195,6 +195,52 @@ select {
   position: absolute;
 }
 
+.map-location-control {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  max-width: min(72vw, 260px);
+  pointer-events: auto;
+}
+
+.map-location-control button {
+  justify-self: start;
+  border: 1px solid rgba(31, 42, 47, 0.1);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(255, 250, 243, 0.96);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(31, 42, 47, 0.14);
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.map-location-control button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.map-location-message {
+  margin: 0;
+  border: 1px solid rgba(31, 42, 47, 0.08);
+  border-radius: 14px;
+  padding: 8px 10px;
+  background: rgba(255, 250, 243, 0.94);
+  color: var(--muted);
+  box-shadow: 0 10px 22px rgba(31, 42, 47, 0.1);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.map-location-message.is-error {
+  color: #b42318;
+}
+
 .dot {
   width: 10px;
   height: 10px;

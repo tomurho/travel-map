@@ -13,10 +13,12 @@ import type { Place } from "@/lib/place";
 
 type MapViewProps = {
   places: Place[];
+  cityCenters: CityCenter[];
   selectedPlaceId: string | null;
   openPlaceId: string | null;
   onSelectPlace: (placeId: string | null) => void;
   onClosePlace: () => void;
+  onNearbyCityDetected: (city: string) => void;
 };
 
 const defaultCenter = { lat: 1.3521, lng: 103.8198 };
@@ -26,6 +28,13 @@ const containerStyle = {
 };
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+const nearbyCityRadiusKm = 80;
+
+export type CityCenter = {
+  city: string;
+  latitude: number;
+  longitude: number;
+};
 
 type PlaceLookupState =
   | {
@@ -41,12 +50,33 @@ type PlaceLookupState =
       status: "error";
     };
 
+function getDistanceKm(
+  firstPoint: google.maps.LatLngLiteral,
+  secondPoint: google.maps.LatLngLiteral,
+) {
+  const earthRadiusKm = 6371;
+  const firstLatitude = (firstPoint.lat * Math.PI) / 180;
+  const secondLatitude = (secondPoint.lat * Math.PI) / 180;
+  const latitudeDelta = ((secondPoint.lat - firstPoint.lat) * Math.PI) / 180;
+  const longitudeDelta = ((secondPoint.lng - firstPoint.lng) * Math.PI) / 180;
+  const haversine =
+    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
+    Math.cos(firstLatitude) *
+      Math.cos(secondLatitude) *
+      Math.sin(longitudeDelta / 2) *
+      Math.sin(longitudeDelta / 2);
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
 export function MapView({
   places,
+  cityCenters,
   selectedPlaceId,
   openPlaceId,
   onSelectPlace,
   onClosePlace,
+  onNearbyCityDetected,
 }: MapViewProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [placeDetails, setPlaceDetails] = useState<
@@ -55,6 +85,13 @@ export function MapView({
   const [activePhotoUrl, setActivePhotoUrl] = useState<string | null>(null);
   const [photoStartIndex, setPhotoStartIndex] = useState(0);
   const [isCompactPopup, setIsCompactPopup] = useState(false);
+  const [userLocation, setUserLocation] = useState<google.maps.LatLngLiteral | null>(
+    null,
+  );
+  const [locationStatus, setLocationStatus] = useState<
+    "idle" | "locating" | "found" | "error"
+  >("idle");
+  const [locationMessage, setLocationMessage] = useState("");
   const { isLoaded, loadError } = useJsApiLoader({
     id: "travel-map-google-maps",
     googleMapsApiKey,
@@ -74,18 +111,22 @@ export function MapView({
       return;
     }
 
-    if (places.length === 0) {
-      map.setCenter(defaultCenter);
-      map.setZoom(2);
-      return;
-    }
-
     if (selectedPlace) {
       map.panTo({
         lat: selectedPlace.latitude,
         lng: selectedPlace.longitude,
       });
       map.setZoom(Math.max(map.getZoom() ?? 2, 12));
+      return;
+    }
+
+    if (userLocation && locationStatus === "found") {
+      return;
+    }
+
+    if (places.length === 0) {
+      map.setCenter(defaultCenter);
+      map.setZoom(2);
       return;
     }
 
@@ -98,7 +139,7 @@ export function MapView({
     }
 
     map.fitBounds(bounds, 72);
-  }, [isLoaded, map, places, selectedPlace]);
+  }, [isLoaded, locationStatus, map, places, selectedPlace, userLocation]);
 
   useEffect(() => {
     setPhotoStartIndex(0);
@@ -177,6 +218,79 @@ export function MapView({
 
     return () => controller.abort();
   }, [openPlace]);
+
+  function findNearbyCity(position: google.maps.LatLngLiteral) {
+    let nearestCity: CityCenter | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const cityCenter of cityCenters) {
+      const distance = getDistanceKm(position, {
+        lat: cityCenter.latitude,
+        lng: cityCenter.longitude,
+      });
+
+      if (distance < nearestDistance) {
+        nearestCity = cityCenter;
+        nearestDistance = distance;
+      }
+    }
+
+    if (!nearestCity || nearestDistance > nearbyCityRadiusKm) {
+      return null;
+    }
+
+    return nearestCity.city;
+  }
+
+  function handleUseMyLocation() {
+    if (!navigator.geolocation) {
+      setLocationStatus("error");
+      setLocationMessage("Location is not available in this browser.");
+      return;
+    }
+
+    setLocationStatus("locating");
+    setLocationMessage("Finding your location...");
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLocation = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        const nearbyCity = findNearbyCity(nextLocation);
+
+        setUserLocation(nextLocation);
+        setLocationStatus("found");
+        setLocationMessage(
+          nearbyCity
+            ? `Centered near ${nearbyCity}.`
+            : "Centered on your location.",
+        );
+        onSelectPlace(null);
+        onClosePlace();
+        map?.panTo(nextLocation);
+        map?.setZoom(nearbyCity ? 13 : 12);
+
+        if (nearbyCity) {
+          onNearbyCityDetected(nearbyCity);
+        }
+      },
+      (error) => {
+        setLocationStatus("error");
+        setLocationMessage(
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was denied."
+            : "Could not find your location.",
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 60_000,
+        timeout: 10_000,
+      },
+    );
+  }
 
   if (!googleMapsApiKey) {
     return (
@@ -348,6 +462,42 @@ export function MapView({
       }}
       zoom={2}
     >
+      <div
+        className="map-location-control"
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+      >
+        <button
+          disabled={locationStatus === "locating"}
+          onClick={(event) => {
+            event.stopPropagation();
+            handleUseMyLocation();
+          }}
+          type="button"
+        >
+          {locationStatus === "locating" ? "Finding..." : "Use my location"}
+        </button>
+        {locationMessage ? (
+          <p className={`map-location-message is-${locationStatus}`}>
+            {locationMessage}
+          </p>
+        ) : null}
+      </div>
+      {userLocation ? (
+        <MarkerF
+          position={userLocation}
+          zIndex={20}
+          icon={{
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: "#007aff",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 3,
+          }}
+        />
+      ) : null}
       {places.map((place) => {
         const isActive = place.id === openPlaceId;
 
@@ -387,9 +537,7 @@ export function MapView({
         <OverlayViewF
           getPixelPositionOffset={(width, height) => ({
             x: Math.round(-width / 2),
-            y: isCompactPopup
-              ? Math.round(-height / 2)
-              : Math.round(-(height + 18)),
+            y: Math.round(-(height + (isCompactPopup ? 14 : 18))),
           })}
           mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
           position={{
@@ -399,6 +547,9 @@ export function MapView({
         >
           <div
             className="map-popup-shell"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
             onTouchMove={(event) => event.stopPropagation()}
             style={popupShellStyle}
@@ -407,7 +558,12 @@ export function MapView({
               <button
                 aria-label="Close place details"
                 className="map-popup-close"
-                onClick={onClosePlace}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClosePlace();
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onTouchStart={(event) => event.stopPropagation()}
                 style={popupCloseStyle}
                 type="button"
               >
@@ -454,9 +610,12 @@ export function MapView({
                         className="map-popup-photo-nav"
                         aria-label="Previous photos"
                         disabled={!canShowPreviousPhotos}
-                        onClick={() =>
-                          setPhotoStartIndex((current) => Math.max(0, current - 6))
-                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPhotoStartIndex((current) => Math.max(0, current - 6));
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onTouchStart={(event) => event.stopPropagation()}
                         style={photoNavStyle}
                         type="button"
                       >
@@ -467,7 +626,12 @@ export function MapView({
                           <button
                             key={photoUrl}
                             className="map-popup-photo-link"
-                            onClick={() => setActivePhotoUrl(photoUrl)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setActivePhotoUrl(photoUrl);
+                            }}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onTouchStart={(event) => event.stopPropagation()}
                             style={photoThumbStyle}
                             type="button"
                           >
@@ -484,14 +648,17 @@ export function MapView({
                         className="map-popup-photo-nav"
                         aria-label="More photos"
                         disabled={!canShowMorePhotos}
-                        onClick={() =>
+                        onClick={(event) => {
+                          event.stopPropagation();
                           setPhotoStartIndex((current) =>
                             Math.min(
                               current + 6,
                               Math.max(openPlaceDetails.photoUrls.length - 6, 0),
                             ),
-                          )
-                        }
+                          );
+                        }}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onTouchStart={(event) => event.stopPropagation()}
                         style={photoNavStyle}
                         type="button"
                       >
@@ -522,17 +689,29 @@ export function MapView({
       {activePhotoUrl ? (
         <div
           className="map-photo-modal"
-          onClick={() => setActivePhotoUrl(null)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setActivePhotoUrl(null);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
           role="presentation"
         >
           <div
             className="map-photo-modal-content"
             onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
             role="presentation"
           >
             <button
               className="map-photo-modal-close"
-              onClick={() => setActivePhotoUrl(null)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setActivePhotoUrl(null);
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onTouchStart={(event) => event.stopPropagation()}
               type="button"
             >
               Close
