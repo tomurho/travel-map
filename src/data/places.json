@@ -3046,8 +3046,8 @@
     "loved": null,
     "district": "Songshan",
     "address": "No. 1, Alley 8, Lane 303, Section 3, Nanjing E Rd, Songshan District, Taipei City 105",
-    "latitude": 25.051869,
-    "longitude": 121.5633404,
+    "latitude": 25.052989,
+    "longitude": 121.54682,
     "tabelog": "",
     "subway": ""
   },
@@ -3300,6 +3300,20 @@
     "address": "No. 58, Minle St, Datong District, Taipei City 103",
     "latitude": 25.056583,
     "longitude": 121.5097167,
+    "tabelog": "",
+    "subway": ""
+  },
+  {
+    "id": "taipei-everywhere-burger-club-21-lane-420-guangfu-s-rd-da-an-district-taipei-cit",
+    "name": "Everywhere Burger Club",
+    "city": "Taipei",
+    "category": "Burger",
+    "status": "location",
+    "loved": null,
+    "district": "Da’an",
+    "address": "21號, Lane 420, Guangfu S Rd, Da’an District, Taipei City, Taiwan 106",
+    "latitude": 25.036300999999998,
+    "longitude": 121.556224,
     "tabelog": "",
     "subway": ""
   },
@@ -5040,20 +5054,6 @@
     "subway": ""
   },
   {
-    "id": "no-6-minle-st-datong-district-taipei-city-103",
-    "name": "江牛樓",
-    "city": "Taipei",
-    "category": "Beef noodles",
-    "status": "want_to_go",
-    "loved": null,
-    "district": "Datong",
-    "address": "No. 6, Minle St, Datong District, Taipei City 103",
-    "latitude": 25.0564316,
-    "longitude": 121.5090058,
-    "tabelog": "",
-    "subway": ""
-  },
-  {
     "id": "taipei-no-6-minle-st-datong-district-taipei-city-taiwan-103-25-0557099-121-51078",
     "name": "江牛樓",
     "city": "Taipei",
@@ -5090,8 +5090,8 @@
     "loved": null,
     "district": "Songshan",
     "address": "No. 16-1號, Lane 222, Dunhua N Rd, Songshan District, Taipei City, Taiwan 105",
-    "latitude": 25.0573,
-    "longitude": 121.5481,
+    "latitude": 25.05935,
+    "longitude": 121.54797,
     "tabelog": "",
     "subway": ""
   },
@@ -5272,8 +5272,8 @@
     "loved": null,
     "district": "Songshan",
     "address": "No. 7, Alley 7, Lane 303, Section 3, Nanjing E Rd, Songshan District, Taipei City 105",
-    "latitude": 25.052369,
-    "longitude": 121.5637403,
+    "latitude": 25.052815,
+    "longitude": 121.54635,
     "tabelog": "",
     "subway": ""
   },
@@ -5344,6 +5344,20 @@
     "address": "No. 20, Lane 250, Longjiang Rd, Zhongshan District, Taipei City 104",
     "latitude": 25.0581831,
     "longitude": 121.5402427,
+    "tabelog": "",
+    "subway": ""
+  },
+  {
+    "id": "taipei-op-118-2-10343-taiwan-taipei-city-datong-district-lane-14-section-1-dihua",
+    "name": "菸花Op.118.2",
+    "city": "Taipei",
+    "category": "Cafe",
+    "status": "want_to_go",
+    "loved": null,
+    "district": "Datong",
+    "address": "10343, Taiwan, Taipei City, Datong District, Lane 14, Section 1, Dihua St, 37號菸花一、二樓",
+    "latitude": 25.0540175,
+    "longitude": 121.50935779999999,
     "tabelog": "",
     "subway": ""
   },
@@ -5426,8 +5440,8 @@
     "loved": null,
     "district": "Da’an",
     "address": "No. 2號, Lane 17, Section 4, Zhongxiao E Rd, Da’an District, Taipei City, Taiwan 106",
-    "latitude": 25.0436736,
-    "longitude": 121.5071796,
+    "latitude": 25.042303,
+    "longitude": 121.5444,
     "tabelog": "",
     "subway": ""
   },
