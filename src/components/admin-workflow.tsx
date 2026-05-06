@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { formatDistance } from "@/lib/geo";
+
 type ResolveDraft = {
   sourceLabel: string;
   city: string;
@@ -32,6 +34,14 @@ type StagedPlace = {
   longitude: number | null;
   tabelog: string;
   subway: string;
+  duplicateMatches?: Array<{
+    address: string;
+    category: string;
+    distanceKm: number | null;
+    id: string;
+    name: string;
+    reason: string;
+  }>;
 };
 
 type ResolveResponse = {
@@ -75,6 +85,22 @@ function normalizeCategoryInput(category: string, categoryOptions: string[]) {
   return existingCategory ?? trimmedCategory;
 }
 
+function getAdminStatusLabel(place: StagedPlace) {
+  if (place.loved) {
+    return "Loved it";
+  }
+
+  if (place.status === "been") {
+    return "Been";
+  }
+
+  if (place.status === "want_to_go") {
+    return "Want to go";
+  }
+
+  return "Location";
+}
+
 export function AdminWorkflow({
   categoryOptions,
   cityOptions,
@@ -96,7 +122,30 @@ export function AdminWorkflow({
   const [isLoading, setIsLoading] = useState(false);
   const [stagingDraftKey, setStagingDraftKey] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [duplicatePublishPending, setDuplicatePublishPending] = useState(false);
+  const [isGeneratingDatasetExport, setIsGeneratingDatasetExport] = useState(false);
+  const [datasetExport, setDatasetExport] = useState<{
+    downloadUrl: string;
+    filePath: string;
+  } | null>(null);
   const [deletingStagedId, setDeletingStagedId] = useState<string | null>(null);
+  const stagedDuplicateCount = stagedPlaces.filter(
+    (place) => place.duplicateMatches?.length,
+  ).length;
+  const stagedMissingCoordinateCount = stagedPlaces.filter(
+    (place) => place.latitude === null || place.longitude === null,
+  ).length;
+  const stagedCityNames = Array.from(
+    new Set(stagedPlaces.map((place) => place.city).filter(Boolean)),
+  ).sort((firstCity, secondCity) => firstCity.localeCompare(secondCity));
+  const stagedStatusSummary = stagedPlaces.reduce(
+    (summary, place) => ({
+      ...summary,
+      [getAdminStatusLabel(place)]:
+        (summary[getAdminStatusLabel(place)] ?? 0) + 1,
+    }),
+    {} as Record<string, number>,
+  );
 
   function getDraftKey(draft: ResolveDraft) {
     return `${draft.city}-${draft.name}-${draft.sourceLabel}`;
@@ -202,6 +251,7 @@ export function AdminWorkflow({
       }
 
       setStagedPlaces(payload.places ?? []);
+      setDuplicatePublishPending(false);
       setStagedMessage(`Approved ${draft.name}.`);
       setApprovedDraftKeys((currentKeys) => ({
         ...currentKeys,
@@ -235,6 +285,7 @@ export function AdminWorkflow({
       }
 
       setStagedPlaces(payload.places ?? []);
+      setDuplicatePublishPending(false);
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -244,21 +295,25 @@ export function AdminWorkflow({
     }
   }
 
-  function downloadStagedPlaces() {
-    const params = new URLSearchParams();
-
-    if (adminPassword) {
-      params.set("adminPassword", adminPassword);
+  async function publishStagedPlaces() {
+    if (stagedMissingCoordinateCount > 0) {
+      setError(
+        `Remove or fix ${stagedMissingCoordinateCount} staged place${
+          stagedMissingCoordinateCount === 1 ? "" : "s"
+        } without coordinates before publishing.`,
+      );
+      return;
     }
 
-    window.location.href = `/api/admin/staged-places/export${
-      params.toString() ? `?${params.toString()}` : ""
-    }`;
-  }
-
-  async function publishStagedPlaces() {
+    const duplicateCount = stagedPlaces.filter(
+      (place) => place.duplicateMatches?.length,
+    ).length;
     const confirmed = window.confirm(
-      "Publish all staged places into the live local map dataset?",
+      duplicatePublishPending
+        ? `Publish anyway and keep ${duplicateCount} possible duplicate${
+            duplicateCount === 1 ? "" : "s"
+          } as staged entries?`
+        : "Publish all staged places into the live local map dataset?",
     );
 
     if (!confirmed) {
@@ -270,20 +325,63 @@ export function AdminWorkflow({
     setStagedMessage(null);
 
     try {
-      const response = await fetch("/api/admin/staged-places/publish", {
+      const params = new URLSearchParams();
+
+      if (duplicatePublishPending) {
+        params.set("allowDuplicates", "true");
+      }
+
+      const publishUrl = `/api/admin/staged-places/publish${
+        params.toString() ? `?${params.toString()}` : ""
+      }`;
+      const response = await fetch(publishUrl, {
         method: "POST",
         headers: authHeaders(),
       });
       const payload = (await response.json()) as {
+        duplicatePlaces?: Array<{
+          place: StagedPlace;
+          duplicateMatches: NonNullable<StagedPlace["duplicateMatches"]>;
+        }>;
         error?: string;
         publishedCount?: number;
+        requiresDuplicateConfirmation?: boolean;
       };
 
       if (!response.ok) {
         throw new Error(payload.error ?? "Could not publish staged places.");
       }
 
+      if (payload.requiresDuplicateConfirmation) {
+        const duplicateIds = new Set(
+          (payload.duplicatePlaces ?? []).map(({ place }) => place.id),
+        );
+
+        setStagedPlaces((currentPlaces) =>
+          currentPlaces.map((place) => {
+            const duplicatePlace = payload.duplicatePlaces?.find(
+              ({ place: pendingPlace }) => pendingPlace.id === place.id,
+            );
+
+            return duplicateIds.has(place.id) && duplicatePlace
+              ? {
+                  ...place,
+                  duplicateMatches: duplicatePlace.duplicateMatches,
+                }
+              : place;
+          }),
+        );
+        setDuplicatePublishPending(true);
+        setStagedMessage(
+          `Found ${payload.duplicatePlaces?.length ?? 0} possible duplicate${
+            payload.duplicatePlaces?.length === 1 ? "" : "s"
+          }. Review warnings, remove staged rows you do not want, or publish anyway.`,
+        );
+        return;
+      }
+
       setStagedPlaces([]);
+      setDuplicatePublishPending(false);
       setStagedMessage(`Published ${payload.publishedCount ?? 0} staged places.`);
     } catch (publishError) {
       setError(
@@ -293,6 +391,41 @@ export function AdminWorkflow({
       );
     } finally {
       setIsPublishing(false);
+    }
+  }
+
+  async function generateLocalDatasetExport() {
+    setIsGeneratingDatasetExport(true);
+    setError(null);
+    setDatasetExport(null);
+
+    try {
+      const response = await fetch("/api/admin/places/export/local", {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const payload = (await response.json()) as {
+        downloadUrl?: string;
+        error?: string;
+        filePath?: string;
+      };
+
+      if (!response.ok || !payload.downloadUrl || !payload.filePath) {
+        throw new Error(payload.error ?? "Could not generate the Excel file.");
+      }
+
+      setDatasetExport({
+        downloadUrl: payload.downloadUrl,
+        filePath: payload.filePath,
+      });
+    } catch (exportError) {
+      setError(
+        exportError instanceof Error
+          ? exportError.message
+          : "Could not generate the Excel file.",
+      );
+    } finally {
+      setIsGeneratingDatasetExport(false);
     }
   }
 
@@ -323,6 +456,7 @@ export function AdminWorkflow({
       }
 
       setStagedPlaces(payload.places ?? []);
+      setDuplicatePublishPending(false);
       setStagedMessage(`Removed ${place.name} from staging.`);
     } catch (deleteError) {
       setError(
@@ -361,6 +495,7 @@ export function AdminWorkflow({
       }
 
       setStagedPlaces(payload.places ?? []);
+      setDuplicatePublishPending(false);
       setStagedMessage("Cleared approved staging.");
     } catch (deleteError) {
       setError(
@@ -626,14 +761,17 @@ export function AdminWorkflow({
           <div className="admin-staged-header">
             <div>
               <h2>Approved staging</h2>
-              <p>Review, export, or publish approved places.</p>
+              <p>
+                {stagedDuplicateCount > 0
+                  ? `${stagedDuplicateCount} staged place${
+                      stagedDuplicateCount === 1 ? " has" : "s have"
+                    } possible duplicate matches.`
+                  : "Review or publish approved drafts before they join the map."}
+              </p>
             </div>
             <div className="admin-staged-actions">
               <button onClick={refreshStagedPlaces} type="button">
                 Refresh
-              </button>
-              <button onClick={downloadStagedPlaces} type="button">
-                Download Excel
               </button>
               <button
                 disabled={deletingStagedId === "all" || stagedPlaces.length === 0}
@@ -647,37 +785,130 @@ export function AdminWorkflow({
                 onClick={publishStagedPlaces}
                 type="button"
               >
-                {isPublishing ? "Publishing..." : "Publish staged places"}
+                {isPublishing
+                  ? "Publishing..."
+                  : duplicatePublishPending
+                    ? "Publish anyway"
+                    : "Publish staged places"}
               </button>
             </div>
           </div>
           {stagedPlaces.length ? (
-            <div className="admin-staged-list">
-              {stagedPlaces.map((place) => (
-                <article className="admin-staged-row" key={place.id}>
-                  <div>
-                    <strong>{place.name}</strong>
-                    <span>
-                      {place.city} - {place.category || "Uncategorized"} -{" "}
-                      {place.loved ? "Loved it" : place.status}
+            <>
+              <div className="admin-publish-preview">
+                <div>
+                  <span>Ready to publish</span>
+                  <strong>
+                    {stagedPlaces.length} staged place
+                    {stagedPlaces.length === 1 ? "" : "s"}
+                  </strong>
+                  <p>
+                    {stagedCityNames.length
+                      ? stagedCityNames.join(", ")
+                      : "No city assigned"}
+                  </p>
+                </div>
+                <div className="admin-preview-chips">
+                  {Object.entries(stagedStatusSummary).map(([status, count]) => (
+                    <span key={status}>
+                      <strong>{count}</strong> {status}
                     </span>
-                  </div>
-                  <button
-                    disabled={deletingStagedId === place.id}
-                    onClick={() => deleteStagedPlace(place)}
-                    type="button"
-                  >
-                    {deletingStagedId === place.id ? "Removing..." : "Remove"}
-                  </button>
-                </article>
-              ))}
-            </div>
+                  ))}
+                  {stagedDuplicateCount > 0 ? (
+                    <span className="is-warning">
+                      <strong>{stagedDuplicateCount}</strong> possible duplicate
+                      {stagedDuplicateCount === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
+                  {stagedMissingCoordinateCount > 0 ? (
+                    <span className="is-blocked">
+                      <strong>{stagedMissingCoordinateCount}</strong> missing coords
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="admin-staged-list">
+                {stagedPlaces.map((place) => (
+                  <article className="admin-staged-row" key={place.id}>
+                    <div>
+                      <strong>{place.name}</strong>
+                      <span>
+                        {place.city} - {place.category || "Uncategorized"} -{" "}
+                        {getAdminStatusLabel(place)}
+                      </span>
+                      {place.duplicateMatches?.length ? (
+                        <div className="admin-duplicate-warning">
+                          <strong>Possible duplicate in approved dataset</strong>
+                          {place.duplicateMatches.map((match) => (
+                            <p key={match.id}>
+                              <span>
+                                {match.name} - {match.category || "Uncategorized"}
+                                {match.distanceKm !== null
+                                  ? ` - ${formatDistance(match.distanceKm)} away`
+                                  : ""}
+                              </span>
+                              <small>{match.reason}</small>
+                            </p>
+                          ))}
+                        </div>
+                      ) : null}
+                      {place.latitude === null || place.longitude === null ? (
+                        <div className="admin-duplicate-warning is-blocked">
+                          <strong>Cannot publish without coordinates</strong>
+                          <small>
+                            Remove this staged place or resolve it again with latitude and
+                            longitude.
+                          </small>
+                        </div>
+                      ) : null}
+                    </div>
+                    <button
+                      disabled={deletingStagedId === place.id}
+                      onClick={() => deleteStagedPlace(place)}
+                      type="button"
+                    >
+                      {deletingStagedId === place.id ? "Removing..." : "Remove"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </>
           ) : (
             <p className="admin-empty">
               Approved drafts will appear here before they are merged into the
               live map dataset.
             </p>
           )}
+        </section>
+
+        <section className="panel admin-export-panel">
+          <div className="admin-staged-header">
+            <div>
+              <h2>Approved dataset export</h2>
+              <p>
+                Download the full production map dataset as an Excel workbook,
+                with each city split into its own worksheet.
+              </p>
+            </div>
+            <div className="admin-staged-actions">
+              <button
+                disabled={isGeneratingDatasetExport}
+                onClick={generateLocalDatasetExport}
+                type="button"
+              >
+                {isGeneratingDatasetExport ? "Generating..." : "Download Excel"}
+              </button>
+            </div>
+          </div>
+          {datasetExport ? (
+            <div className="admin-export-result">
+              <strong>Excel file generated.</strong>
+              <a download="travel-map-approved-places.xlsx" href={datasetExport.downloadUrl}>
+                Open generated file
+              </a>
+              <code>{datasetExport.filePath}</code>
+            </div>
+          ) : null}
         </section>
       </section>
       <datalist id="admin-category-options">

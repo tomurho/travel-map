@@ -2954,6 +2954,20 @@
     "subway": ""
   },
   {
+    "id": "taipei-amber-land-taproom-4-4-no-16-songgao-rd-xinyi-district-taipei-city-taiwan",
+    "name": "Amber Land 微風松高店-Taproom酒吧",
+    "city": "Taipei",
+    "category": "Beer bar",
+    "status": "been",
+    "loved": true,
+    "district": "Xinyi",
+    "address": "4樓, 微風松高4樓No. 16號, Songgao Rd, Xinyi District, Taipei City, Taiwan 110",
+    "latitude": 25.0379036,
+    "longitude": 121.56726049999999,
+    "tabelog": "",
+    "subway": ""
+  },
+  {
     "id": "astea-no-236-wenchang-st-daan-district-taipei-city-106",
     "name": "Astea",
     "city": "Taipei",
@@ -5194,6 +5208,20 @@
     "subway": ""
   },
   {
+    "id": "taipei-sweet-sour-coffee-wave-frisson-no-33-lane-61-section-2-hangzhou-s-rd-da-a",
+    "name": "甜酸三號店 - Sweet & Sour Coffee Wave 錦町門市（Frisson）",
+    "city": "Taipei",
+    "category": "Coffee",
+    "status": "want_to_go",
+    "loved": null,
+    "district": "Da’an",
+    "address": "No. 33號, Lane 61, Section 2, Hangzhou S Rd, Da’an District, Taipei City, Taiwan 106",
+    "latitude": 25.0300965,
+    "longitude": 121.52428299999998,
+    "tabelog": "",
+    "subway": ""
+  },
+  {
     "id": "no-34-yongkang-st-daan-district-taipei-city-106007",
     "name": "白水豆花",
     "city": "Taipei",
@@ -5880,20 +5908,6 @@
     "subway": "Omote-sando"
   },
   {
-    "id": "land-bar-artisan-2-16-1-4f",
-    "name": "LAND BAR artisan",
-    "city": "Tokyo",
-    "category": "Bar",
-    "status": "location",
-    "loved": null,
-    "district": "Minato",
-    "address": "東京都港区新橋2-16-1 ニュー新橋ビル 4F",
-    "latitude": 35.666859,
-    "longitude": 139.757097,
-    "tabelog": "3.05",
-    "subway": "Shimbashi"
-  },
-  {
     "id": "mimet-1-9-20-1f",
     "name": "mimet",
     "city": "Tokyo",
@@ -6258,20 +6272,6 @@
     "subway": "Omote-sando"
   },
   {
-    "id": "glaciel-omotesando-ten-5-2-23",
-    "name": "グラッシェル 表参道店 (GLACIEL Omotesando Ten)",
-    "city": "Tokyo",
-    "category": "Pastries",
-    "status": "location",
-    "loved": null,
-    "district": "Shibuya",
-    "address": "東京都渋谷区神宮前5-2-23",
-    "latitude": 35.664524,
-    "longitude": 139.706017,
-    "tabelog": "3.71",
-    "subway": "Omote-sando"
-  },
-  {
     "id": "craftale-1-16-11-2f",
     "name": "クラフタル (CRAFTALE)",
     "city": "Tokyo",
@@ -6284,20 +6284,6 @@
     "longitude": 139.6969,
     "tabelog": "3.72",
     "subway": "Naka-meguro"
-  },
-  {
-    "id": "craftheads-1-13-10-egg-b1f",
-    "name": "クラフトヘッズ (Craftheads)",
-    "city": "Tokyo",
-    "category": "Beer bar",
-    "status": "location",
-    "loved": null,
-    "district": "Shibuya",
-    "address": "東京都渋谷区神南1-13-10 EGGビル B1F",
-    "latitude": 35.663127,
-    "longitude": 139.700363,
-    "tabelog": "3.56",
-    "subway": "Shinsen"
   },
   {
     "id": "gourmandise-3-17-23-2f",

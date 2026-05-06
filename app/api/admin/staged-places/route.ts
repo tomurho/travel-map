@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   clearStagedPlaces,
   deleteStagedPlace,
-  readStagedPlaces,
+  getStagedPlacesWithDuplicates,
   stagePlace,
   type AdminStagedPlaceInput,
 } from "@/lib/admin-staging";
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
-  return NextResponse.json({ places: readStagedPlaces() });
+  return NextResponse.json({ places: getStagedPlacesWithDuplicates() });
 }
 
 export async function POST(request: NextRequest) {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   const place = stagePlace(input);
 
-  return NextResponse.json({ place, places: readStagedPlaces() });
+  return NextResponse.json({ place, places: getStagedPlacesWithDuplicates() });
 }
 
 export async function DELETE(request: NextRequest) {
@@ -61,5 +61,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ places: [] });
   }
 
-  return NextResponse.json({ places: deleteStagedPlace(id) });
+  deleteStagedPlace(id);
+
+  return NextResponse.json({ places: getStagedPlacesWithDuplicates() });
 }

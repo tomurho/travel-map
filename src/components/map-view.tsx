@@ -9,6 +9,7 @@ import {
   OverlayViewF,
   useJsApiLoader,
 } from "@react-google-maps/api";
+import { getDistanceKm, type GeoPoint } from "@/lib/geo";
 import type { Place } from "@/lib/place";
 
 type MapViewProps = {
@@ -19,6 +20,7 @@ type MapViewProps = {
   onSelectPlace: (placeId: string | null) => void;
   onClosePlace: () => void;
   onNearbyCityDetected: (city: string) => void;
+  onUserLocationFound: (location: GeoPoint) => void;
 };
 
 const defaultCenter = { lat: 1.3521, lng: 103.8198 };
@@ -50,25 +52,6 @@ type PlaceLookupState =
       status: "error";
     };
 
-function getDistanceKm(
-  firstPoint: google.maps.LatLngLiteral,
-  secondPoint: google.maps.LatLngLiteral,
-) {
-  const earthRadiusKm = 6371;
-  const firstLatitude = (firstPoint.lat * Math.PI) / 180;
-  const secondLatitude = (secondPoint.lat * Math.PI) / 180;
-  const latitudeDelta = ((secondPoint.lat - firstPoint.lat) * Math.PI) / 180;
-  const longitudeDelta = ((secondPoint.lng - firstPoint.lng) * Math.PI) / 180;
-  const haversine =
-    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
-    Math.cos(firstLatitude) *
-      Math.cos(secondLatitude) *
-      Math.sin(longitudeDelta / 2) *
-      Math.sin(longitudeDelta / 2);
-
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-}
-
 export function MapView({
   places,
   cityCenters,
@@ -77,6 +60,7 @@ export function MapView({
   onSelectPlace,
   onClosePlace,
   onNearbyCityDetected,
+  onUserLocationFound,
 }: MapViewProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [placeDetails, setPlaceDetails] = useState<
@@ -224,10 +208,16 @@ export function MapView({
     let nearestDistance = Number.POSITIVE_INFINITY;
 
     for (const cityCenter of cityCenters) {
-      const distance = getDistanceKm(position, {
-        lat: cityCenter.latitude,
-        lng: cityCenter.longitude,
-      });
+      const distance = getDistanceKm(
+        {
+          latitude: position.lat,
+          longitude: position.lng,
+        },
+        {
+          latitude: cityCenter.latitude,
+          longitude: cityCenter.longitude,
+        },
+      );
 
       if (distance < nearestDistance) {
         nearestCity = cityCenter;
@@ -267,6 +257,10 @@ export function MapView({
             ? `Centered near ${nearbyCity}.`
             : "Centered on your location.",
         );
+        onUserLocationFound({
+          latitude: nextLocation.lat,
+          longitude: nextLocation.lng,
+        });
         onSelectPlace(null);
         onClosePlace();
         map?.panTo(nextLocation);

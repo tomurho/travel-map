@@ -17,7 +17,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
-  const result = publishStagedPlaces();
+  const allowDuplicates =
+    request.nextUrl.searchParams.get("allowDuplicates") === "true";
+  const result = publishStagedPlaces({ allowDuplicates });
 
   return NextResponse.json(result);
 }

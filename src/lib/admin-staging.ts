@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as xlsx from "xlsx";
 
+import { getDistanceKm } from "@/lib/geo";
 import type { Place, PlaceStatus } from "@/lib/place";
 
 export type AdminDraftStatus = PlaceStatus | "loved";
@@ -23,6 +24,19 @@ export interface AdminStagedPlace {
   notes: string[];
   createdAt: string;
 }
+
+export interface AdminDuplicateMatch {
+  address: string;
+  category: string;
+  distanceKm: number | null;
+  id: string;
+  name: string;
+  reason: string;
+}
+
+export type AdminStagedPlaceWithDuplicates = AdminStagedPlace & {
+  duplicateMatches: AdminDuplicateMatch[];
+};
 
 export interface AdminStagedPlaceInput {
   name: string;
@@ -52,6 +66,92 @@ function slugify(value: string) {
     .slice(0, 80);
 }
 
+function normalizeDuplicateText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\u3040-\u30ff\u3400-\u9fff]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getTokenOverlap(firstValue: string, secondValue: string) {
+  const firstTokens = new Set(
+    normalizeDuplicateText(firstValue)
+      .split(" ")
+      .filter((token) => token.length >= 3),
+  );
+  const secondTokens = new Set(
+    normalizeDuplicateText(secondValue)
+      .split(" ")
+      .filter((token) => token.length >= 3),
+  );
+
+  if (firstTokens.size === 0 || secondTokens.size === 0) {
+    return 0;
+  }
+
+  const overlapCount = Array.from(firstTokens).filter((token) =>
+    secondTokens.has(token),
+  ).length;
+
+  return overlapCount / Math.min(firstTokens.size, secondTokens.size);
+}
+
+function getDuplicateDistanceKm(
+  stagedPlace: AdminStagedPlace,
+  productionPlace: Place,
+) {
+  if (stagedPlace.latitude === null || stagedPlace.longitude === null) {
+    return null;
+  }
+
+  return getDistanceKm(
+    {
+      latitude: stagedPlace.latitude,
+      longitude: stagedPlace.longitude,
+    },
+    {
+      latitude: productionPlace.latitude,
+      longitude: productionPlace.longitude,
+    },
+  );
+}
+
+function getDuplicateReason(
+  stagedPlace: AdminStagedPlace,
+  productionPlace: Place,
+) {
+  if (stagedPlace.city !== productionPlace.city) {
+    return null;
+  }
+
+  const stagedName = normalizeDuplicateText(stagedPlace.name);
+  const productionName = normalizeDuplicateText(productionPlace.name);
+  const stagedAddress = normalizeDuplicateText(stagedPlace.address);
+  const productionAddress = normalizeDuplicateText(productionPlace.address);
+  const distanceKm = getDuplicateDistanceKm(stagedPlace, productionPlace);
+
+  if (stagedName && stagedName === productionName) {
+    return "Same city and same normalized name";
+  }
+
+  if (stagedAddress && stagedAddress === productionAddress) {
+    return "Same city and same normalized address";
+  }
+
+  if (
+    distanceKm !== null &&
+    distanceKm <= 0.05 &&
+    getTokenOverlap(stagedPlace.name, productionPlace.name) >= 0.5
+  ) {
+    return "Very close coordinates and similar name";
+  }
+
+  return null;
+}
+
 function normalizeDraftStatus(draftStatus: AdminDraftStatus) {
   if (draftStatus === "loved") {
     return { status: "been" as const, loved: true };
@@ -75,6 +175,40 @@ export function readStagedPlaces() {
   }
 
   return JSON.parse(rawContent) as AdminStagedPlace[];
+}
+
+export function getDuplicateMatchesForStagedPlace(
+  stagedPlace: AdminStagedPlace,
+  productionPlaces = readProductionPlaces(),
+): AdminDuplicateMatch[] {
+  return productionPlaces
+    .map((productionPlace) => {
+      const reason = getDuplicateReason(stagedPlace, productionPlace);
+
+      if (!reason) {
+        return null;
+      }
+
+      return {
+        address: productionPlace.address,
+        category: productionPlace.category,
+        distanceKm: getDuplicateDistanceKm(stagedPlace, productionPlace),
+        id: productionPlace.id,
+        name: productionPlace.name,
+        reason,
+      };
+    })
+    .filter((match): match is AdminDuplicateMatch => match !== null)
+    .slice(0, 3);
+}
+
+export function getStagedPlacesWithDuplicates() {
+  const productionPlaces = readProductionPlaces();
+
+  return readStagedPlaces().map((place) => ({
+    ...place,
+    duplicateMatches: getDuplicateMatchesForStagedPlace(place, productionPlaces),
+  }));
 }
 
 export function clearStagedPlaces() {
@@ -152,7 +286,7 @@ function stagedPlaceToPlace(place: AdminStagedPlace): Place {
   };
 }
 
-export function publishStagedPlaces() {
+export function publishStagedPlaces({ allowDuplicates = false } = {}) {
   const stagedPlaces = readStagedPlaces();
 
   if (stagedPlaces.length === 0) {
@@ -162,6 +296,22 @@ export function publishStagedPlaces() {
   const currentPlaces = JSON.parse(
     readFileSync(PLACES_FILE_PATH, "utf8"),
   ) as Place[];
+  const duplicatePlaces = stagedPlaces
+    .map((place) => ({
+      place,
+      duplicateMatches: getDuplicateMatchesForStagedPlace(place, currentPlaces),
+    }))
+    .filter((place) => place.duplicateMatches.length > 0);
+
+  if (!allowDuplicates && duplicatePlaces.length > 0) {
+    return {
+      duplicatePlaces,
+      publishedCount: 0,
+      places: stagedPlaces,
+      requiresDuplicateConfirmation: true,
+    };
+  }
+
   const stagedMapPlaces = stagedPlaces.map(stagedPlaceToPlace);
   const stagedIds = new Set(stagedMapPlaces.map((place) => place.id));
   const nextPlaces = [
@@ -183,7 +333,23 @@ export function publishStagedPlaces() {
   return { publishedCount: stagedPlaces.length, places: stagedPlaces };
 }
 
-function getExportRows(places: AdminStagedPlace[]) {
+function getPlaceStatusLabel(place: Pick<Place, "loved" | "status">) {
+  if (place.loved) {
+    return "Loved it";
+  }
+
+  if (place.status === "been") {
+    return "Been";
+  }
+
+  if (place.status === "want_to_go") {
+    return "Want to go";
+  }
+
+  return "Location";
+}
+
+function getStagedExportRows(places: AdminStagedPlace[]) {
   const headers = [
     "City",
     "Location Name",
@@ -204,7 +370,7 @@ function getExportRows(places: AdminStagedPlace[]) {
     place.city,
     place.name,
     place.category,
-    place.loved ? "Loved it" : place.status,
+    getPlaceStatusLabel(place),
     place.district,
     place.address,
     place.latitude ?? "",
@@ -219,10 +385,82 @@ function getExportRows(places: AdminStagedPlace[]) {
   return [headers, ...rows];
 }
 
-export function stagedPlacesToWorkbookBuffer(places: AdminStagedPlace[]) {
-  const workbook = xlsx.utils.book_new();
-  const worksheet = xlsx.utils.aoa_to_sheet(getExportRows(places));
+function getProductionExportRows(places: Place[]) {
+  const headers = [
+    "Location Name",
+    "Category",
+    "Status",
+    "Area",
+    "Address",
+    "Latitude",
+    "Longitude",
+    "Tabelog Score",
+    "Nearest Subway",
+  ];
 
+  const rows = places.map((place) => [
+    place.name,
+    place.category,
+    getPlaceStatusLabel(place),
+    place.district,
+    place.address,
+    place.latitude,
+    place.longitude,
+    place.tabelog,
+    place.subway,
+  ]);
+
+  return [headers, ...rows];
+}
+
+function getSafeWorksheetName(city: string, existingNames: Set<string>) {
+  const fallbackName = "Unknown";
+  const baseName =
+    city
+      .trim()
+      .replace(/[:\\/?*\[\]]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 31) || fallbackName;
+  let worksheetName = baseName;
+  let suffix = 2;
+
+  while (existingNames.has(worksheetName)) {
+    const suffixText = ` ${suffix}`;
+    worksheetName = `${baseName.slice(0, 31 - suffixText.length)}${suffixText}`;
+    suffix += 1;
+  }
+
+  existingNames.add(worksheetName);
+
+  return worksheetName;
+}
+
+function getPlacesByCity<TPlace extends Pick<Place, "city" | "name">>(
+  places: TPlace[],
+) {
+  return [...places]
+    .sort((firstPlace, secondPlace) => {
+      const citySort = firstPlace.city.localeCompare(secondPlace.city);
+
+      if (citySort !== 0) {
+        return citySort;
+      }
+
+      return firstPlace.name.localeCompare(secondPlace.name);
+    })
+    .reduce((cityMap, place) => {
+      const city = place.city.trim() || "Unknown";
+      cityMap.set(city, [...(cityMap.get(city) ?? []), place]);
+
+      return cityMap;
+    }, new Map<string, TPlace[]>());
+}
+
+function applyStagedExportWorksheetFormatting(
+  worksheet: xlsx.WorkSheet,
+  rowCount: number,
+) {
   worksheet["!cols"] = [
     { wch: 14 },
     { wch: 32 },
@@ -238,10 +476,86 @@ export function stagedPlacesToWorkbookBuffer(places: AdminStagedPlace[]) {
     { wch: 44 },
     { wch: 24 },
   ];
-  worksheet["!autofilter"] = { ref: `A1:M${Math.max(1, places.length + 1)}` };
+  worksheet["!autofilter"] = { ref: `A1:M${Math.max(1, rowCount)}` };
   worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+}
 
-  xlsx.utils.book_append_sheet(workbook, worksheet, "Staged Places");
+function applyProductionExportWorksheetFormatting(
+  worksheet: xlsx.WorkSheet,
+  rowCount: number,
+) {
+  worksheet["!cols"] = [
+    { wch: 34 },
+    { wch: 22 },
+    { wch: 14 },
+    { wch: 22 },
+    { wch: 52 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 18 },
+    { wch: 24 },
+  ];
+  worksheet["!autofilter"] = { ref: `A1:I${Math.max(1, rowCount)}` };
+  worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+}
+
+export function readProductionPlaces() {
+  return JSON.parse(readFileSync(PLACES_FILE_PATH, "utf8")) as Place[];
+}
+
+export function stagedPlacesToWorkbookBuffer(places: AdminStagedPlace[]) {
+  const workbook = xlsx.utils.book_new();
+  const cityNames = new Set<string>();
+
+  if (places.length === 0) {
+    const worksheet = xlsx.utils.aoa_to_sheet(getStagedExportRows([]));
+
+    applyStagedExportWorksheetFormatting(worksheet, 1);
+    xlsx.utils.book_append_sheet(workbook, worksheet, "No Staged Places");
+
+    return xlsx.write(workbook, {
+      bookType: "xlsx",
+      type: "buffer",
+    }) as Buffer;
+  }
+
+  for (const [city, cityPlaces] of getPlacesByCity(places)) {
+    const worksheet = xlsx.utils.aoa_to_sheet(getStagedExportRows(cityPlaces));
+    const worksheetName = getSafeWorksheetName(city, cityNames);
+
+    applyStagedExportWorksheetFormatting(worksheet, cityPlaces.length + 1);
+    xlsx.utils.book_append_sheet(workbook, worksheet, worksheetName);
+  }
+
+  return xlsx.write(workbook, {
+    bookType: "xlsx",
+    type: "buffer",
+  }) as Buffer;
+}
+
+export function productionPlacesToWorkbookBuffer(places: Place[]) {
+  const workbook = xlsx.utils.book_new();
+  const cityNames = new Set<string>();
+
+  if (places.length === 0) {
+    const worksheet = xlsx.utils.aoa_to_sheet(getProductionExportRows([]));
+
+    applyProductionExportWorksheetFormatting(worksheet, 1);
+    xlsx.utils.book_append_sheet(workbook, worksheet, "No Places");
+
+    return xlsx.write(workbook, {
+      bookType: "xlsx",
+      type: "buffer",
+    }) as Buffer;
+  }
+
+  for (const [city, cityPlaces] of getPlacesByCity(places)) {
+    const worksheet = xlsx.utils.aoa_to_sheet(getProductionExportRows(cityPlaces));
+    const worksheetName = getSafeWorksheetName(city, cityNames);
+
+    applyProductionExportWorksheetFormatting(worksheet, cityPlaces.length + 1);
+    xlsx.utils.book_append_sheet(workbook, worksheet, worksheetName);
+  }
 
   return xlsx.write(workbook, {
     bookType: "xlsx",

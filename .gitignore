@@ -7,3 +7,4 @@ dist
 .DS_Store
 tsconfig.tsbuildinfo
 src/data/admin-staged-places.json
+public/exports/*.xlsx
