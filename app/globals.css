@@ -1012,14 +1012,6 @@ select {
 .map-popup-hours.is-preview ul {
   display: grid;
   gap: 2px;
-  max-height: 3.4em;
-  overflow: hidden;
-}
-
-.map-popup-hours.is-preview p {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 0.78rem;
 }
 
 .map-mobile-sheet {

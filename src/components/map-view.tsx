@@ -483,14 +483,8 @@ export function MapView({
         : openPlace?.district || "";
   const visibleOpeningHours =
     openPlaceDetails?.status === "loaded" && openPlaceDetails.openingHours?.length
-      ? isCompactPopup
-        ? sortOpeningHoursFromToday(openPlaceDetails.openingHours).slice(0, 2)
-        : sortOpeningHoursFromToday(openPlaceDetails.openingHours)
+      ? sortOpeningHoursFromToday(openPlaceDetails.openingHours)
       : [];
-  const hiddenOpeningHoursCount =
-    openPlaceDetails?.status === "loaded" && openPlaceDetails.openingHours?.length
-      ? openPlaceDetails.openingHours.length - visibleOpeningHours.length
-      : 0;
   const placeDetailsContent = openPlace ? (
     <>
       <strong style={popupTitleStyle}>{openPlace.name}</strong>
@@ -587,9 +581,6 @@ export function MapView({
               <li key={line}>{line}</li>
             ))}
           </ul>
-          {hiddenOpeningHoursCount > 0 ? (
-            <p>Scroll for {hiddenOpeningHoursCount} more day{hiddenOpeningHoursCount === 1 ? "" : "s"}.</p>
-          ) : null}
         </div>
       ) : null}
       {openPlaceDetails?.status === "error" ? (
