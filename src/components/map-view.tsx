@@ -52,6 +52,41 @@ type PlaceLookupState =
       status: "error";
     };
 
+const weekdayOrder = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+function getWeekdayIndex(openingHoursLine: string) {
+  return weekdayOrder.findIndex((weekday) =>
+    openingHoursLine.toLowerCase().startsWith(weekday.toLowerCase()),
+  );
+}
+
+function sortOpeningHoursFromToday(openingHours: string[]) {
+  const todayIndex = new Date().getDay();
+
+  return [...openingHours].sort((firstLine, secondLine) => {
+    const firstIndex = getWeekdayIndex(firstLine);
+    const secondIndex = getWeekdayIndex(secondLine);
+
+    if (firstIndex === -1 || secondIndex === -1) {
+      return firstIndex - secondIndex;
+    }
+
+    return (
+      (firstIndex - todayIndex + weekdayOrder.length) % weekdayOrder.length
+    ) - (
+      (secondIndex - todayIndex + weekdayOrder.length) % weekdayOrder.length
+    );
+  });
+}
+
 export function MapView({
   places,
   cityCenters,
@@ -445,7 +480,17 @@ export function MapView({
         ? "Been"
         : openPlace?.status === "want_to_go"
           ? "Want to go"
-          : openPlace?.district || "";
+        : openPlace?.district || "";
+  const visibleOpeningHours =
+    openPlaceDetails?.status === "loaded" && openPlaceDetails.openingHours?.length
+      ? isCompactPopup
+        ? sortOpeningHoursFromToday(openPlaceDetails.openingHours).slice(0, 2)
+        : sortOpeningHoursFromToday(openPlaceDetails.openingHours)
+      : [];
+  const hiddenOpeningHoursCount =
+    openPlaceDetails?.status === "loaded" && openPlaceDetails.openingHours?.length
+      ? openPlaceDetails.openingHours.length - visibleOpeningHours.length
+      : 0;
   const placeDetailsContent = openPlace ? (
     <>
       <strong style={popupTitleStyle}>{openPlace.name}</strong>
@@ -535,13 +580,16 @@ export function MapView({
       ) : null}
       {openPlaceDetails?.status === "loaded" &&
       openPlaceDetails.openingHours?.length ? (
-        <div className="map-popup-hours">
+        <div className={isCompactPopup ? "map-popup-hours is-preview" : "map-popup-hours"}>
           <strong>Opening hours</strong>
           <ul>
-            {openPlaceDetails.openingHours.map((line) => (
+            {visibleOpeningHours.map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>
+          {hiddenOpeningHoursCount > 0 ? (
+            <p>Scroll for {hiddenOpeningHoursCount} more day{hiddenOpeningHoursCount === 1 ? "" : "s"}.</p>
+          ) : null}
         </div>
       ) : null}
       {openPlaceDetails?.status === "error" ? (
