@@ -1,5 +1,6 @@
 import places from "@/data/places.json";
 import { TravelMapApp } from "@/components/travel-map-app";
+import { isPublicPlace } from "@/lib/filtering";
 import type {
   LovedFilter,
   Place,
@@ -44,7 +45,7 @@ export default async function Home({ searchParams }: PageProps) {
 
   return (
     <TravelMapApp
-      places={places as Place[]}
+      places={(places as Place[]).filter(isPublicPlace)}
       initialFilters={initialFilters}
     />
   );

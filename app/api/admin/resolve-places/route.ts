@@ -38,6 +38,10 @@ type DraftPlace = {
   longitude: number | null;
   subway: string;
   tabelog: string;
+  googleMapsUrl: string;
+  verifiedStatus: "";
+  lastChecked: string;
+  verificationNotes: string;
   googleCategory: string;
   notes: string[];
 };
@@ -1113,6 +1117,10 @@ export async function POST(request: NextRequest) {
         extraction?.tabelog_hint,
         resolvedTabelogExtraction?.score,
       ),
+      googleMapsUrl: "",
+      verifiedStatus: "",
+      lastChecked: "",
+      verificationNotes: "",
       googleCategory: derivedGoogleCategory,
       notes: [
         ...(extraction?.notes ?? []),

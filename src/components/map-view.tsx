@@ -10,7 +10,7 @@ import {
   useJsApiLoader,
 } from "@react-google-maps/api";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
-import type { Place } from "@/lib/place";
+import { getPlaceDetailsLookupAddress, type Place } from "@/lib/place";
 
 type MapViewProps = {
   places: Place[];
@@ -193,7 +193,7 @@ export function MapView({
 
     const params = new URLSearchParams({
       name: openPlace.name,
-      address: openPlace.address,
+      address: getPlaceDetailsLookupAddress(openPlace),
     });
 
     fetch(`/api/place-details?${params.toString()}`, {

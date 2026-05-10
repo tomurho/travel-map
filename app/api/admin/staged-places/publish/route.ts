@@ -21,5 +21,9 @@ export async function POST(request: NextRequest) {
     request.nextUrl.searchParams.get("allowDuplicates") === "true";
   const result = publishStagedPlaces({ allowDuplicates });
 
+  if ("validationError" in result) {
+    return NextResponse.json({ error: result.validationError }, { status: 400 });
+  }
+
   return NextResponse.json(result);
 }

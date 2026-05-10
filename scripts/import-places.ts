@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import xlsx from "xlsx";
 import { normalizePlaces } from "@/lib/import";
+import type { Place } from "@/lib/place";
 
 function readRowsFromStructuredSheet(
   worksheet: xlsx.WorkSheet,
@@ -46,19 +47,51 @@ function readRowsFromStructuredSheet(
     return null;
   }
 
-  return matrix.slice(1).map((row) => ({
-    "Location Name": readCell(row, ["Location Name", "Location"]),
-    City: sheetName,
-    "Verified Category": readCell(row, ["Verified Category", "Category"]),
-    Status: readCell(row, ["Status"]),
-    "Loved it": readCell(row, ["Loved it"]),
-    Area: readCell(row, ["Area"]),
-    Address: readCell(row, ["Address"]),
-    Latitude: readCell(row, ["Latitude"]),
-    Longitude: readCell(row, ["Longitude"]),
-    Tabelog: readCell(row, ["Tabelog"]),
-    Subway: readCell(row, ["Subway"]),
-  }));
+  return matrix
+    .slice(1)
+    .filter((row) =>
+      [
+        "Location Name",
+        "Location",
+        "Address",
+        "Latitude",
+        "Longitude",
+      ].some((headerName) => String(readCell(row, [headerName])).trim()),
+    )
+    .map((row) => ({
+      "Location Name": readCell(row, ["Location Name", "Location"]),
+      City: sheetName,
+      "Verified Category": readCell(row, ["Verified Category", "Category"]),
+      Status: readCell(row, ["Status"]),
+      "Loved it": readCell(row, ["Loved it"]),
+      Area: readCell(row, ["Area"]),
+      Address: readCell(row, ["Address"]),
+      Latitude: readCell(row, ["Latitude"]),
+      Longitude: readCell(row, ["Longitude"]),
+      "Tabelog Score": readCell(row, ["Tabelog Score", "Tabelog"]),
+      "Nearest Subway": readCell(row, ["Nearest Subway", "Subway"]),
+      "Google Maps URL": readCell(row, ["Google Maps URL"]),
+      "Google Place ID": readCell(row, ["Google Place ID"]),
+      "Canonical Name": readCell(row, ["Canonical Name"]),
+      "Canonical Address": readCell(row, ["Canonical Address"]),
+      "Verified Latitude": readCell(row, ["Verified Latitude"]),
+      "Verified Longitude": readCell(row, ["Verified Longitude"]),
+      "Distance Delta Meters": readCell(row, ["Distance Delta Meters"]),
+      "Business Status": readCell(row, ["Business Status"]),
+      "Match Confidence": readCell(row, ["Match Confidence"]),
+      "Same Place Decision": readCell(row, ["Same Place Decision"]),
+      "Same Place Reason": readCell(row, ["Same Place Reason"]),
+      "Verification Decision": readCell(row, ["Verification Decision"]),
+      "Name Score": readCell(row, ["Name Score"]),
+      "Address Score": readCell(row, ["Address Score"]),
+      "City Score": readCell(row, ["City Score"]),
+      "District Score": readCell(row, ["District Score"]),
+      "Country Score": readCell(row, ["Country Score"]),
+      "Ambiguity Score": readCell(row, ["Ambiguity Score"]),
+      "Verified?": readCell(row, ["Verified?"]),
+      "Last Checked": readCell(row, ["Last Checked"]),
+      "Verification Notes": readCell(row, ["Verification Notes"]),
+    }));
 }
 
 async function main() {
@@ -120,16 +153,37 @@ async function main() {
       selectedSheetName,
     );
 
+    if (structuredRows) {
+      return structuredRows;
+    }
+
+    if (importAllSheets) {
+      return [];
+    }
+
+    const fallbackRows = xlsx.utils
+      .sheet_to_json<Record<string, unknown>>(worksheet, {
+        defval: "",
+      });
+    const hasFallbackPlaceHeader = fallbackRows.some((row) =>
+      [
+        "Location Name",
+        "location name",
+        "Location",
+        "location",
+        "name",
+      ].some((headerName) => row[headerName]),
+    );
+
+    if (!hasFallbackPlaceHeader) {
+      return [];
+    }
+
     return (
-      structuredRows ??
-      xlsx.utils
-        .sheet_to_json<Record<string, unknown>>(worksheet, {
-          defval: "",
-        })
-        .map((row) => ({
-          ...row,
-          City: row.City ?? row.city ?? selectedSheetName,
-        }))
+      fallbackRows.map((row) => ({
+        ...row,
+        City: row.City ?? row.city ?? selectedSheetName,
+      }))
     );
   });
 
@@ -137,7 +191,18 @@ async function main() {
     return;
   }
 
-  const result = normalizePlaces(rows);
+  const productionPlacesPath = path.resolve(process.cwd(), "src/data/places.json");
+  let existingPlaces: Place[] = [];
+
+  try {
+    existingPlaces = JSON.parse(
+      await fs.readFile(productionPlacesPath, "utf8"),
+    ) as Place[];
+  } catch {
+    existingPlaces = [];
+  }
+
+  const result = normalizePlaces(rows, { existingPlaces });
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(`${outputPath}`, `${JSON.stringify(result.places, null, 2)}\n`);
@@ -147,6 +212,23 @@ async function main() {
       .map((selectedSheetName) => `"${selectedSheetName}"`)
       .join(", ")} into ${outputPath}.`,
   );
+
+  console.log("\nID migration:");
+  console.log(`- IDs preserved: ${result.migrationReport.idsPreserved}`);
+  console.log(`- New IDs generated: ${result.migrationReport.newIdsGenerated}`);
+  console.log(`- ID changes avoided: ${result.migrationReport.idChangesAvoided}`);
+  console.log(
+    `- Ambiguous ID matches: ${result.migrationReport.ambiguousIdMatches.length}`,
+  );
+
+  if (result.migrationReport.ambiguousIdMatches.length > 0) {
+    console.log("\nAmbiguous ID matches:");
+    for (const match of result.migrationReport.ambiguousIdMatches) {
+      console.log(
+        `- ${match.city} / ${match.locationName} (${match.matchStrategy}): ${match.possibleIds.join(", ")}`,
+      );
+    }
+  }
 
   if (result.errors.length > 0) {
     console.log("\nSkipped rows:");

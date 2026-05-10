@@ -19,6 +19,7 @@ export default function AdminPage() {
     <AdminWorkflow
       categoryOptions={categoryOptions}
       cityOptions={cityOptions}
+      productionPlaces={places as Place[]}
     />
   );
 }

@@ -3,6 +3,20 @@
 import { useState } from "react";
 
 import { formatDistance } from "@/lib/geo";
+import {
+  hasMaterialCanonicalAddressDifference,
+  type Place,
+  type PlaceVerifiedStatus,
+} from "@/lib/place";
+import {
+  type AdminVerificationFilter,
+  acceptCandidateCoordinates,
+  getCompactVerificationLabel,
+  getVerificationFilterBucket,
+  markVerifiedToday,
+  matchesVerificationFilter,
+  validatePlaceVerification,
+} from "@/lib/place-verification";
 
 type ResolveDraft = {
   sourceLabel: string;
@@ -15,11 +29,22 @@ type ResolveDraft = {
   longitude: number | null;
   subway: string;
   tabelog: string;
+  googleMapsUrl?: string;
+  verifiedStatus?: PlaceVerifiedStatus;
+  lastChecked?: string;
+  verificationNotes?: string;
   googleCategory: string;
   notes: string[];
 };
 
 type DraftStatus = "location" | "been" | "loved" | "want_to_go";
+
+type DraftVerificationEdit = {
+  googleMapsUrl: string;
+  verifiedStatus: PlaceVerifiedStatus;
+  lastChecked: string;
+  verificationNotes: string;
+};
 
 type StagedPlace = {
   id: string;
@@ -34,6 +59,10 @@ type StagedPlace = {
   longitude: number | null;
   tabelog: string;
   subway: string;
+  googleMapsUrl?: string;
+  verifiedStatus?: PlaceVerifiedStatus;
+  lastChecked?: string;
+  verificationNotes?: string;
   duplicateMatches?: Array<{
     address: string;
     category: string;
@@ -52,7 +81,25 @@ type ResolveResponse = {
 type AdminWorkflowProps = {
   categoryOptions: string[];
   cityOptions: string[];
+  productionPlaces: Place[];
 };
+
+type ProductionPlaceEdit = {
+  googleMapsUrl: string;
+  latitude: string;
+  longitude: string;
+  verifiedStatus: PlaceVerifiedStatus;
+  lastChecked: string;
+  verificationNotes: string;
+};
+
+function formatOptionalValue(value: string | number | undefined | null) {
+  if (value === undefined || value === null || value === "") {
+    return "Not populated";
+  }
+
+  return String(value);
+}
 
 const CATEGORY_ALIASES: Record<string, string> = {
   coffee: "Coffee",
@@ -101,18 +148,82 @@ function getAdminStatusLabel(place: StagedPlace) {
   return "Location";
 }
 
+const VERIFIED_STATUS_OPTIONS: PlaceVerifiedStatus[] = [
+  "",
+  "Yes",
+  "Review",
+  "No",
+  "Closed/Moved",
+];
+
+const VERIFICATION_FILTER_OPTIONS: Array<{
+  label: string;
+  value: AdminVerificationFilter;
+}> = [
+  { label: "All", value: "all" },
+  { label: "Verified", value: "verified" },
+  { label: "Needs Review", value: "review" },
+  { label: "Unverified", value: "unverified" },
+  { label: "Closed/Moved", value: "closed_moved" },
+];
+
+function getVerificationClass(status: PlaceVerifiedStatus | undefined) {
+  if (status === "Yes") {
+    return " is-verified";
+  }
+
+  if (status === "Review") {
+    return " is-review";
+  }
+
+  if (status === "No") {
+    return " is-unverified";
+  }
+
+  if (status === "Closed/Moved") {
+    return " is-inactive";
+  }
+
+  return "";
+}
+
 export function AdminWorkflow({
   categoryOptions,
   cityOptions,
+  productionPlaces: initialProductionPlaces,
 }: AdminWorkflowProps) {
   const [cityHint, setCityHint] = useState("all");
   const [plainText, setPlainText] = useState("");
   const [placeUrl, setPlaceUrl] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [productionPlaces, setProductionPlaces] = useState(initialProductionPlaces);
+  const [productionFilter, setProductionFilter] =
+    useState<AdminVerificationFilter>("all");
+  const [selectedProductionPlaceId, setSelectedProductionPlaceId] = useState<
+    string | null
+  >(
+    initialProductionPlaces.find((place) =>
+      ["", "No", "Review"].includes(place.verifiedStatus ?? ""),
+    )?.id ??
+      initialProductionPlaces[0]?.id ??
+      null,
+  );
+  const [productionEdits, setProductionEdits] = useState<
+    Record<string, ProductionPlaceEdit>
+  >({});
+  const [savingProductionPlaceId, setSavingProductionPlaceId] = useState<
+    string | null
+  >(null);
+  const [productionMessage, setProductionMessage] = useState<string | null>(null);
   const [result, setResult] = useState<ResolveResponse | null>(null);
   const [draftStatuses, setDraftStatuses] = useState<Record<string, DraftStatus>>({});
   const [draftCategories, setDraftCategories] = useState<Record<string, string>>({});
+  const [draftVerificationEdits, setDraftVerificationEdits] = useState<
+    Record<string, DraftVerificationEdit>
+  >({});
+  const [verifiedFilter, setVerifiedFilter] =
+    useState<AdminVerificationFilter>("all");
   const [approvedDraftKeys, setApprovedDraftKeys] = useState<Record<string, boolean>>(
     {},
   );
@@ -135,6 +246,9 @@ export function AdminWorkflow({
   const stagedMissingCoordinateCount = stagedPlaces.filter(
     (place) => place.latitude === null || place.longitude === null,
   ).length;
+  const stagedVerifiedMissingUrlCount = stagedPlaces.filter(
+    (place) => place.verifiedStatus === "Yes" && !place.googleMapsUrl?.trim(),
+  ).length;
   const stagedCityNames = Array.from(
     new Set(stagedPlaces.map((place) => place.city).filter(Boolean)),
   ).sort((firstCity, secondCity) => firstCity.localeCompare(secondCity));
@@ -145,6 +259,27 @@ export function AdminWorkflow({
         (summary[getAdminStatusLabel(place)] ?? 0) + 1,
     }),
     {} as Record<string, number>,
+  );
+  const visibleStagedPlaces = stagedPlaces.filter((place) =>
+    matchesVerificationFilter(place.verifiedStatus, verifiedFilter),
+  );
+  const visibleProductionPlaces = productionPlaces.filter((place) =>
+    matchesVerificationFilter(place.verifiedStatus, productionFilter),
+  );
+  const selectedProductionPlace =
+    productionPlaces.find((place) => place.id === selectedProductionPlaceId) ??
+    visibleProductionPlaces[0] ??
+    null;
+  const productionVerificationSummary = productionPlaces.reduce(
+    (summary, place) => {
+      const bucket = getVerificationFilterBucket(place.verifiedStatus);
+
+      return {
+        ...summary,
+        [bucket]: (summary[bucket] ?? 0) + 1,
+      };
+    },
+    {} as Record<Exclude<AdminVerificationFilter, "all">, number>,
   );
 
   function getDraftKey(draft: ResolveDraft) {
@@ -163,6 +298,85 @@ export function AdminWorkflow({
       ...currentCategories,
       [draftKey]: category,
     }));
+  }
+
+  function getDraftVerificationEdit(
+    draftKey: string,
+    draft: ResolveDraft,
+  ): DraftVerificationEdit {
+    return (
+      draftVerificationEdits[draftKey] ?? {
+        googleMapsUrl: draft.googleMapsUrl ?? "",
+        verifiedStatus: draft.verifiedStatus ?? "",
+        lastChecked: draft.lastChecked ?? "",
+        verificationNotes: draft.verificationNotes ?? "",
+      }
+    );
+  }
+
+  function setDraftVerificationField<K extends keyof DraftVerificationEdit>(
+    draftKey: string,
+    draft: ResolveDraft,
+    field: K,
+    value: DraftVerificationEdit[K],
+  ) {
+    const currentEdit = getDraftVerificationEdit(draftKey, draft);
+
+    setDraftVerificationEdits((currentEdits) => ({
+      ...currentEdits,
+      [draftKey]: {
+        ...currentEdit,
+        [field]: value,
+      },
+    }));
+  }
+
+  function getProductionEdit(place: Place): ProductionPlaceEdit {
+    return (
+      productionEdits[place.id] ?? {
+        googleMapsUrl: place.googleMapsUrl ?? "",
+        latitude: String(place.latitude ?? ""),
+        longitude: String(place.longitude ?? ""),
+        verifiedStatus: place.verifiedStatus ?? "",
+        lastChecked: place.lastChecked ?? "",
+        verificationNotes: place.verificationNotes ?? "",
+      }
+    );
+  }
+
+  function setProductionEditField<K extends keyof ProductionPlaceEdit>(
+    place: Place,
+    field: K,
+    value: ProductionPlaceEdit[K],
+  ) {
+    const currentEdit = getProductionEdit(place);
+
+    setProductionEdits((currentEdits) => ({
+      ...currentEdits,
+      [place.id]: {
+        ...currentEdit,
+        [field]: value,
+      },
+    }));
+  }
+
+  function parseCoordinate(value: string) {
+    const coordinate = Number(value);
+
+    return Number.isFinite(coordinate) ? coordinate : null;
+  }
+
+  function getProductionPayload(place: Place) {
+    const edit = getProductionEdit(place);
+
+    return {
+      googleMapsUrl: edit.googleMapsUrl,
+      latitude: parseCoordinate(edit.latitude),
+      longitude: parseCoordinate(edit.longitude),
+      verifiedStatus: edit.verifiedStatus,
+      lastChecked: edit.lastChecked,
+      verificationNotes: edit.verificationNotes,
+    };
   }
 
   function authHeaders() {
@@ -206,6 +420,7 @@ export function AdminWorkflow({
       setResult(payload);
       setDraftStatuses({});
       setDraftCategories({});
+      setDraftVerificationEdits({});
       setApprovedDraftKeys({});
     } catch (submissionError) {
       setError(
@@ -220,9 +435,19 @@ export function AdminWorkflow({
 
   async function approveDraft(draft: ResolveDraft) {
     const draftKey = getDraftKey(draft);
+    const verificationEdit = getDraftVerificationEdit(draftKey, draft);
     setStagingDraftKey(draftKey);
     setError(null);
     setStagedMessage(null);
+
+    if (
+      verificationEdit.verifiedStatus === "Yes" &&
+      !verificationEdit.googleMapsUrl.trim()
+    ) {
+      setError("Google Maps URL is required when Verified? is set to Yes.");
+      setStagingDraftKey(null);
+      return;
+    }
 
     try {
       const response = await fetch("/api/admin/staged-places", {
@@ -238,6 +463,10 @@ export function AdminWorkflow({
             categoryOptions,
           ),
           draftStatus: draftStatuses[draftKey] ?? "location",
+          googleMapsUrl: verificationEdit.googleMapsUrl,
+          verifiedStatus: verificationEdit.verifiedStatus,
+          lastChecked: verificationEdit.lastChecked,
+          verificationNotes: verificationEdit.verificationNotes,
         }),
       });
 
@@ -301,6 +530,15 @@ export function AdminWorkflow({
         `Remove or fix ${stagedMissingCoordinateCount} staged place${
           stagedMissingCoordinateCount === 1 ? "" : "s"
         } without coordinates before publishing.`,
+      );
+      return;
+    }
+
+    if (stagedVerifiedMissingUrlCount > 0) {
+      setError(
+        `Add a Google Maps URL to ${stagedVerifiedMissingUrlCount} verified staged place${
+          stagedVerifiedMissingUrlCount === 1 ? "" : "s"
+        } before publishing.`,
       );
       return;
     }
@@ -429,6 +667,110 @@ export function AdminWorkflow({
     }
   }
 
+  function markSelectedProductionPlaceVerified(place: Place) {
+    const currentEdit = getProductionEdit(place);
+    const nextEdit = markVerifiedToday({
+      ...currentEdit,
+      lastChecked: currentEdit.lastChecked,
+      verifiedStatus: currentEdit.verifiedStatus,
+    });
+
+    setProductionEdits((currentEdits) => ({
+      ...currentEdits,
+      [place.id]: {
+        ...currentEdit,
+        lastChecked: nextEdit.lastChecked,
+        verifiedStatus: nextEdit.verifiedStatus,
+      },
+    }));
+    setProductionMessage(
+      "Marked as verified for today. Save QA changes to write it to the dataset.",
+    );
+  }
+
+  function acceptProductionCandidateCoordinates(place: Place) {
+    const currentEdit = getProductionEdit(place);
+    const currentLatitude = parseCoordinate(currentEdit.latitude);
+    const currentLongitude = parseCoordinate(currentEdit.longitude);
+    const acceptedPlace = acceptCandidateCoordinates({
+      ...place,
+      googleMapsUrl: currentEdit.googleMapsUrl,
+      latitude: currentLatitude,
+      longitude: currentLongitude,
+      lastChecked: currentEdit.lastChecked,
+      verificationNotes: currentEdit.verificationNotes,
+      verifiedStatus: currentEdit.verifiedStatus,
+    });
+
+    setProductionEdits((currentEdits) => ({
+      ...currentEdits,
+      [place.id]: {
+        ...currentEdit,
+        latitude: String(acceptedPlace.latitude ?? ""),
+        longitude: String(acceptedPlace.longitude ?? ""),
+        lastChecked: acceptedPlace.lastChecked ?? "",
+        verifiedStatus: acceptedPlace.verifiedStatus ?? "",
+        verificationNotes: acceptedPlace.verificationNotes ?? "",
+      },
+    }));
+    setProductionMessage(
+      "Accepted candidate coordinates. Save QA changes to write them to the dataset.",
+    );
+  }
+
+  async function saveProductionPlace(place: Place) {
+    const payload = getProductionPayload(place);
+    const validationErrors = validatePlaceVerification(payload);
+
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(" "));
+      return;
+    }
+
+    setSavingProductionPlaceId(place.id);
+    setError(null);
+    setProductionMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/admin/places/${encodeURIComponent(place.id)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(authHeaders() ?? {}),
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      const responsePayload = (await response.json()) as {
+        error?: string;
+        place?: Place;
+        places?: Place[];
+      };
+
+      if (!response.ok || !responsePayload.place || !responsePayload.places) {
+        throw new Error(responsePayload.error ?? "Could not save QA changes.");
+      }
+
+      setProductionPlaces(responsePayload.places);
+      setProductionEdits((currentEdits) => {
+        const nextEdits = { ...currentEdits };
+        delete nextEdits[place.id];
+        return nextEdits;
+      });
+      setProductionMessage(`Saved QA changes for ${responsePayload.place.name}.`);
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Could not save QA changes.",
+      );
+    } finally {
+      setSavingProductionPlaceId(null);
+    }
+  }
+
   async function deleteStagedPlace(place: StagedPlace) {
     const confirmed = window.confirm(`Remove ${place.name} from staging?`);
 
@@ -520,6 +862,443 @@ export function AdminWorkflow({
       </section>
 
       <section className="admin-grid">
+        <section className="panel admin-verification-panel">
+          <div className="admin-staged-header">
+            <div>
+              <h2>Map-pin verification</h2>
+              <p>
+                Review production places, open their Google Maps source, and mark
+                map pins as verified after manual checks.
+              </p>
+            </div>
+            <div className="admin-preview-chips">
+              <span>
+                <strong>{productionPlaces.length}</strong> places
+              </span>
+              <span className="is-verified">
+                <strong>{productionVerificationSummary.verified ?? 0}</strong>{" "}
+                verified
+              </span>
+              <span className="is-warning">
+                <strong>{productionVerificationSummary.review ?? 0}</strong>{" "}
+                review
+              </span>
+              <span>
+                <strong>{productionVerificationSummary.unverified ?? 0}</strong>{" "}
+                unverified
+              </span>
+              <span className="is-blocked">
+                <strong>{productionVerificationSummary.closed_moved ?? 0}</strong>{" "}
+                closed/moved
+              </span>
+            </div>
+          </div>
+
+          {productionMessage ? (
+            <p className="admin-success">{productionMessage}</p>
+          ) : null}
+
+          <div className="admin-verification-filters" aria-label="QA filters">
+            {VERIFICATION_FILTER_OPTIONS.map((option) => (
+              <button
+                className={productionFilter === option.value ? "is-active" : ""}
+                key={option.value}
+                onClick={() => setProductionFilter(option.value)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="admin-verification-workspace">
+            <div className="admin-verification-list">
+              {visibleProductionPlaces.map((place) => (
+                <button
+                  className={`admin-verification-row${
+                    selectedProductionPlace?.id === place.id ? " is-active" : ""
+                  }`}
+                  key={place.id}
+                  onClick={() => setSelectedProductionPlaceId(place.id)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{place.name}</strong>
+                    <small>
+                      {place.city} - {place.category || "Uncategorized"} -{" "}
+                      {place.district || "No area"}
+                    </small>
+                  </span>
+                  <span
+                    className={`admin-verification-badge${getVerificationClass(
+                      place.verifiedStatus,
+                    )}`}
+                  >
+                    {getCompactVerificationLabel(place.verifiedStatus)}
+                  </span>
+                </button>
+              ))}
+              {visibleProductionPlaces.length === 0 ? (
+                <p className="admin-empty">No places match this QA filter.</p>
+              ) : null}
+            </div>
+
+            {selectedProductionPlace ? (
+              (() => {
+                const edit = getProductionEdit(selectedProductionPlace);
+                const canOpenGoogleMaps = edit.googleMapsUrl.trim().length > 0;
+
+                return (
+                  <div className="admin-verification-detail">
+                    <div className="admin-draft-header">
+                      <div>
+                        <h3>{selectedProductionPlace.name}</h3>
+                        <p className="admin-source">
+                          {selectedProductionPlace.address || "No address"}
+                        </p>
+                        {hasMaterialCanonicalAddressDifference(
+                          selectedProductionPlace,
+                        ) ? (
+                          <p className="admin-source">
+                            Canonical:{" "}
+                            {selectedProductionPlace.canonicalAddress}
+                          </p>
+                        ) : null}
+                      </div>
+                      <span
+                        className={`admin-verification-badge${getVerificationClass(
+                          edit.verifiedStatus,
+                        )}`}
+                      >
+                        {getCompactVerificationLabel(edit.verifiedStatus)}
+                      </span>
+                    </div>
+
+                    <div className="admin-draft-fields">
+                      <label>
+                        <span>Latitude</span>
+                        <input
+                          className="admin-draft-input"
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            setProductionEditField(
+                              selectedProductionPlace,
+                              "latitude",
+                              event.target.value,
+                            )
+                          }
+                          value={edit.latitude}
+                        />
+                      </label>
+                      <label>
+                        <span>Longitude</span>
+                        <input
+                          className="admin-draft-input"
+                          inputMode="decimal"
+                          onChange={(event) =>
+                            setProductionEditField(
+                              selectedProductionPlace,
+                              "longitude",
+                              event.target.value,
+                            )
+                          }
+                          value={edit.longitude}
+                        />
+                      </label>
+                      <label>
+                        <span>Google Maps URL</span>
+                        <input
+                          className="admin-draft-input"
+                          onChange={(event) =>
+                            setProductionEditField(
+                              selectedProductionPlace,
+                              "googleMapsUrl",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="https://maps.google.com/..."
+                          type="url"
+                          value={edit.googleMapsUrl}
+                        />
+                      </label>
+                      <label>
+                        <span>Verified?</span>
+                        <select
+                          className="admin-draft-input"
+                          onChange={(event) =>
+                            setProductionEditField(
+                              selectedProductionPlace,
+                              "verifiedStatus",
+                              event.target.value as PlaceVerifiedStatus,
+                            )
+                          }
+                          value={edit.verifiedStatus}
+                        >
+                          {VERIFIED_STATUS_OPTIONS.map((status) => (
+                            <option key={status || "blank"} value={status}>
+                              {status || "No"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Last Checked</span>
+                        <input
+                          className="admin-draft-input"
+                          onChange={(event) =>
+                            setProductionEditField(
+                              selectedProductionPlace,
+                              "lastChecked",
+                              event.target.value,
+                            )
+                          }
+                          type="date"
+                          value={edit.lastChecked}
+                        />
+                      </label>
+                      <label>
+                        <span>Verification Notes</span>
+                        <textarea
+                          className="admin-draft-input admin-draft-textarea"
+                          onChange={(event) =>
+                            setProductionEditField(
+                              selectedProductionPlace,
+                              "verificationNotes",
+                              event.target.value,
+                            )
+                          }
+                          rows={3}
+                          value={edit.verificationNotes}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="admin-candidate-panel">
+                      <div>
+                        <h4>Google candidate</h4>
+                        <p>
+                          Read-only metadata from the batch verifier. Accepting
+                          coordinates still requires saving QA changes.
+                        </p>
+                      </div>
+                      <dl className="admin-candidate-grid">
+                        <div>
+                          <dt>Candidate Google Maps URL</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.googleMapsUrl,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Canonical name</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.canonicalName,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Canonical address</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.canonicalAddress,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Verified latitude</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.verifiedLatitude,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Verified longitude</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.verifiedLongitude,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Distance delta</dt>
+                          <dd>
+                            {selectedProductionPlace.distanceDeltaMeters ===
+                            undefined
+                              ? "Not populated"
+                              : `${Math.round(
+                                  selectedProductionPlace.distanceDeltaMeters,
+                                )}m`}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Business status</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.businessStatus,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Same place decision</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.samePlaceDecision,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Verification decision</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.verificationDecision,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Correction source</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.verificationSource,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Current latitude</dt>
+                          <dd>
+                            {formatOptionalValue(selectedProductionPlace.latitude)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Current longitude</dt>
+                          <dd>
+                            {formatOptionalValue(selectedProductionPlace.longitude)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Same place reason</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.samePlaceReason,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Name score</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.nameScore,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Address score</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.addressScore,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>City score</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.cityScore,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>District score</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.districtScore,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Country score</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.countryScore,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Ambiguity score</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.ambiguityScore,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Match confidence</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.matchConfidence,
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    <div className="admin-verification-actions">
+                      <button
+                        onClick={() =>
+                          markSelectedProductionPlaceVerified(selectedProductionPlace)
+                        }
+                        type="button"
+                      >
+                        Mark Verified Today
+                      </button>
+                      <button
+                        disabled={
+                          selectedProductionPlace.verifiedLatitude === undefined ||
+                          selectedProductionPlace.verifiedLongitude === undefined
+                        }
+                        onClick={() =>
+                          acceptProductionCandidateCoordinates(
+                            selectedProductionPlace,
+                          )
+                        }
+                        type="button"
+                      >
+                        Accept candidate coordinates
+                      </button>
+                      {canOpenGoogleMaps ? (
+                        <a
+                          href={edit.googleMapsUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          Open Google Maps
+                        </a>
+                      ) : (
+                        <span className="admin-disabled-action">
+                          Add a Google Maps URL to open Maps.
+                        </span>
+                      )}
+                      <button
+                        disabled={savingProductionPlaceId === selectedProductionPlace.id}
+                        onClick={() => saveProductionPlace(selectedProductionPlace)}
+                        type="button"
+                      >
+                        {savingProductionPlaceId === selectedProductionPlace.id
+                          ? "Saving..."
+                          : "Save QA changes"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <p className="admin-empty">Choose a place to verify.</p>
+            )}
+          </div>
+        </section>
+
         <section className="panel admin-form-panel">
           <h2>Capture input</h2>
           <form className="admin-form" onSubmit={handleSubmit}>
@@ -613,6 +1392,7 @@ export function AdminWorkflow({
                 const draftCategory =
                   draftCategories[draftKey] ?? draft.category ?? draft.googleCategory ?? "";
                 const isApproved = approvedDraftKeys[draftKey] ?? false;
+                const verificationEdit = getDraftVerificationEdit(draftKey, draft);
 
                 return (
                   <article
@@ -626,7 +1406,18 @@ export function AdminWorkflow({
                         <h3>{draft.name || "Unresolved place"}</h3>
                         <p className="admin-source">{draft.sourceLabel}</p>
                       </div>
-                      <span className="badge admin-city-badge">{draft.city}</span>
+                      <div className="admin-draft-badges">
+                        <span className="badge admin-city-badge">{draft.city}</span>
+                        <span
+                          className={`admin-verification-badge${getVerificationClass(
+                            verificationEdit.verifiedStatus,
+                          )}`}
+                        >
+                          {getCompactVerificationLabel(
+                            verificationEdit.verifiedStatus,
+                          )}
+                        </span>
+                      </div>
                     </div>
 
                     <div
@@ -721,7 +1512,100 @@ export function AdminWorkflow({
                         <dt>Tabelog score</dt>
                         <dd>{draft.tabelog || "-"}</dd>
                       </div>
+                      <div>
+                        <dt>Google Maps URL</dt>
+                        <dd>
+                          <input
+                            aria-label={`Google Maps URL for ${draft.name}`}
+                            className="admin-draft-input"
+                            onChange={(event) =>
+                              setDraftVerificationField(
+                                draftKey,
+                                draft,
+                                "googleMapsUrl",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="https://maps.google.com/..."
+                            type="url"
+                            value={verificationEdit.googleMapsUrl}
+                          />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Verified?</dt>
+                        <dd>
+                          <select
+                            aria-label={`Verified status for ${draft.name}`}
+                            className="admin-draft-input"
+                            onChange={(event) =>
+                              setDraftVerificationField(
+                                draftKey,
+                                draft,
+                                "verifiedStatus",
+                                event.target.value as PlaceVerifiedStatus,
+                              )
+                            }
+                            value={verificationEdit.verifiedStatus}
+                          >
+                            {VERIFIED_STATUS_OPTIONS.map((status) => (
+                              <option key={status || "blank"} value={status}>
+                                {status || "Not checked"}
+                              </option>
+                            ))}
+                          </select>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Last checked</dt>
+                        <dd>
+                          <input
+                            aria-label={`Last checked for ${draft.name}`}
+                            className="admin-draft-input"
+                            onChange={(event) =>
+                              setDraftVerificationField(
+                                draftKey,
+                                draft,
+                                "lastChecked",
+                                event.target.value,
+                              )
+                            }
+                            type="date"
+                            value={verificationEdit.lastChecked}
+                          />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Verification notes</dt>
+                        <dd>
+                          <textarea
+                            aria-label={`Verification notes for ${draft.name}`}
+                            className="admin-draft-input admin-draft-textarea"
+                            onChange={(event) =>
+                              setDraftVerificationField(
+                                draftKey,
+                                draft,
+                                "verificationNotes",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="Optional QA notes"
+                            rows={2}
+                            value={verificationEdit.verificationNotes}
+                          />
+                        </dd>
+                      </div>
                     </dl>
+
+                    {draft.latitude === null || draft.longitude === null ? (
+                      <div className="admin-duplicate-warning is-blocked">
+                        <strong>Needs review: missing map coordinates</strong>
+                        <small>
+                          Latitude and longitude are required before this can be
+                          approved into staging.
+                        </small>
+                      </div>
+                    ) : null}
 
                     {draft.notes.length ? (
                       <ul className="admin-note-list">
@@ -825,10 +1709,34 @@ export function AdminWorkflow({
                       <strong>{stagedMissingCoordinateCount}</strong> missing coords
                     </span>
                   ) : null}
+                  {stagedVerifiedMissingUrlCount > 0 ? (
+                    <span className="is-blocked">
+                      <strong>{stagedVerifiedMissingUrlCount}</strong> verified missing URL
+                    </span>
+                  ) : null}
                 </div>
               </div>
+              <div className="admin-staged-filter">
+                <label>
+                  Verified?
+                  <select
+                    onChange={(event) =>
+                      setVerifiedFilter(
+                        event.target.value as AdminVerificationFilter,
+                      )
+                    }
+                    value={verifiedFilter}
+                  >
+                    {VERIFICATION_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <div className="admin-staged-list">
-                {stagedPlaces.map((place) => (
+                {visibleStagedPlaces.map((place) => (
                   <article className="admin-staged-row" key={place.id}>
                     <div>
                       <strong>{place.name}</strong>
@@ -836,6 +1744,22 @@ export function AdminWorkflow({
                         {place.city} - {place.category || "Uncategorized"} -{" "}
                         {getAdminStatusLabel(place)}
                       </span>
+                      <span
+                        className={`admin-verification-badge${getVerificationClass(
+                          place.verifiedStatus,
+                        )}`}
+                      >
+                        {getCompactVerificationLabel(place.verifiedStatus)}
+                      </span>
+                      {place.verifiedStatus === "Yes" && !place.googleMapsUrl ? (
+                        <div className="admin-duplicate-warning is-blocked">
+                          <strong>Verified place needs a Google Maps URL</strong>
+                          <small>
+                            Add or re-approve with a Google Maps URL before this is
+                            treated as fully verified.
+                          </small>
+                        </div>
+                      ) : null}
                       {place.duplicateMatches?.length ? (
                         <div className="admin-duplicate-warning">
                           <strong>Possible duplicate in approved dataset</strong>
@@ -872,6 +1796,11 @@ export function AdminWorkflow({
                   </article>
                 ))}
               </div>
+              {visibleStagedPlaces.length === 0 ? (
+                <p className="admin-empty">
+                  No staged places match that verification filter.
+                </p>
+              ) : null}
             </>
           ) : (
             <p className="admin-empty">

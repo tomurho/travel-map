@@ -1,0 +1,904 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import process from "node:process";
+
+import {
+  assertAutoDecisionSafetyGate,
+  assertCoordinateAuditFields,
+  getCandidateDiagnostics,
+  type GoogleCandidate,
+  summarizeAutoDecisions,
+  type VerificationDecision,
+  verifyPlaceFromCandidates,
+} from "@/lib/google-place-verification";
+import { formatDateForInput } from "@/lib/place-verification";
+import type { Place } from "@/lib/place";
+import type { VerificationSource } from "@/lib/place";
+
+const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
+const PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places";
+const TEXT_SEARCH_FIELD_MASK = [
+  "places.id",
+  "places.displayName",
+  "places.formattedAddress",
+  "places.location",
+  "places.googleMapsUri",
+  "places.businessStatus",
+].join(",");
+const DETAILS_FIELD_MASK = [
+  "id",
+  "displayName",
+  "formattedAddress",
+  "location",
+  "googleMapsUri",
+  "businessStatus",
+].join(",");
+
+type CliOptions = {
+  applySafeCoordinateUpdates: boolean;
+  applyAutoDecisions: boolean;
+  city: string | null;
+  coordinateReportJson: boolean;
+  debug: boolean;
+  dryRun: boolean;
+  force: boolean;
+  inputPath: string;
+  limit: number | null;
+  name: string | null;
+  outputPath: string;
+  writeCandidates: boolean;
+};
+
+type GoogleTextSearchResponse = {
+  places?: GoogleCandidate[];
+};
+
+type VerificationSummary = {
+  candidateCoordinatesPopulated: number;
+  closedMoved: number;
+  googleMapsUrlsPopulated: number;
+  highConfidenceMatches: number;
+  noMatch: number;
+  placeIdsPopulated: number;
+  rowsNeedingReview: number;
+  rowsProcessed: number;
+  safeCoordinateUpdatesApplied: number;
+};
+
+function parseArgs(argv: string[]): CliOptions {
+  const today = formatDateForInput(new Date());
+  const options: CliOptions = {
+    applySafeCoordinateUpdates: false,
+    applyAutoDecisions: false,
+    city: null,
+    coordinateReportJson: false,
+    debug: false,
+    dryRun: false,
+    force: false,
+    inputPath: path.join(process.cwd(), "src/data/places.json"),
+    limit: null,
+    name: null,
+    outputPath: path.join(
+      process.cwd(),
+      "outputs",
+      `google-places-candidates-${today}.json`,
+    ),
+    writeCandidates: false,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === "--dry-run") {
+      options.dryRun = true;
+    } else if (arg === "--debug") {
+      options.debug = true;
+    } else if (arg === "--coordinate-report-json") {
+      options.coordinateReportJson = true;
+    } else if (arg === "--write-candidates") {
+      options.writeCandidates = true;
+    } else if (arg === "--apply-safe-coordinate-updates") {
+      options.applySafeCoordinateUpdates = true;
+    } else if (arg === "--apply-auto-decisions") {
+      options.applyAutoDecisions = true;
+    } else if (arg === "--force") {
+      options.force = true;
+    } else if (arg === "--input") {
+      options.inputPath = path.resolve(argv[index + 1] ?? options.inputPath);
+      index += 1;
+    } else if (arg === "--output") {
+      options.outputPath = path.resolve(argv[index + 1] ?? options.outputPath);
+      index += 1;
+    } else if (arg === "--limit") {
+      const limit = Number(argv[index + 1]);
+      options.limit = Number.isFinite(limit) && limit > 0 ? limit : null;
+      index += 1;
+    } else if (arg === "--city") {
+      options.city = argv[index + 1] ?? null;
+      index += 1;
+    } else if (arg === "--name") {
+      options.name = argv[index + 1] ?? null;
+      index += 1;
+    }
+  }
+
+  return options;
+}
+
+async function loadLocalEnvFile() {
+  const envPath = path.join(process.cwd(), ".env.local");
+
+  try {
+    const content = await fs.readFile(envPath, "utf8");
+
+    for (const line of content.split(/\r?\n/)) {
+      const trimmedLine = line.trim();
+
+      if (!trimmedLine || trimmedLine.startsWith("#")) {
+        continue;
+      }
+
+      const separatorIndex = trimmedLine.indexOf("=");
+
+      if (separatorIndex === -1) {
+        continue;
+      }
+
+      const key = trimmedLine.slice(0, separatorIndex).trim();
+      const rawValue = trimmedLine.slice(separatorIndex + 1).trim();
+
+      if (key && process.env[key] === undefined) {
+        process.env[key] = rawValue.replace(/^['"]|['"]$/g, "");
+      }
+    }
+  } catch {
+    // Shell-provided environment variables are enough; .env.local is optional.
+  }
+}
+
+function stripAccentsAndPunctuation(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getRegionCode(city: string) {
+  const normalizedCity = stripAccentsAndPunctuation(city).toLowerCase();
+
+  if (normalizedCity.includes("ho chi minh")) {
+    return "VN";
+  }
+
+  if (normalizedCity.includes("taipei")) {
+    return "TW";
+  }
+
+  if (
+    ["tokyo", "kyoto", "osaka", "fukuoka", "sapporo", "kanazawa"].some((cityName) =>
+      normalizedCity.includes(cityName),
+    )
+  ) {
+    return "JP";
+  }
+
+  if (normalizedCity.includes("seoul")) {
+    return "KR";
+  }
+
+  return undefined;
+}
+
+function getSearchAttempts(place: Place) {
+  const queryParts = [
+    [place.name, place.address, place.city],
+    [place.name, place.city],
+    [place.name, place.district, place.city],
+  ];
+  const attempts = queryParts
+    .map((parts) =>
+      parts
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(", "),
+    )
+    .filter(Boolean);
+  const accentStrippedAttempts = attempts.map(stripAccentsAndPunctuation);
+  const seen = new Set<string>();
+
+  return [...attempts, ...accentStrippedAttempts].filter((query) => {
+    const key = query.toLowerCase();
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function getLocationBias(place: Place) {
+  if (!Number.isFinite(place.latitude) || !Number.isFinite(place.longitude)) {
+    return undefined;
+  }
+
+  return {
+    circle: {
+      center: {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      },
+      radius: 10000,
+    },
+  };
+}
+
+async function fetchJson<TResponse>(
+  url: string,
+  options: {
+    apiKey: string;
+    body?: Record<string, unknown>;
+    fieldMask: string;
+    method: "GET" | "POST";
+  },
+) {
+  const response = await fetch(url, {
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": options.apiKey,
+      "X-Goog-FieldMask": options.fieldMask,
+    },
+    method: options.method,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Google Places API ${response.status}: ${errorText}`);
+  }
+
+  return (await response.json()) as TResponse;
+}
+
+type CandidateSearchResult = {
+  apiError?: string;
+  candidates: GoogleCandidate[];
+  queryAttempts: Array<{
+    candidateCount: number;
+    error?: string;
+    query: string;
+  }>;
+  source: VerificationSource;
+  urlResolutionReason?: string;
+};
+
+function extractGooglePlaceIdFromUrl(url: string) {
+  const trimmedUrl = url.trim();
+
+  if (!trimmedUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(trimmedUrl);
+    const queryPlaceId =
+      parsedUrl.searchParams.get("query_place_id") ??
+      parsedUrl.searchParams.get("place_id");
+
+    if (queryPlaceId) {
+      return queryPlaceId;
+    }
+  } catch {
+    // Some copied Maps URLs are partial strings; regex fallback handles those.
+  }
+
+  const decodedUrl = decodeURIComponent(trimmedUrl);
+  const placeIdMatch =
+    decodedUrl.match(/(?:query_place_id|place_id)=([^&]+)/) ??
+    decodedUrl.match(/!1s(ChI[A-Za-z0-9_-]+)/) ??
+    decodedUrl.match(/\b(ChI[A-Za-z0-9_-]{10,})\b/);
+
+  return placeIdMatch?.[1] ?? null;
+}
+
+async function fetchTextSearchCandidates(
+  place: Place,
+  apiKey: string,
+  initialAttempts: CandidateSearchResult["queryAttempts"] = [],
+  urlResolutionReason?: string,
+): Promise<CandidateSearchResult> {
+  const queryAttempts: CandidateSearchResult["queryAttempts"] = [
+    ...initialAttempts,
+  ];
+  const candidateMap = new Map<string, GoogleCandidate>();
+  const regionCode = getRegionCode(place.city);
+  const locationBias = getLocationBias(place);
+
+  for (const query of getSearchAttempts(place)) {
+    try {
+      const payload = await fetchJson<GoogleTextSearchResponse>(TEXT_SEARCH_URL, {
+        apiKey,
+        body: {
+          locationBias,
+          pageSize: 5,
+          regionCode,
+          textQuery: query,
+        },
+        fieldMask: TEXT_SEARCH_FIELD_MASK,
+        method: "POST",
+      });
+      const candidates = payload.places ?? [];
+
+      queryAttempts.push({
+        candidateCount: candidates.length,
+        query,
+      });
+
+      for (const candidate of candidates) {
+        candidateMap.set(candidate.id, candidate);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      queryAttempts.push({
+        candidateCount: 0,
+        error: message,
+        query,
+      });
+    }
+  }
+
+  const apiError = queryAttempts.find((attempt) => attempt.error)?.error;
+
+  return {
+    apiError,
+    candidates: Array.from(candidateMap.values()),
+    queryAttempts,
+    source: "text_search",
+    urlResolutionReason,
+  };
+}
+
+async function fetchCandidates(place: Place, apiKey: string): Promise<CandidateSearchResult> {
+  if (place.googlePlaceId?.trim()) {
+    const placeResourceId = place.googlePlaceId.trim().replace(/^places\//, "");
+    try {
+      const candidate = await fetchJson<GoogleCandidate>(
+        `${PLACE_DETAILS_URL}/${encodeURIComponent(placeResourceId)}`,
+        {
+          apiKey,
+          fieldMask: DETAILS_FIELD_MASK,
+          method: "GET",
+        },
+      );
+
+      return {
+        candidates: [candidate],
+        queryAttempts: [
+          {
+            candidateCount: 1,
+            query: `Place Details: ${placeResourceId}`,
+          },
+        ],
+        source: "place_id",
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return fetchTextSearchCandidates(
+        place,
+        apiKey,
+        [
+          {
+            candidateCount: 0,
+            error: message,
+            query: `Place Details: ${placeResourceId}`,
+          },
+        ],
+        "Stored Google Place ID could not be resolved; verifier fell back to Text Search.",
+      );
+    }
+  }
+
+  const placeIdFromUrl = place.googleMapsUrl
+    ? extractGooglePlaceIdFromUrl(place.googleMapsUrl)
+    : null;
+
+  if (placeIdFromUrl) {
+    try {
+      const candidate = await fetchJson<GoogleCandidate>(
+        `${PLACE_DETAILS_URL}/${encodeURIComponent(placeIdFromUrl)}`,
+        {
+          apiKey,
+          fieldMask: DETAILS_FIELD_MASK,
+          method: "GET",
+        },
+      );
+
+      return {
+        candidates: [candidate],
+        queryAttempts: [
+          {
+            candidateCount: 1,
+            query: `Google Maps URL Place Details: ${placeIdFromUrl}`,
+          },
+        ],
+        source: "google_maps_url",
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return fetchTextSearchCandidates(
+        place,
+        apiKey,
+        [
+          {
+            candidateCount: 0,
+            error: message,
+            query: `Google Maps URL Place Details: ${placeIdFromUrl}`,
+          },
+        ],
+        "Google Maps URL contained a Place ID but it could not be resolved; verifier fell back to Text Search.",
+      );
+    }
+  }
+
+  return fetchTextSearchCandidates(
+    place,
+    apiKey,
+    [],
+    place.googleMapsUrl
+      ? "Google Maps URL did not contain a directly resolvable Place ID; verifier used Text Search fallback."
+      : undefined,
+  );
+}
+
+function printDebugDetails(
+  place: Place,
+  searchResult: CandidateSearchResult,
+  decision: VerificationDecision,
+) {
+  console.log(`\nDEBUG ${place.city} - ${place.name}`);
+  console.log(`Source: ${searchResult.source}`);
+  console.log("Query attempts:");
+
+  for (const attempt of searchResult.queryAttempts) {
+    console.log(
+      `- "${attempt.query}" -> ${attempt.candidateCount} candidate${
+        attempt.candidateCount === 1 ? "" : "s"
+      }${attempt.error ? ` | API error: ${attempt.error}` : ""}`,
+    );
+  }
+
+  if (searchResult.candidates.length === 0) {
+    console.log(
+      searchResult.apiError
+        ? `No candidates because of API error: ${searchResult.apiError}`
+        : "Google returned zero candidates across all query attempts.",
+    );
+    return;
+  }
+
+  console.log("Candidates:");
+  for (const diagnostic of getCandidateDiagnostics(
+    place,
+    searchResult.candidates,
+  )) {
+    const candidate = diagnostic.candidate;
+    const locationText = candidate.location
+      ? `${candidate.location.latitude}, ${candidate.location.longitude}`
+      : "No coordinates";
+    const statusText =
+      diagnostic.rejectionReasons.length === 0
+        ? "accepted by scoring rules"
+        : `rejected: ${diagnostic.rejectionReasons.join("; ")}`;
+
+    console.log(
+      `- ${candidate.displayName?.text ?? "Unnamed"} | ${
+        candidate.formattedAddress ?? "No address"
+      } | ${candidate.id} | ${candidate.googleMapsUri ?? "No Google Maps URI"} | ${
+        candidate.businessStatus ?? "UNKNOWN"
+      } | ${locationText}`,
+    );
+    console.log(
+      `  scores: confidence=${candidate.matchConfidence}, name=${candidate.nameScore}, address=${candidate.addressScore}, city=${candidate.cityScore}, district=${candidate.districtScore}, country=${candidate.countryScore}, ambiguity=${candidate.ambiguityScore}, distance=${
+        candidate.distanceMeters === null
+          ? "unknown"
+          : `${Math.round(candidate.distanceMeters)}m`
+      }`,
+    );
+    console.log(`  ${statusText}`);
+  }
+
+  if (decision.kind === "no_match") {
+    console.log("Decision: no_match because candidates were rejected by scoring.");
+  } else {
+    console.log(`Decision: ${decision.kind}`);
+  }
+}
+
+function getEmptySummary(): VerificationSummary {
+  return {
+    candidateCoordinatesPopulated: 0,
+    closedMoved: 0,
+    googleMapsUrlsPopulated: 0,
+    highConfidenceMatches: 0,
+    noMatch: 0,
+    placeIdsPopulated: 0,
+    rowsNeedingReview: 0,
+    rowsProcessed: 0,
+    safeCoordinateUpdatesApplied: 0,
+  };
+}
+
+function updateSummary(
+  summary: VerificationSummary,
+  originalPlace: Place,
+  decision: VerificationDecision,
+) {
+  const nextPlace = decision.place;
+  summary.rowsProcessed += 1;
+
+  if (decision.kind === "high_confidence") {
+    summary.highConfidenceMatches += 1;
+    if (decision.safeCoordinateUpdateApplied) {
+      summary.safeCoordinateUpdatesApplied += 1;
+    }
+  }
+
+  if (decision.kind === "closed_moved") {
+    summary.closedMoved += 1;
+  }
+
+  if (decision.kind === "no_match") {
+    summary.noMatch += 1;
+  }
+
+  if (!originalPlace.googlePlaceId && nextPlace.googlePlaceId) {
+    summary.placeIdsPopulated += 1;
+  }
+
+  if (!originalPlace.googleMapsUrl && nextPlace.googleMapsUrl) {
+    summary.googleMapsUrlsPopulated += 1;
+  }
+
+  if (
+    (originalPlace.verifiedLatitude === undefined ||
+      originalPlace.verifiedLongitude === undefined) &&
+    nextPlace.verifiedLatitude !== undefined &&
+    nextPlace.verifiedLongitude !== undefined
+  ) {
+    summary.candidateCoordinatesPopulated += 1;
+  }
+
+  if (nextPlace.verifiedStatus === "Review") {
+    summary.rowsNeedingReview += 1;
+  }
+}
+
+function printReviewRows(places: Place[]) {
+  const reviewRows = places.filter((place) => place.verifiedStatus === "Review");
+
+  if (reviewRows.length === 0) {
+    return;
+  }
+
+  console.log("\nRows left for Review");
+  console.table(
+    reviewRows.map((place) => ({
+      name: place.name,
+      verificationDecision: place.verificationDecision ?? "",
+      candidate: place.canonicalName ?? "",
+      distanceDeltaMeters: place.distanceDeltaMeters ?? "",
+      reason:
+        place.samePlaceReason ||
+        place.verificationNotes ||
+        "No candidate metadata captured.",
+    })),
+  );
+}
+
+function getGoogleUrlReviewReason(place: Place) {
+  const reason = [place.samePlaceReason, place.verificationNotes]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (place.verificationDecision === "ambiguous_multiple_candidates") {
+    return "multiple candidates";
+  }
+
+  if (place.verificationDecision === "closed_or_moved") {
+    return "closed/moved";
+  }
+
+  if (place.verificationDecision === "no_candidate_found") {
+    return place.verificationSource === "text_search"
+      ? "URL not resolvable; Text Search found no candidate"
+      : "URL not resolvable";
+  }
+
+  if (reason.includes("city/country")) {
+    return "city/country mismatch";
+  }
+
+  if (reason.includes("name")) {
+    return "name mismatch";
+  }
+
+  if (reason.includes("address")) {
+    return "address mismatch";
+  }
+
+  if (place.verificationSource === "text_search") {
+    return "URL not resolvable; weak Text Search match";
+  }
+
+  return "resolved Google place needs review";
+}
+
+function printGoogleMapsUrlReviewRows(places: Place[]) {
+  const reviewRows = places.filter(
+    (place) => place.googleMapsUrl?.trim() && place.verifiedStatus === "Review",
+  );
+
+  if (reviewRows.length === 0) {
+    return;
+  }
+
+  console.log("\nGoogle Maps URL rows still left for Review");
+  console.table(
+    reviewRows.map((place) => ({
+      name: place.name,
+      city: place.city,
+      reviewReason: getGoogleUrlReviewReason(place),
+      verificationDecision: place.verificationDecision ?? "",
+      verificationSource: place.verificationSource ?? "",
+      canonicalName: place.canonicalName ?? "",
+      canonicalAddress: place.canonicalAddress ?? "",
+      samePlaceReason: place.samePlaceReason ?? "",
+    })),
+  );
+}
+
+function printCoordinateChangeReport(
+  originalPlacesById: Map<string, Place>,
+  places: Place[],
+  options: { asJson?: boolean } = {},
+) {
+  const coordinateChanges = places
+    .map((place) => {
+      const originalPlace = originalPlacesById.get(place.id);
+
+      if (
+        !originalPlace ||
+        (originalPlace.latitude === place.latitude &&
+          originalPlace.longitude === place.longitude)
+      ) {
+        return null;
+      }
+
+      const flags = [
+        typeof place.distanceDeltaMeters === "number" &&
+        place.distanceDeltaMeters > 1000
+          ? "distance>1000m"
+          : null,
+        typeof place.nameScore === "number" && place.nameScore < 0.6
+          ? "nameScore<0.6"
+          : null,
+        typeof place.addressScore === "number" && place.addressScore < 0.5
+          ? "addressScore<0.5"
+          : null,
+      ].filter(Boolean);
+
+      return {
+        name: place.name,
+        oldLatitude: originalPlace.latitude,
+        oldLongitude: originalPlace.longitude,
+        newLatitude: place.latitude,
+        newLongitude: place.longitude,
+        distanceDeltaMeters: place.distanceDeltaMeters ?? "",
+        verificationDecision: place.verificationDecision ?? "",
+        candidateName: place.canonicalName ?? "",
+        candidateAddress: place.canonicalAddress ?? "",
+        source: place.verificationSource ?? "",
+        samePlaceReason: place.samePlaceReason ?? "",
+        nameScore: place.nameScore ?? "",
+        addressScore: place.addressScore ?? "",
+        flags: flags.join(", "),
+        hasAuditFields: Boolean(
+          place.verificationDecision &&
+            place.verificationSource &&
+            place.samePlaceReason,
+        ),
+      };
+    })
+    .filter((change) => change !== null);
+
+  if (coordinateChanges.length === 0) {
+    return;
+  }
+
+  if (options.asJson) {
+    console.log("\nProposed coordinate changes JSON");
+    console.log(JSON.stringify(coordinateChanges, null, 2));
+    return;
+  }
+
+  console.log("\nProposed coordinate changes");
+  console.table(coordinateChanges);
+
+  const flaggedChanges = coordinateChanges.filter((change) => change.flags);
+
+  if (flaggedChanges.length > 0) {
+    console.log("\nFlagged proposed coordinate changes");
+    console.table(flaggedChanges);
+  }
+
+  const auditGaps = coordinateChanges.filter((change) => !change.hasAuditFields);
+
+  if (auditGaps.length > 0) {
+    console.log("\nCoordinate changes missing audit fields");
+    console.table(auditGaps);
+  }
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  await loadLocalEnvFile();
+  const apiKey =
+    process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "GOOGLE_MAPS_API_KEY or GOOGLE_PLACES_API_KEY is required to verify places.",
+    );
+  }
+
+  const rawPlaces = await fs.readFile(options.inputPath, "utf8");
+  const places = JSON.parse(rawPlaces) as Place[];
+  const cityFilteredPlaces = options.city
+    ? places.filter(
+        (place) =>
+          place.city.localeCompare(options.city ?? "", undefined, {
+            sensitivity: "accent",
+          }) === 0,
+      )
+    : places;
+  const nameFilteredPlaces = options.name
+    ? cityFilteredPlaces.filter(
+        (place) =>
+          place.name.localeCompare(options.name ?? "", undefined, {
+            sensitivity: "accent",
+          }) === 0,
+      )
+    : cityFilteredPlaces;
+  const placesToProcess =
+    options.limit === null
+      ? nameFilteredPlaces
+      : nameFilteredPlaces.slice(0, options.limit);
+  const today = new Date();
+  const summary = getEmptySummary();
+  const updatedById = new Map<string, Place>();
+
+  for (const [index, place] of placesToProcess.entries()) {
+    try {
+      const searchResult = await fetchCandidates(place, apiKey);
+      const decision = verifyPlaceFromCandidates(place, searchResult.candidates, {
+        applyAutoDecisions: options.applyAutoDecisions,
+        applySafeCoordinateUpdates: options.applySafeCoordinateUpdates,
+        candidateSource: searchResult.source,
+        today,
+      });
+
+      updatedById.set(place.id, decision.place);
+      updateSummary(summary, place, decision);
+      console.log(
+        `${index + 1}/${placesToProcess.length} ${place.city} - ${place.name}: ${
+          decision.kind
+        }`,
+      );
+
+      if (options.debug) {
+        printDebugDetails(place, searchResult, decision);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const failedPlace: Place = {
+        ...place,
+        lastChecked: formatDateForInput(today),
+        verifiedStatus: "Review",
+        verificationNotes: place.verificationNotes
+          ? `${place.verificationNotes}\nGoogle Places verification failed: ${message}`
+          : `Google Places verification failed: ${message}`,
+      };
+
+      updatedById.set(place.id, failedPlace);
+      summary.rowsProcessed += 1;
+      summary.rowsNeedingReview += 1;
+      console.warn(
+        `${index + 1}/${placesToProcess.length} ${place.city} - ${place.name}: failed`,
+      );
+    }
+  }
+
+  const nextPlaces = places.map((place) => updatedById.get(place.id) ?? place);
+  const processedNextPlaces = placesToProcess.map(
+    (place) => updatedById.get(place.id) ?? place,
+  );
+  const originalPlacesById = new Map(places.map((place) => [place.id, place]));
+  const autoDecisionSummary = summarizeAutoDecisions(processedNextPlaces);
+  autoDecisionSummary.autoCorrectedLargeDelta =
+    autoDecisionSummary.autoCorrectedLargeDelta.map((correction) => {
+      const correctedPlace = processedNextPlaces.find(
+        (place) => place.name === correction.name,
+      );
+      const originalPlace = correctedPlace
+        ? originalPlacesById.get(correctedPlace.id)
+        : undefined;
+
+      return {
+        ...correction,
+        oldLatitude: originalPlace?.latitude ?? correction.oldLatitude,
+        oldLongitude: originalPlace?.longitude ?? correction.oldLongitude,
+      };
+    });
+
+  console.log("\nGoogle Places verification summary");
+  console.table(summary);
+  console.log("\nAuto-decision safety report");
+  console.table({
+    rowsProcessed: autoDecisionSummary.rowsProcessed,
+    auto_verified_small_delta: autoDecisionSummary.autoVerifiedSmallDeltaCount,
+    corrected_from_place_id: autoDecisionSummary.correctedFromPlaceIdCount,
+    corrected_from_google_maps_url:
+      autoDecisionSummary.correctedFromGoogleMapsUrlCount,
+    corrected_from_text_search: autoDecisionSummary.correctedFromTextSearchCount,
+    auto_corrected_large_delta: autoDecisionSummary.autoCorrectedLargeDeltaCount,
+    review: autoDecisionSummary.candidateOnlyReviewCount,
+    no_candidate_found: autoDecisionSummary.noCandidateCount,
+    closed_or_moved: autoDecisionSummary.closedMovedCount,
+  });
+
+  if (
+    autoDecisionSummary.autoCorrectedLargeDelta.length > 0 &&
+    !options.coordinateReportJson
+  ) {
+    console.log("\nLarge-delta auto-correction proposals");
+    console.table(autoDecisionSummary.autoCorrectedLargeDelta);
+  }
+
+  printCoordinateChangeReport(originalPlacesById, processedNextPlaces, {
+    asJson: options.coordinateReportJson,
+  });
+
+  if (!options.coordinateReportJson) {
+    printReviewRows(processedNextPlaces);
+    printGoogleMapsUrlReviewRows(processedNextPlaces);
+  }
+
+  if (options.writeCandidates && !options.dryRun) {
+    if (options.applyAutoDecisions) {
+      assertAutoDecisionSafetyGate(processedNextPlaces, { force: options.force });
+    }
+
+    assertCoordinateAuditFields(originalPlacesById, processedNextPlaces);
+
+    await fs.mkdir(path.dirname(options.outputPath), { recursive: true });
+    await fs.writeFile(
+      options.outputPath,
+      `${JSON.stringify(nextPlaces, null, 2)}\n`,
+    );
+    console.log(`Candidate output written to ${options.outputPath}`);
+  } else {
+    console.log(
+      "No file written. Pass --write-candidates to write candidate output JSON.",
+    );
+  }
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

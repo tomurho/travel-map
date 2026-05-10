@@ -44,6 +44,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (input.verifiedStatus === "Yes" && !input.googleMapsUrl?.trim()) {
+    return NextResponse.json(
+      { error: "Google Maps URL is required when a place is marked verified." },
+      { status: 400 },
+    );
+  }
+
   const place = stagePlace(input);
 
   return NextResponse.json({ place, places: getStagedPlacesWithDuplicates() });

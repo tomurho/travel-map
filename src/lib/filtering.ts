@@ -1,11 +1,19 @@
 import type { Place, PlaceFilterState } from "@/lib/place";
 
+export function isPublicPlace(place: Place) {
+  return place.verifiedStatus !== "Closed/Moved";
+}
+
 export function getCategories(places: Place[]) {
-  return Array.from(new Set(places.map((place) => place.category))).sort();
+  return Array.from(
+    new Set(places.filter(isPublicPlace).map((place) => place.category)),
+  ).sort();
 }
 
 export function getCities(places: Place[]) {
-  return Array.from(new Set(places.map((place) => place.city))).sort();
+  return Array.from(
+    new Set(places.filter(isPublicPlace).map((place) => place.city)),
+  ).sort();
 }
 
 export function getAvailableCategories(
@@ -26,6 +34,7 @@ export function getAreas(places: Place[]) {
   return Array.from(
     new Set(
       places
+        .filter(isPublicPlace)
         .map((place) => place.district)
         .filter((district) => district.trim().length > 0),
     ),
@@ -50,6 +59,10 @@ export function getAvailableAreas(
 
 export function filterPlaces(places: Place[], filters: PlaceFilterState) {
   return places.filter((place) => {
+    if (!isPublicPlace(place)) {
+      return false;
+    }
+
     if (filters.city !== "all" && place.city !== filters.city) {
       return false;
     }
@@ -83,7 +96,7 @@ export function filterPlaces(places: Place[], filters: PlaceFilterState) {
 }
 
 export function countByStatus(places: Place[]) {
-  return places.reduce(
+  return places.filter(isPublicPlace).reduce(
     (accumulator, place) => {
       accumulator[place.status] += 1;
       return accumulator;

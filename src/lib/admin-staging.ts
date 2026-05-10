@@ -3,7 +3,8 @@ import { join } from "node:path";
 import * as xlsx from "xlsx";
 
 import { getDistanceKm } from "@/lib/geo";
-import type { Place, PlaceStatus } from "@/lib/place";
+import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
+import { validatePlaceVerification } from "@/lib/place-verification";
 
 export type AdminDraftStatus = PlaceStatus | "loved";
 
@@ -20,6 +21,10 @@ export interface AdminStagedPlace {
   longitude: number | null;
   tabelog: string;
   subway: string;
+  googleMapsUrl: string;
+  verifiedStatus: PlaceVerifiedStatus;
+  lastChecked: string;
+  verificationNotes: string;
   sourceLabel: string;
   notes: string[];
   createdAt: string;
@@ -49,8 +54,21 @@ export interface AdminStagedPlaceInput {
   longitude: number | null;
   tabelog: string;
   subway: string;
+  googleMapsUrl: string;
+  verifiedStatus: PlaceVerifiedStatus;
+  lastChecked: string;
+  verificationNotes: string;
   sourceLabel: string;
   notes: string[];
+}
+
+export interface AdminProductionPlaceVerificationInput {
+  googleMapsUrl: string;
+  latitude: number | null;
+  longitude: number | null;
+  verifiedStatus: PlaceVerifiedStatus;
+  lastChecked: string;
+  verificationNotes: string;
 }
 
 const STAGING_FILE_PATH = join(process.cwd(), "src/data/admin-staged-places.json");
@@ -250,6 +268,12 @@ export function stagePlace(input: AdminStagedPlaceInput) {
     longitude: input.longitude,
     tabelog: input.tabelog.trim(),
     subway: input.subway.trim(),
+    googleMapsUrl: (input.googleMapsUrl ?? "").trim(),
+    verifiedStatus:
+      input.verifiedStatus ||
+      (input.latitude === null || input.longitude === null ? "Review" : ""),
+    lastChecked: (input.lastChecked ?? "").trim(),
+    verificationNotes: (input.verificationNotes ?? "").trim(),
     sourceLabel: input.sourceLabel.trim(),
     notes: input.notes,
     createdAt: new Date().toISOString(),
@@ -283,6 +307,10 @@ function stagedPlaceToPlace(place: AdminStagedPlace): Place {
     longitude: place.longitude,
     tabelog: place.tabelog,
     subway: place.subway,
+    googleMapsUrl: place.googleMapsUrl,
+    verifiedStatus: place.verifiedStatus,
+    lastChecked: place.lastChecked,
+    verificationNotes: place.verificationNotes,
   };
 }
 
@@ -291,6 +319,20 @@ export function publishStagedPlaces({ allowDuplicates = false } = {}) {
 
   if (stagedPlaces.length === 0) {
     return { publishedCount: 0, places: [] as AdminStagedPlace[] };
+  }
+
+  const verifiedPlacesMissingUrls = stagedPlaces.filter(
+    (place) => place.verifiedStatus === "Yes" && !place.googleMapsUrl?.trim(),
+  );
+
+  if (verifiedPlacesMissingUrls.length > 0) {
+    return {
+      places: stagedPlaces,
+      publishedCount: 0,
+      validationError: `${verifiedPlacesMissingUrls.length} verified staged place${
+        verifiedPlacesMissingUrls.length === 1 ? "" : "s"
+      } need a Google Maps URL before publishing.`,
+    };
   }
 
   const currentPlaces = JSON.parse(
@@ -361,6 +403,10 @@ function getStagedExportRows(places: AdminStagedPlace[]) {
     "Longitude",
     "Tabelog Score",
     "Nearest Subway",
+    "Google Maps URL",
+    "Verified?",
+    "Last Checked",
+    "Verification Notes",
     "Source",
     "Notes",
     "Created At",
@@ -377,6 +423,10 @@ function getStagedExportRows(places: AdminStagedPlace[]) {
     place.longitude ?? "",
     place.tabelog,
     place.subway,
+    place.googleMapsUrl ?? "",
+    place.verifiedStatus ?? "",
+    place.lastChecked ?? "",
+    place.verificationNotes ?? "",
     place.sourceLabel,
     place.notes.join(" | "),
     place.createdAt,
@@ -396,6 +446,28 @@ function getProductionExportRows(places: Place[]) {
     "Longitude",
     "Tabelog Score",
     "Nearest Subway",
+    "Google Maps URL",
+    "Google Place ID",
+    "Canonical Name",
+    "Canonical Address",
+    "Verified Latitude",
+    "Verified Longitude",
+    "Distance Delta Meters",
+    "Business Status",
+    "Match Confidence",
+    "Same Place Decision",
+    "Same Place Reason",
+    "Verification Decision",
+    "Verification Source",
+    "Name Score",
+    "Address Score",
+    "City Score",
+    "District Score",
+    "Country Score",
+    "Ambiguity Score",
+    "Verified?",
+    "Last Checked",
+    "Verification Notes",
   ];
 
   const rows = places.map((place) => [
@@ -408,6 +480,28 @@ function getProductionExportRows(places: Place[]) {
     place.longitude,
     place.tabelog,
     place.subway,
+    place.googleMapsUrl ?? "",
+    place.googlePlaceId ?? "",
+    place.canonicalName ?? "",
+    place.canonicalAddress ?? "",
+    place.verifiedLatitude ?? "",
+    place.verifiedLongitude ?? "",
+    place.distanceDeltaMeters ?? "",
+    place.businessStatus ?? "",
+    place.matchConfidence ?? "",
+    place.samePlaceDecision ?? "",
+    place.samePlaceReason ?? "",
+    place.verificationDecision ?? "",
+    place.verificationSource ?? "",
+    place.nameScore ?? "",
+    place.addressScore ?? "",
+    place.cityScore ?? "",
+    place.districtScore ?? "",
+    place.countryScore ?? "",
+    place.ambiguityScore ?? "",
+    place.verifiedStatus ?? "",
+    place.lastChecked ?? "",
+    place.verificationNotes ?? "",
   ]);
 
   return [headers, ...rows];
@@ -472,11 +566,15 @@ function applyStagedExportWorksheetFormatting(
     { wch: 14 },
     { wch: 28 },
     { wch: 24 },
+    { wch: 42 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 44 },
     { wch: 36 },
     { wch: 44 },
     { wch: 24 },
   ];
-  worksheet["!autofilter"] = { ref: `A1:M${Math.max(1, rowCount)}` };
+  worksheet["!autofilter"] = { ref: `A1:Q${Math.max(1, rowCount)}` };
   worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
 }
 
@@ -494,13 +592,74 @@ function applyProductionExportWorksheetFormatting(
     { wch: 14 },
     { wch: 18 },
     { wch: 24 },
+    { wch: 42 },
+    { wch: 24 },
+    { wch: 34 },
+    { wch: 52 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 64 },
+    { wch: 32 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 44 },
   ];
-  worksheet["!autofilter"] = { ref: `A1:I${Math.max(1, rowCount)}` };
+  worksheet["!autofilter"] = { ref: `A1:AD${Math.max(1, rowCount)}` };
   worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
 }
 
 export function readProductionPlaces() {
   return JSON.parse(readFileSync(PLACES_FILE_PATH, "utf8")) as Place[];
+}
+
+export function updateProductionPlaceVerification(
+  id: string,
+  input: AdminProductionPlaceVerificationInput,
+) {
+  const currentPlaces = readProductionPlaces();
+  const placeIndex = currentPlaces.findIndex((place) => place.id === id);
+
+  if (placeIndex === -1) {
+    return { error: "Production place was not found." };
+  }
+
+  const validationErrors = validatePlaceVerification(input);
+
+  if (validationErrors.length > 0) {
+    return { error: validationErrors.join(" ") };
+  }
+
+  const currentPlace = currentPlaces[placeIndex];
+  if (!currentPlace || input.latitude === null || input.longitude === null) {
+    return { error: "Valid latitude and longitude are required." };
+  }
+
+  const updatedPlace: Place = {
+    ...currentPlace,
+    googleMapsUrl: input.googleMapsUrl.trim(),
+    latitude: input.latitude,
+    longitude: input.longitude,
+    verifiedStatus: input.verifiedStatus,
+    lastChecked: input.lastChecked.trim(),
+    verificationNotes: input.verificationNotes.trim(),
+  };
+  const nextPlaces = currentPlaces.map((place) =>
+    place.id === id ? updatedPlace : place,
+  );
+
+  writeFileSync(PLACES_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
+
+  return { place: updatedPlace, places: nextPlaces };
 }
 
 export function stagedPlacesToWorkbookBuffer(places: AdminStagedPlace[]) {

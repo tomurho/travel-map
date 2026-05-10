@@ -1309,6 +1309,14 @@ select {
   margin-top: 2px;
 }
 
+.admin-draft-badges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .admin-source {
   margin: 4px 0 0;
   color: var(--muted);
@@ -1395,6 +1403,49 @@ select {
   box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.12);
 }
 
+.admin-draft-textarea {
+  min-height: 72px;
+  padding-block: 10px;
+  resize: vertical;
+}
+
+.admin-verification-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  border: 1px solid rgba(31, 42, 47, 0.12);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.admin-verification-badge.is-verified {
+  border-color: rgba(48, 209, 88, 0.38);
+  background: rgba(236, 253, 243, 0.92);
+  color: #0b7a35;
+}
+
+.admin-verification-badge.is-review {
+  border-color: rgba(255, 149, 0, 0.32);
+  background: rgba(255, 247, 230, 0.92);
+  color: #8a4b00;
+}
+
+.admin-verification-badge.is-unverified {
+  border-color: rgba(10, 132, 255, 0.24);
+  background: rgba(10, 132, 255, 0.08);
+  color: #075aaf;
+}
+
+.admin-verification-badge.is-inactive {
+  border-color: rgba(180, 35, 24, 0.26);
+  background: rgba(254, 243, 242, 0.92);
+  color: #b42318;
+}
+
 .admin-note-list {
   margin: 0;
   padding-left: 18px;
@@ -1427,11 +1478,187 @@ select {
 }
 
 .admin-export-panel,
+.admin-verification-panel,
 .admin-staged-panel {
   grid-column: 1 / -1;
   display: grid;
   gap: 14px;
   padding: 20px;
+}
+
+.admin-verification-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-verification-filters button,
+.admin-verification-actions a,
+.admin-verification-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(31, 42, 47, 0.14);
+  border-radius: 999px;
+  min-height: 38px;
+  padding: 0 13px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.admin-verification-filters button.is-active {
+  border-color: rgba(10, 132, 255, 0.46);
+  background: rgba(10, 132, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.08);
+}
+
+.admin-verification-workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-verification-list {
+  display: grid;
+  gap: 8px;
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-verification-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid rgba(31, 42, 47, 0.08);
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.admin-verification-row.is-active {
+  border-color: rgba(10, 132, 255, 0.42);
+  background: rgba(10, 132, 255, 0.08);
+}
+
+.admin-verification-row span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-verification-row strong {
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.admin-verification-row small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.admin-verification-detail {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(31, 42, 47, 0.08);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.admin-verification-detail .admin-draft-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-verification-detail .admin-draft-fields span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-candidate-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(31, 42, 47, 0.08);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(244, 248, 245, 0.78);
+}
+
+.admin-candidate-panel h4 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.admin-candidate-panel p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.admin-candidate-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.admin-candidate-grid div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-candidate-grid dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-candidate-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.admin-verification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-verification-actions button:disabled {
+  cursor: progress;
+  opacity: 0.62;
+}
+
+.admin-disabled-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .admin-staged-header {
@@ -1480,6 +1707,34 @@ select {
 .admin-staged-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.admin-staged-filter {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-staged-filter label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-staged-filter select {
+  border: 1px solid rgba(31, 42, 47, 0.14);
+  border-radius: 999px;
+  min-height: 38px;
+  padding: 0 34px 0 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: none;
 }
 
 .admin-export-result {
@@ -1699,6 +1954,14 @@ select {
   .admin-preview-chips {
     justify-content: flex-start;
   }
+
+  .admin-verification-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-verification-list {
+    max-height: 360px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1775,6 +2038,10 @@ select {
     grid-column: 1 / -1;
     min-height: 40px;
     opacity: 0.72;
+  }
+
+  .admin-candidate-grid {
+    grid-template-columns: 1fr;
   }
 
   .controls-header {
