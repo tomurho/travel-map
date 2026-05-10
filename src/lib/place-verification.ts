@@ -77,6 +77,24 @@ export function acceptCandidateCoordinates<
   };
 }
 
+export function useCanonicalAddress<
+  TPlace extends {
+    address: string;
+    canonicalAddress?: string;
+  },
+>(place: TPlace) {
+  const canonicalAddress = place.canonicalAddress?.trim();
+
+  if (!canonicalAddress) {
+    return place;
+  }
+
+  return {
+    ...place,
+    address: canonicalAddress,
+  };
+}
+
 export function isValidLatitude(latitude: number | null) {
   return latitude !== null && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90;
 }

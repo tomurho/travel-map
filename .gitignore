@@ -8,3 +8,5 @@ dist
 tsconfig.tsbuildinfo
 src/data/admin-staged-places.json
 public/exports/*.xlsx
+.cache/
+outputs/

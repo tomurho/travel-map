@@ -15,6 +15,7 @@ import {
   getVerificationFilterBucket,
   markVerifiedToday,
   matchesVerificationFilter,
+  useCanonicalAddress,
   validatePlaceVerification,
 } from "@/lib/place-verification";
 
@@ -85,6 +86,7 @@ type AdminWorkflowProps = {
 };
 
 type ProductionPlaceEdit = {
+  address: string;
   googleMapsUrl: string;
   latitude: string;
   longitude: string;
@@ -99,6 +101,16 @@ function formatOptionalValue(value: string | number | undefined | null) {
   }
 
   return String(value);
+}
+
+function getLatestVerificationNote(place: Pick<Place, "verificationNotes">) {
+  return (
+    place.verificationNotes
+      ?.split("\n")
+      .map((note) => note.trim())
+      .filter(Boolean)
+      .at(-1) ?? ""
+  );
 }
 
 const CATEGORY_ALIASES: Record<string, string> = {
@@ -213,6 +225,9 @@ export function AdminWorkflow({
     Record<string, ProductionPlaceEdit>
   >({});
   const [savingProductionPlaceId, setSavingProductionPlaceId] = useState<
+    string | null
+  >(null);
+  const [resolvingProductionPlaceId, setResolvingProductionPlaceId] = useState<
     string | null
   >(null);
   const [productionMessage, setProductionMessage] = useState<string | null>(null);
@@ -334,6 +349,7 @@ export function AdminWorkflow({
   function getProductionEdit(place: Place): ProductionPlaceEdit {
     return (
       productionEdits[place.id] ?? {
+        address: place.address ?? "",
         googleMapsUrl: place.googleMapsUrl ?? "",
         latitude: String(place.latitude ?? ""),
         longitude: String(place.longitude ?? ""),
@@ -370,6 +386,7 @@ export function AdminWorkflow({
     const edit = getProductionEdit(place);
 
     return {
+      address: edit.address,
       googleMapsUrl: edit.googleMapsUrl,
       latitude: parseCoordinate(edit.latitude),
       longitude: parseCoordinate(edit.longitude),
@@ -694,6 +711,7 @@ export function AdminWorkflow({
     const currentLongitude = parseCoordinate(currentEdit.longitude);
     const acceptedPlace = acceptCandidateCoordinates({
       ...place,
+      address: currentEdit.address,
       googleMapsUrl: currentEdit.googleMapsUrl,
       latitude: currentLatitude,
       longitude: currentLongitude,
@@ -706,6 +724,7 @@ export function AdminWorkflow({
       ...currentEdits,
       [place.id]: {
         ...currentEdit,
+        address: acceptedPlace.address,
         latitude: String(acceptedPlace.latitude ?? ""),
         longitude: String(acceptedPlace.longitude ?? ""),
         lastChecked: acceptedPlace.lastChecked ?? "",
@@ -716,6 +735,108 @@ export function AdminWorkflow({
     setProductionMessage(
       "Accepted candidate coordinates. Save QA changes to write them to the dataset.",
     );
+  }
+
+  function useProductionCanonicalAddress(place: Place) {
+    const currentEdit = getProductionEdit(place);
+    const updatedPlace = useCanonicalAddress({
+      ...place,
+      address: currentEdit.address,
+    });
+
+    setProductionEdits((currentEdits) => ({
+      ...currentEdits,
+      [place.id]: {
+        ...currentEdit,
+        address: updatedPlace.address,
+      },
+    }));
+    setProductionMessage(
+      "Canonical address copied into the editable address field. Save QA changes to write it to the dataset.",
+    );
+  }
+
+  async function resolveProductionGoogleMapsUrl(place: Place) {
+    const currentEdit = getProductionEdit(place);
+    const googleMapsUrl = currentEdit.googleMapsUrl.trim();
+
+    if (!googleMapsUrl) {
+      setError("Paste a Google Maps URL before resolving a candidate.");
+      return;
+    }
+
+    setResolvingProductionPlaceId(place.id);
+    setError(null);
+    setProductionMessage("Resolving Google Maps URL...");
+
+    try {
+      const response = await fetch(
+        `/api/admin/places/${encodeURIComponent(place.id)}/resolve-google-url`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(authHeaders() ?? {}),
+          },
+          body: JSON.stringify({ googleMapsUrl }),
+        },
+      );
+      const responsePayload = (await response.json()) as {
+        error?: string;
+        place?: Place;
+        places?: Place[];
+      };
+
+      if (!response.ok || !responsePayload.place || !responsePayload.places) {
+        throw new Error(responsePayload.error ?? "URL could not be resolved.");
+      }
+
+      setProductionPlaces(responsePayload.places);
+      setProductionEdits((currentEdits) => ({
+        ...currentEdits,
+        [place.id]: {
+          address: responsePayload.place?.address ?? currentEdit.address,
+          googleMapsUrl:
+            responsePayload.place?.googleMapsUrl ?? currentEdit.googleMapsUrl,
+          latitude: String(responsePayload.place?.latitude ?? ""),
+          longitude: String(responsePayload.place?.longitude ?? ""),
+          lastChecked: responsePayload.place?.lastChecked ?? "",
+          verifiedStatus: responsePayload.place?.verifiedStatus ?? "",
+          verificationNotes: responsePayload.place?.verificationNotes ?? "",
+        },
+      }));
+
+      const resolvedPlace = responsePayload.place;
+      const hasCandidateCoordinates =
+        resolvedPlace.verifiedLatitude !== undefined &&
+        resolvedPlace.verifiedLongitude !== undefined;
+      const isReviewCandidate =
+        resolvedPlace.verificationDecision === "candidate_only_review" ||
+        resolvedPlace.verificationDecision === "ambiguous_multiple_candidates";
+
+      setProductionMessage(
+        hasCandidateCoordinates
+          ? isReviewCandidate
+            ? "Candidate found, but it still needs review before accepting coordinates."
+            : "Candidate found. Review it, then accept candidate coordinates if it is the right pin."
+          : `URL could not be resolved to candidate coordinates.${
+              resolvedPlace.samePlaceReason
+                ? ` ${resolvedPlace.samePlaceReason}`
+                : getLatestVerificationNote(resolvedPlace)
+                  ? ` ${getLatestVerificationNote(resolvedPlace)}`
+                  : ""
+            }`,
+      );
+    } catch (resolveError) {
+      setError(
+        resolveError instanceof Error
+          ? resolveError.message
+          : "URL could not be resolved.",
+      );
+      setProductionMessage(null);
+    } finally {
+      setResolvingProductionPlaceId(null);
+    }
   }
 
   async function saveProductionPlace(place: Place) {
@@ -947,6 +1068,15 @@ export function AdminWorkflow({
               (() => {
                 const edit = getProductionEdit(selectedProductionPlace);
                 const canOpenGoogleMaps = edit.googleMapsUrl.trim().length > 0;
+                const canResolveGoogleMapsUrl =
+                  canOpenGoogleMaps &&
+                  resolvingProductionPlaceId !== selectedProductionPlace.id;
+                const hasCandidateMetadata =
+                  selectedProductionPlace.googlePlaceId !== undefined ||
+                  selectedProductionPlace.canonicalName !== undefined ||
+                  selectedProductionPlace.canonicalAddress !== undefined ||
+                  selectedProductionPlace.verifiedLatitude !== undefined ||
+                  selectedProductionPlace.verifiedLongitude !== undefined;
 
                 return (
                   <div className="admin-verification-detail">
@@ -975,6 +1105,21 @@ export function AdminWorkflow({
                     </div>
 
                     <div className="admin-draft-fields">
+                      <label className="admin-field-full">
+                        <span>Address</span>
+                        <textarea
+                          className="admin-draft-input admin-draft-textarea"
+                          onChange={(event) =>
+                            setProductionEditField(
+                              selectedProductionPlace,
+                              "address",
+                              event.target.value,
+                            )
+                          }
+                          rows={2}
+                          value={edit.address}
+                        />
+                      </label>
                       <label>
                         <span>Latitude</span>
                         <input
@@ -1020,6 +1165,11 @@ export function AdminWorkflow({
                           type="url"
                           value={edit.googleMapsUrl}
                         />
+                        <small className="admin-field-helper">
+                          Paste a Google Maps listing URL, then click Resolve
+                          Google Maps URL to fetch the candidate pin. This may
+                          call Google Places API.
+                        </small>
                       </label>
                       <label>
                         <span>Verified?</span>
@@ -1077,8 +1227,9 @@ export function AdminWorkflow({
                       <div>
                         <h4>Google candidate</h4>
                         <p>
-                          Read-only metadata from the batch verifier. Accepting
-                          coordinates still requires saving QA changes.
+                          {hasCandidateMetadata
+                            ? "Read-only metadata from the URL resolver or batch verifier. Accepting coordinates still requires saving QA changes."
+                            : "No candidate loaded yet. Resolve a Google Maps URL or run the batch verifier."}
                         </p>
                       </div>
                       <dl className="admin-candidate-grid">
@@ -1246,6 +1397,17 @@ export function AdminWorkflow({
 
                     <div className="admin-verification-actions">
                       <button
+                        disabled={!canResolveGoogleMapsUrl}
+                        onClick={() =>
+                          resolveProductionGoogleMapsUrl(selectedProductionPlace)
+                        }
+                        type="button"
+                      >
+                        {resolvingProductionPlaceId === selectedProductionPlace.id
+                          ? "Resolving..."
+                          : "Resolve Google Maps URL"}
+                      </button>
+                      <button
                         onClick={() =>
                           markSelectedProductionPlaceVerified(selectedProductionPlace)
                         }
@@ -1266,6 +1428,15 @@ export function AdminWorkflow({
                         type="button"
                       >
                         Accept candidate coordinates
+                      </button>
+                      <button
+                        disabled={!selectedProductionPlace.canonicalAddress?.trim()}
+                        onClick={() =>
+                          useProductionCanonicalAddress(selectedProductionPlace)
+                        }
+                        type="button"
+                      >
+                        Use canonical address
                       </button>
                       {canOpenGoogleMaps ? (
                         <a

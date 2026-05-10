@@ -63,6 +63,7 @@ export interface AdminStagedPlaceInput {
 }
 
 export interface AdminProductionPlaceVerificationInput {
+  address?: string;
   googleMapsUrl: string;
   latitude: number | null;
   longitude: number | null;
@@ -646,6 +647,7 @@ export function updateProductionPlaceVerification(
 
   const updatedPlace: Place = {
     ...currentPlace,
+    address: input.address?.trim() || currentPlace.address,
     googleMapsUrl: input.googleMapsUrl.trim(),
     latitude: input.latitude,
     longitude: input.longitude,

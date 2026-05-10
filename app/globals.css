@@ -1584,12 +1584,23 @@ select {
   gap: 6px;
 }
 
+.admin-verification-detail .admin-draft-fields .admin-field-full {
+  grid-column: 1 / -1;
+}
+
 .admin-verification-detail .admin-draft-fields span {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.admin-field-helper {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .admin-candidate-panel {
@@ -1649,7 +1660,7 @@ select {
 }
 
 .admin-verification-actions button:disabled {
-  cursor: progress;
+  cursor: not-allowed;
   opacity: 0.62;
 }
 

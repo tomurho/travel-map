@@ -11,6 +11,14 @@ import {
   type VerificationDecision,
   verifyPlaceFromCandidates,
 } from "@/lib/google-place-verification";
+import {
+  assertNarrowFieldMask,
+  assertBroadLiveRunAllowed,
+  getPlaceDetailsCacheKey,
+  getTextSearchCacheKey,
+  GooglePlacesAccess,
+  GooglePlacesLiveCallBlockedError,
+} from "@/lib/google-places-access";
 import { formatDateForInput } from "@/lib/place-verification";
 import type { Place } from "@/lib/place";
 import type { VerificationSource } from "@/lib/place";
@@ -36,16 +44,20 @@ const DETAILS_FIELD_MASK = [
 
 type CliOptions = {
   applySafeCoordinateUpdates: boolean;
+  cacheOnly: boolean;
   applyAutoDecisions: boolean;
   city: string | null;
+  confirmLiveApi: boolean;
   coordinateReportJson: boolean;
   debug: boolean;
   dryRun: boolean;
   force: boolean;
   inputPath: string;
   limit: number | null;
+  maxApiCalls: number | null;
   name: string | null;
   outputPath: string;
+  help: boolean;
   writeCandidates: boolean;
 };
 
@@ -70,27 +82,37 @@ function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     applySafeCoordinateUpdates: false,
     applyAutoDecisions: false,
+    cacheOnly: false,
     city: null,
+    confirmLiveApi: false,
     coordinateReportJson: false,
     debug: false,
     dryRun: false,
     force: false,
     inputPath: path.join(process.cwd(), "src/data/places.json"),
     limit: null,
+    maxApiCalls: null,
     name: null,
     outputPath: path.join(
       process.cwd(),
       "outputs",
       `google-places-candidates-${today}.json`,
     ),
+    help: false,
     writeCandidates: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
-    if (arg === "--dry-run") {
+    if (arg === "--help" || arg === "-h") {
+      options.help = true;
+    } else if (arg === "--dry-run") {
       options.dryRun = true;
+    } else if (arg === "--cache-only") {
+      options.cacheOnly = true;
+    } else if (arg === "--confirm-live-api") {
+      options.confirmLiveApi = true;
     } else if (arg === "--debug") {
       options.debug = true;
     } else if (arg === "--coordinate-report-json") {
@@ -113,6 +135,11 @@ function parseArgs(argv: string[]): CliOptions {
       const limit = Number(argv[index + 1]);
       options.limit = Number.isFinite(limit) && limit > 0 ? limit : null;
       index += 1;
+    } else if (arg === "--max-api-calls") {
+      const maxApiCalls = Number(argv[index + 1]);
+      options.maxApiCalls =
+        Number.isFinite(maxApiCalls) && maxApiCalls >= 0 ? maxApiCalls : null;
+      index += 1;
     } else if (arg === "--city") {
       options.city = argv[index + 1] ?? null;
       index += 1;
@@ -123,6 +150,57 @@ function parseArgs(argv: string[]): CliOptions {
   }
 
   return options;
+}
+
+function printHelp() {
+  console.log(`Google Places verifier
+
+Safety defaults:
+  --dry-run does not write data. It does not call Google unless --confirm-live-api is present.
+  --cache-only makes zero live Google calls and uses .cache/google-places-cache.json only.
+  Live Google calls require --confirm-live-api and --max-api-calls N.
+  City-wide live runs over 25 rows also require --force.
+
+Examples:
+  pnpm verify:places -- --dry-run --cache-only --city "Taipei"
+  pnpm verify:places -- --dry-run --city "Taipei" --name "Ironwood coffee" --confirm-live-api --max-api-calls 5
+  GOOGLE_PLACES_LIVE_ENABLED=true pnpm verify:places -- --dry-run --city "Taipei" --confirm-live-api --max-api-calls 100 --force
+`);
+}
+
+function estimateMaxTextSearchCalls(places: Place[]) {
+  return places.reduce((total, place) => total + getSearchAttempts(place).length, 0);
+}
+
+function printPreRunEstimate(input: {
+  liveEnabled: boolean;
+  maxApiCalls: number | null;
+  options: CliOptions;
+  placesToProcess: Place[];
+}) {
+  const placeDetailsCandidates = input.placesToProcess.filter(
+    (place) => place.googlePlaceId?.trim() || place.googleMapsUrl?.trim(),
+  ).length;
+  const textSearchCalls = estimateMaxTextSearchCalls(input.placesToProcess);
+  const urlExpansionAttempts = input.placesToProcess.filter(
+    (place) =>
+      place.googleMapsUrl?.trim() &&
+      !extractGooglePlaceIdFromUrl(place.googleMapsUrl),
+  ).length;
+
+  console.log("\nGoogle Places pre-run safety estimate");
+  console.table({
+    rowsToProcess: input.placesToProcess.length,
+    estimatedMaxTextSearchCalls: textSearchCalls,
+    estimatedMaxPlaceDetailsCalls: placeDetailsCandidates,
+    estimatedMaxUrlExpansionAttempts: urlExpansionAttempts,
+    estimatedMaxTotalGoogleCalls:
+      textSearchCalls + placeDetailsCandidates + urlExpansionAttempts,
+    maxApiCallsConfigured: input.maxApiCalls ?? "not set",
+    cacheOnly: input.options.cacheOnly || !input.options.confirmLiveApi,
+    liveApiEnabled:
+      input.liveEnabled && input.options.confirmLiveApi && input.maxApiCalls !== null,
+  });
 }
 
 async function loadLocalEnvFile() {
@@ -245,6 +323,7 @@ async function fetchJson<TResponse>(
     method: "GET" | "POST";
   },
 ) {
+  assertNarrowFieldMask(options.fieldMask);
   const response = await fetch(url, {
     body: options.body ? JSON.stringify(options.body) : undefined,
     headers: {
@@ -307,6 +386,7 @@ function extractGooglePlaceIdFromUrl(url: string) {
 async function fetchTextSearchCandidates(
   place: Place,
   apiKey: string,
+  access: GooglePlacesAccess,
   initialAttempts: CandidateSearchResult["queryAttempts"] = [],
   urlResolutionReason?: string,
 ): Promise<CandidateSearchResult> {
@@ -319,17 +399,28 @@ async function fetchTextSearchCandidates(
 
   for (const query of getSearchAttempts(place)) {
     try {
-      const payload = await fetchJson<GoogleTextSearchResponse>(TEXT_SEARCH_URL, {
-        apiKey,
-        body: {
-          locationBias,
-          pageSize: 5,
+      const payload = await access.fetchJson<GoogleTextSearchResponse>(
+        "textSearch",
+        getTextSearchCacheKey({
+          city: place.city,
+          fieldMask: TEXT_SEARCH_FIELD_MASK,
+          query,
           regionCode,
-          textQuery: query,
-        },
-        fieldMask: TEXT_SEARCH_FIELD_MASK,
-        method: "POST",
-      });
+        }),
+        "textSearch",
+        () =>
+          fetchJson<GoogleTextSearchResponse>(TEXT_SEARCH_URL, {
+            apiKey,
+            body: {
+              locationBias,
+              pageSize: 5,
+              regionCode,
+              textQuery: query,
+            },
+            fieldMask: TEXT_SEARCH_FIELD_MASK,
+            method: "POST",
+          }),
+      );
       const candidates = payload.places ?? [];
 
       queryAttempts.push({
@@ -362,17 +453,82 @@ async function fetchTextSearchCandidates(
   };
 }
 
-async function fetchCandidates(place: Place, apiKey: string): Promise<CandidateSearchResult> {
-  if (place.googlePlaceId?.trim()) {
-    const placeResourceId = place.googlePlaceId.trim().replace(/^places\//, "");
-    try {
-      const candidate = await fetchJson<GoogleCandidate>(
-        `${PLACE_DETAILS_URL}/${encodeURIComponent(placeResourceId)}`,
+async function resolveRedirectedUrl(url: string) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    },
+    method: "GET",
+    redirect: "follow",
+  });
+
+  return response.url || url;
+}
+
+async function fetchPlaceDetailsCandidate(
+  placeId: string,
+  apiKey: string,
+  access: GooglePlacesAccess,
+) {
+  return access.fetchJson<GoogleCandidate>(
+    "placeDetails",
+    getPlaceDetailsCacheKey(placeId, DETAILS_FIELD_MASK),
+    "placeDetails",
+    () =>
+      fetchJson<GoogleCandidate>(
+        `${PLACE_DETAILS_URL}/${encodeURIComponent(placeId)}`,
         {
           apiKey,
           fieldMask: DETAILS_FIELD_MASK,
           method: "GET",
         },
+      ),
+  );
+}
+
+async function getPlaceIdFromGoogleMapsUrl(
+  googleMapsUrl: string,
+  access: GooglePlacesAccess,
+) {
+  const directPlaceId = extractGooglePlaceIdFromUrl(googleMapsUrl);
+
+  if (directPlaceId) {
+    access.setUrlPlaceId(googleMapsUrl, directPlaceId);
+    return directPlaceId;
+  }
+
+  const cachedPlaceId = access.getUrlPlaceId(googleMapsUrl);
+
+  if (cachedPlaceId) {
+    return cachedPlaceId;
+  }
+
+  const expandedUrl = await access.expandUrl(googleMapsUrl, () =>
+    resolveRedirectedUrl(googleMapsUrl),
+  );
+  const resolvedPlaceId = extractGooglePlaceIdFromUrl(expandedUrl);
+
+  if (resolvedPlaceId) {
+    access.setUrlPlaceId(googleMapsUrl, resolvedPlaceId);
+  }
+
+  return resolvedPlaceId;
+}
+
+async function fetchCandidates(
+  place: Place,
+  apiKey: string,
+  access: GooglePlacesAccess,
+): Promise<CandidateSearchResult> {
+  if (place.googlePlaceId?.trim()) {
+    const placeResourceId = place.googlePlaceId.trim().replace(/^places\//, "");
+    try {
+      const candidate = await fetchPlaceDetailsCandidate(
+        placeResourceId,
+        apiKey,
+        access,
       );
 
       return {
@@ -390,6 +546,7 @@ async function fetchCandidates(place: Place, apiKey: string): Promise<CandidateS
       return fetchTextSearchCandidates(
         place,
         apiKey,
+        access,
         [
           {
             candidateCount: 0,
@@ -403,18 +560,15 @@ async function fetchCandidates(place: Place, apiKey: string): Promise<CandidateS
   }
 
   const placeIdFromUrl = place.googleMapsUrl
-    ? extractGooglePlaceIdFromUrl(place.googleMapsUrl)
+    ? await getPlaceIdFromGoogleMapsUrl(place.googleMapsUrl, access)
     : null;
 
   if (placeIdFromUrl) {
     try {
-      const candidate = await fetchJson<GoogleCandidate>(
-        `${PLACE_DETAILS_URL}/${encodeURIComponent(placeIdFromUrl)}`,
-        {
-          apiKey,
-          fieldMask: DETAILS_FIELD_MASK,
-          method: "GET",
-        },
+      const candidate = await fetchPlaceDetailsCandidate(
+        placeIdFromUrl,
+        apiKey,
+        access,
       );
 
       return {
@@ -432,6 +586,7 @@ async function fetchCandidates(place: Place, apiKey: string): Promise<CandidateS
       return fetchTextSearchCandidates(
         place,
         apiKey,
+        access,
         [
           {
             candidateCount: 0,
@@ -447,6 +602,7 @@ async function fetchCandidates(place: Place, apiKey: string): Promise<CandidateS
   return fetchTextSearchCandidates(
     place,
     apiKey,
+    access,
     [],
     place.googleMapsUrl
       ? "Google Maps URL did not contain a directly resolvable Place ID; verifier used Text Search fallback."
@@ -746,15 +902,15 @@ function printCoordinateChangeReport(
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  await loadLocalEnvFile();
-  const apiKey =
-    process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY;
-
-  if (!apiKey) {
-    throw new Error(
-      "GOOGLE_MAPS_API_KEY or GOOGLE_PLACES_API_KEY is required to verify places.",
-    );
+  if (options.help) {
+    printHelp();
+    return;
   }
+
+  await loadLocalEnvFile();
+  const liveEnabled = process.env.GOOGLE_PLACES_LIVE_ENABLED === "true";
+  const apiKey =
+    process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
 
   const rawPlaces = await fs.readFile(options.inputPath, "utf8");
   const places = JSON.parse(rawPlaces) as Place[];
@@ -778,13 +934,47 @@ async function main() {
     options.limit === null
       ? nameFilteredPlaces
       : nameFilteredPlaces.slice(0, options.limit);
+  const liveCallsRequested = options.confirmLiveApi && !options.cacheOnly;
+
+  printPreRunEstimate({
+    liveEnabled,
+    maxApiCalls: options.maxApiCalls,
+    options,
+    placesToProcess,
+  });
+
+  if (liveCallsRequested && !apiKey) {
+    throw new Error(
+      "GOOGLE_MAPS_API_KEY or GOOGLE_PLACES_API_KEY is required for live Google calls.",
+    );
+  }
+
+  if (liveCallsRequested && !liveEnabled) {
+    throw new Error(
+      "Live Google Places calls are disabled. Set GOOGLE_PLACES_LIVE_ENABLED=true before using --confirm-live-api.",
+    );
+  }
+
+  assertBroadLiveRunAllowed({
+    confirmLiveApi: liveCallsRequested,
+    force: options.force,
+    maxApiCalls: options.maxApiCalls,
+    rowCount: placesToProcess.length,
+  });
+
+  const access = new GooglePlacesAccess({
+    cacheOnly: options.cacheOnly || !options.confirmLiveApi,
+    confirmLiveApi: options.confirmLiveApi,
+    liveEnabled,
+    maxApiCalls: options.maxApiCalls,
+  });
   const today = new Date();
   const summary = getEmptySummary();
   const updatedById = new Map<string, Place>();
 
   for (const [index, place] of placesToProcess.entries()) {
     try {
-      const searchResult = await fetchCandidates(place, apiKey);
+      const searchResult = await fetchCandidates(place, apiKey, access);
       const decision = verifyPlaceFromCandidates(place, searchResult.candidates, {
         applyAutoDecisions: options.applyAutoDecisions,
         applySafeCoordinateUpdates: options.applySafeCoordinateUpdates,
@@ -805,13 +995,22 @@ async function main() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const isBlockedLiveCall = error instanceof GooglePlacesLiveCallBlockedError;
       const failedPlace: Place = {
         ...place,
         lastChecked: formatDateForInput(today),
         verifiedStatus: "Review",
+        samePlaceDecision: "Unsure",
+        samePlaceReason: isBlockedLiveCall
+          ? "Cache miss; live Google Places calls were not allowed for this run."
+          : place.samePlaceReason,
+        verificationDecision: isBlockedLiveCall
+          ? "no_candidate_found"
+          : place.verificationDecision,
+        verificationSource: place.verificationSource ?? "text_search",
         verificationNotes: place.verificationNotes
-          ? `${place.verificationNotes}\nGoogle Places verification failed: ${message}`
-          : `Google Places verification failed: ${message}`,
+          ? `${place.verificationNotes}\n${message}`
+          : message,
       };
 
       updatedById.set(place.id, failedPlace);
@@ -847,6 +1046,11 @@ async function main() {
 
   console.log("\nGoogle Places verification summary");
   console.table(summary);
+  console.log("\nGoogle Places API/cache safety counters");
+  console.table({
+    ...access.counters,
+    liveCallsMade: access.getLiveCallCount(),
+  });
   console.log("\nAuto-decision safety report");
   console.table({
     rowsProcessed: autoDecisionSummary.rowsProcessed,

@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { filterPlaces } from "@/lib/filtering";
+import {
+  fetchCandidatesFromGoogleMapsUrl,
+  getAdminResolverSearchAttempts,
+} from "@/lib/google-place-admin-resolver";
+import {
+  assertBroadLiveRunAllowed,
+  assertNarrowFieldMask,
+  getTextSearchCacheKey,
+  GooglePlacesAccess,
+  GooglePlacesLiveCallBlockedError,
+  writeGooglePlacesCache,
+} from "@/lib/google-places-access";
 import {
   assertAutoDecisionSafetyGate,
   assertCoordinateAuditFields,
@@ -16,6 +29,7 @@ import {
 import {
   acceptCandidateCoordinates,
   markVerifiedToday,
+  useCanonicalAddress,
   validatePlaceVerification,
 } from "@/lib/place-verification";
 
@@ -1546,5 +1560,399 @@ test("acceptCandidateCoordinates copies candidate coordinates into stored coordi
   assert.match(
     result.verificationNotes ?? "",
     /candidate coordinates were accepted manually/,
+  );
+});
+
+test("Google Maps URL resolve-style candidate metadata does not overwrite stored coordinates", () => {
+  const place = makePlace({
+    address: "Old address",
+    googleMapsUrl: "https://maps.google.com/?cid=123",
+    latitude: 25.032,
+    longitude: 121.553,
+  });
+  const result = verifyPlaceFromCandidates(
+    place,
+    [
+      {
+        businessStatus: "OPERATIONAL",
+        displayName: { text: "Existing Place" },
+        formattedAddress: "Verified canonical address, Taipei City, Taiwan",
+        googleMapsUri: "https://maps.google.com/?cid=456",
+        id: "google-place-existing",
+        location: {
+          latitude: 25.033,
+          longitude: 121.554,
+        },
+      },
+    ],
+    {
+      applyAutoDecisions: false,
+      candidateSource: "google_maps_url",
+      today: new Date(2026, 4, 10),
+    },
+  );
+
+  assert.equal(result.place.latitude, 25.032);
+  assert.equal(result.place.longitude, 121.553);
+  assert.equal(result.place.googlePlaceId, "google-place-existing");
+  assert.equal(result.place.canonicalName, "Existing Place");
+  assert.equal(
+    result.place.canonicalAddress,
+    "Verified canonical address, Taipei City, Taiwan",
+  );
+  assert.equal(result.place.verifiedLatitude, 25.033);
+  assert.equal(result.place.verifiedLongitude, 121.554);
+  assert.equal(result.place.verificationSource, "google_maps_url");
+  assert.equal(result.place.lastChecked, "2026-05-10");
+});
+
+test("useCanonicalAddress copies canonical address only when explicitly requested", () => {
+  const unchangedPlace = useCanonicalAddress({
+    address: "Original address",
+    canonicalAddress: "",
+  });
+  const updatedPlace = useCanonicalAddress({
+    address: "Original address",
+    canonicalAddress: "Canonical address",
+  });
+
+  assert.equal(unchangedPlace.address, "Original address");
+  assert.equal(updatedPlace.address, "Canonical address");
+});
+
+test("verifyPlaceFromCandidates keeps unresolvable URL rows in Review with useful notes", () => {
+  const place = makePlace({ googleMapsUrl: "https://maps.app.goo.gl/example" });
+  const result = verifyPlaceFromCandidates(place, [], {
+    candidateSource: "google_maps_url",
+    today: new Date(2026, 4, 10),
+  });
+
+  assert.equal(result.place.verifiedStatus, "Review");
+  assert.equal(result.place.verificationDecision, "no_candidate_found");
+  assert.equal(result.place.samePlaceDecision, "Unsure");
+  assert.match(
+    result.place.verificationNotes ?? "",
+    /found no candidate match/,
+  );
+});
+
+test("admin Google Maps resolver expands maps.app.goo.gl short links", async () => {
+  const calls: string[] = [];
+  const mockFetch = (async (url: string | URL | Request) => {
+    const requestUrl = String(url);
+    calls.push(requestUrl);
+
+    if (requestUrl.includes("maps.app.goo.gl")) {
+      return {
+        ok: true,
+        url: "https://www.google.com/maps/place/Ironwood+Coffee/data=!4m2!3m1!1sChIJironwood123",
+      } as Response;
+    }
+
+    assert.match(requestUrl, /places\/ChIJironwood123$/);
+
+    return {
+      json: async () => ({
+        businessStatus: "OPERATIONAL",
+        displayName: { text: "Ironwood Coffee" },
+        formattedAddress: "No. 1 Coffee Street, Taipei City, Taiwan",
+        googleMapsUri: "https://maps.google.com/?cid=ironwood",
+        id: "ChIJironwood123",
+        location: {
+          latitude: 25.04,
+          longitude: 121.56,
+        },
+      }),
+      ok: true,
+    } as Response;
+  }) as typeof fetch;
+
+  const result = await fetchCandidatesFromGoogleMapsUrl(
+    makePlace({ name: "Ironwood coffee", city: "Taipei" }),
+    "https://maps.app.goo.gl/asv6t8jzFG48E",
+    "test-key",
+    mockFetch,
+    new GooglePlacesAccess({
+      cachePath: join("/private/tmp", `places-cache-short-${Date.now()}.json`),
+      confirmLiveApi: true,
+      liveEnabled: true,
+      maxApiCalls: 2,
+    }),
+  );
+
+  assert.equal(result.source, "google_maps_url");
+  assert.equal(result.placeIdFromUrl, "ChIJironwood123");
+  assert.equal(result.candidates[0]?.location?.latitude, 25.04);
+  assert.equal(calls.length, 2);
+  assert.match(result.resolutionNotes.join("\n"), /expanded/);
+});
+
+test("admin Google Maps resolver falls back to Text Search when Place ID is absent", async () => {
+  const textSearchBodies: string[] = [];
+  const mockFetch = (async (
+    url: string | URL | Request,
+    init?: RequestInit,
+  ) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes("maps.app.goo.gl")) {
+      return {
+        ok: true,
+        url: "https://www.google.com/maps/search/?api=1&query=Ironwood+coffee",
+      } as Response;
+    }
+
+    assert.equal(requestUrl, "https://places.googleapis.com/v1/places:searchText");
+    textSearchBodies.push(String(init?.body ?? ""));
+
+    return {
+      json: async () => ({
+        places: [
+          {
+            businessStatus: "OPERATIONAL",
+            displayName: { text: "Ironwood Coffee" },
+            formattedAddress: "No. 1 Coffee Street, Taipei City, Taiwan",
+            googleMapsUri: "https://maps.google.com/?cid=ironwood",
+            id: "text-search-ironwood",
+            location: {
+              latitude: 25.04,
+              longitude: 121.56,
+            },
+          },
+        ],
+      }),
+      ok: true,
+    } as Response;
+  }) as typeof fetch;
+
+  const result = await fetchCandidatesFromGoogleMapsUrl(
+    makePlace({
+      address: "Old address",
+      canonicalAddress: "Canonical address",
+      city: "Taipei",
+      name: "Ironwood coffee",
+    }),
+    "https://maps.app.goo.gl/asv6t8jzFG48E",
+    "test-key",
+    mockFetch,
+    new GooglePlacesAccess({
+      cachePath: join("/private/tmp", `places-cache-fallback-${Date.now()}.json`),
+      confirmLiveApi: true,
+      liveEnabled: true,
+      maxApiCalls: 10,
+    }),
+  );
+
+  assert.equal(result.source, "text_search");
+  assert.equal(result.candidates[0]?.id, "text-search-ironwood");
+  assert.match(result.resolutionNotes.join("\n"), /Place ID was not found/);
+  assert.ok(
+    textSearchBodies.some((body) => body.includes("Old address")) &&
+      textSearchBodies.some((body) => body.includes("Canonical address")),
+  );
+});
+
+test("admin resolver search attempts include saved and canonical addresses", () => {
+  const attempts = getAdminResolverSearchAttempts(
+    makePlace({
+      address: "Saved address",
+      canonicalAddress: "Canonical address",
+      city: "Taipei",
+      district: "Da'an",
+      name: "Ironwood coffee",
+    }),
+  );
+
+  assert.ok(
+    attempts.includes("Ironwood coffee, Saved address, Taipei"),
+  );
+  assert.ok(
+    attempts.includes("Ironwood coffee, Canonical address, Taipei"),
+  );
+  assert.ok(attempts.includes("Ironwood coffee, Taipei"));
+});
+
+test("Google Places access blocks live calls without confirm flag", async () => {
+  const access = new GooglePlacesAccess({
+    cachePath: join("/private/tmp", `places-cache-no-confirm-${Date.now()}.json`),
+    liveEnabled: true,
+    maxApiCalls: 1,
+  });
+  let called = false;
+
+  await assert.rejects(
+    access.fetchJson("textSearch", "missing", "textSearch", async () => {
+      called = true;
+      return { places: [] };
+    }),
+    GooglePlacesLiveCallBlockedError,
+  );
+  assert.equal(called, false);
+  assert.equal(access.counters.blockedByMissingConfirm, 1);
+});
+
+test("Google Places access enforces max-api-calls", async () => {
+  const access = new GooglePlacesAccess({
+    cachePath: join("/private/tmp", `places-cache-cap-${Date.now()}.json`),
+    confirmLiveApi: true,
+    liveEnabled: true,
+    maxApiCalls: 1,
+  });
+
+  await access.fetchJson("textSearch", "first", "textSearch", async () => ({
+    places: [],
+  }));
+  await assert.rejects(
+    access.fetchJson("textSearch", "second", "textSearch", async () => ({
+      places: [],
+    })),
+    /max API call cap/,
+  );
+  assert.equal(access.getLiveCallCount(), 1);
+  assert.equal(access.counters.blockedByMaxApiCalls, 1);
+});
+
+test("Google Places cache-only mode never calls Google", async () => {
+  const access = new GooglePlacesAccess({
+    cacheOnly: true,
+    cachePath: join("/private/tmp", `places-cache-only-${Date.now()}.json`),
+    confirmLiveApi: true,
+    liveEnabled: true,
+    maxApiCalls: 1,
+  });
+  let called = false;
+
+  await assert.rejects(
+    access.fetchJson("placeDetails", "missing", "placeDetails", async () => {
+      called = true;
+      return { id: "place-1" };
+    }),
+    GooglePlacesLiveCallBlockedError,
+  );
+  assert.equal(called, false);
+  assert.equal(access.getLiveCallCount(), 0);
+});
+
+test("Google Places cache hits avoid live calls", async () => {
+  const cachePath = join("/private/tmp", `places-cache-hit-${Date.now()}.json`);
+  const cacheKey = getTextSearchCacheKey({
+    city: "Taipei",
+    fieldMask: "places.id",
+    query: "Ironwood coffee Taipei",
+  });
+  writeGooglePlacesCache(
+    {
+      placeDetails: {},
+      textSearch: {
+        [cacheKey]: { places: [{ id: "cached-place" }] },
+      },
+      urlExpansions: {},
+      urlPlaceIds: {},
+    },
+    cachePath,
+  );
+  const access = new GooglePlacesAccess({
+    cachePath,
+    liveEnabled: false,
+  });
+  const result = await access.fetchJson<{ places: Array<{ id: string }> }>(
+    "textSearch",
+    cacheKey,
+    "textSearch",
+    async () => {
+      throw new Error("should not call live fetcher");
+    },
+  );
+
+  assert.equal(result.places[0]?.id, "cached-place");
+  assert.equal(access.counters.cacheHits, 1);
+  assert.equal(access.getLiveCallCount(), 0);
+});
+
+test("admin resolver respects per-request max call cap", async () => {
+  const access = new GooglePlacesAccess({
+    cachePath: join("/private/tmp", `places-cache-admin-cap-${Date.now()}.json`),
+    confirmLiveApi: true,
+    liveEnabled: true,
+    maxApiCalls: 1,
+  });
+  const mockFetch = (async (url: string | URL | Request) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes("maps.app.goo.gl")) {
+      return {
+        ok: true,
+        url: "https://www.google.com/maps/place/Test/data=!4m2!3m1!1sChIJadmincap",
+      } as Response;
+    }
+
+    return {
+      json: async () => ({ id: "ChIJadmincap" }),
+      ok: true,
+    } as Response;
+  }) as typeof fetch;
+
+  await assert.rejects(
+    fetchCandidatesFromGoogleMapsUrl(
+      makePlace({ city: "Taipei", name: "Ironwood coffee" }),
+      "https://maps.app.goo.gl/example",
+      "test-key",
+      mockFetch,
+      access,
+    ),
+    /max API call cap/,
+  );
+  assert.equal(access.counters.urlExpansionAttempts, 1);
+  assert.equal(access.counters.blockedByMaxApiCalls, 1);
+});
+
+test("admin resolver does not call Google when live usage is disabled", async () => {
+  const access = new GooglePlacesAccess({
+    cachePath: join("/private/tmp", `places-cache-disabled-${Date.now()}.json`),
+    confirmLiveApi: true,
+    liveEnabled: false,
+    maxApiCalls: 5,
+  });
+  let called = false;
+
+  const result = await fetchCandidatesFromGoogleMapsUrl(
+    makePlace({ city: "Taipei", name: "Ironwood coffee" }),
+    "https://maps.app.goo.gl/example",
+    "test-key",
+    (async () => {
+      called = true;
+      return { ok: true, url: "https://maps.google.com" } as Response;
+    }) as typeof fetch,
+    access,
+  );
+  assert.equal(called, false);
+  assert.equal(result.candidates.length, 0);
+  assert.equal(access.getLiveCallCount(), 0);
+  assert.equal(access.counters.blockedByMissingConfirm > 0, true);
+});
+
+test("Google Places wildcard field masks are blocked", () => {
+  assert.throws(() => assertNarrowFieldMask("*"), /Wildcard/);
+  assert.doesNotThrow(() => assertNarrowFieldMask("places.id,places.location"));
+});
+
+test("city-wide live Google Places runs are blocked without force", () => {
+  assert.throws(
+    () =>
+      assertBroadLiveRunAllowed({
+        confirmLiveApi: true,
+        force: false,
+        maxApiCalls: 100,
+        rowCount: 26,
+      }),
+    /require --force/,
+  );
+  assert.doesNotThrow(() =>
+    assertBroadLiveRunAllowed({
+      confirmLiveApi: true,
+      force: true,
+      maxApiCalls: 100,
+      rowCount: 26,
+    }),
   );
 });

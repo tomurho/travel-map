@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  getTextSearchCacheKey,
+  GooglePlacesAccess,
+} from "@/lib/google-places-access";
+
 type SearchTextResponse = {
   places?: Array<{
     id?: string;
@@ -12,12 +17,16 @@ type SearchTextResponse = {
   }>;
 };
 
+const PLACE_DETAILS_FIELD_MASK =
+  "places.id,places.currentOpeningHours.weekdayDescriptions,places.photos.name";
+
 export async function GET(request: NextRequest) {
   const name = request.nextUrl.searchParams.get("name")?.trim() ?? "";
   const address = request.nextUrl.searchParams.get("address")?.trim() ?? "";
   const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
+  const liveEnabled = process.env.GOOGLE_PLACES_LIVE_ENABLED === "true";
 
-  if (!apiKey) {
+  if (liveEnabled && !apiKey) {
     return NextResponse.json(
       { error: "Google Places API key is not configured." },
       { status: 500 },
@@ -32,37 +41,64 @@ export async function GET(request: NextRequest) {
   }
 
   const textQuery = [name, address].filter(Boolean).join(", ");
-
-  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-        "places.id,places.currentOpeningHours.weekdayDescriptions,places.photos.name",
-    },
-    body: JSON.stringify({
-      textQuery,
-      maxResultCount: 1,
-    }),
-    cache: "no-store",
+  const access = new GooglePlacesAccess({
+    cacheOnly: !liveEnabled,
+    confirmLiveApi: liveEnabled,
+    liveEnabled,
+    maxApiCalls: 2,
   });
 
-  if (!response.ok) {
-    return NextResponse.json(
-      { error: "Google Places lookup failed." },
-      { status: response.status },
+  let data: SearchTextResponse;
+
+  try {
+    data = await access.fetchJson<SearchTextResponse>(
+      "textSearch",
+      getTextSearchCacheKey({
+        city: "",
+        fieldMask: PLACE_DETAILS_FIELD_MASK,
+        query: textQuery,
+      }),
+      "textSearch",
+      async () => {
+        const response = await fetch(
+          "https://places.googleapis.com/v1/places:searchText",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": apiKey,
+              "X-Goog-FieldMask": PLACE_DETAILS_FIELD_MASK,
+            },
+            body: JSON.stringify({
+              textQuery,
+              maxResultCount: 1,
+            }),
+            cache: "no-store",
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Google Places lookup failed.");
+        }
+
+        return (await response.json()) as SearchTextResponse;
+      },
     );
+  } catch {
+    return NextResponse.json({
+      matched: false,
+      openingHours: null,
+      photoUrls: [],
+    });
   }
 
-  const data = (await response.json()) as SearchTextResponse;
   const match = data.places?.[0];
 
   if (!match) {
     return NextResponse.json({
       matched: false,
       openingHours: null,
-      photoUrl: null,
+      photoUrls: [],
     });
   }
 
