@@ -1385,6 +1385,30 @@ export function AdminWorkflow({
                           </dd>
                         </div>
                         <div>
+                          <dt>Candidate source</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.candidateCoordinateSource,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Coordinate precision</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.coordinatePrecision,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Confidence</dt>
+                          <dd>
+                            {formatOptionalValue(
+                              selectedProductionPlace.coordinateConfidence,
+                            )}
+                          </dd>
+                        </div>
+                        <div>
                           <dt>Match confidence</dt>
                           <dd>
                             {formatOptionalValue(
@@ -1428,6 +1452,20 @@ export function AdminWorkflow({
                         type="button"
                       >
                         Accept candidate coordinates
+                      </button>
+                      <button
+                        disabled={
+                          selectedProductionPlace.verifiedLatitude === undefined ||
+                          selectedProductionPlace.verifiedLongitude === undefined
+                        }
+                        onClick={() =>
+                          setProductionMessage(
+                            "Candidate rejected for now. No dataset fields were changed.",
+                          )
+                        }
+                        type="button"
+                      >
+                        Reject candidate
                       </button>
                       <button
                         disabled={!selectedProductionPlace.canonicalAddress?.trim()}

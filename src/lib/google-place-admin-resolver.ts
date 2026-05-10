@@ -411,6 +411,14 @@ function addSingleFallbackCandidateForReview(
     googlePlaceId: candidate.id,
     matchConfidence: candidate.matchConfidence,
     nameScore: candidate.nameScore,
+    candidateCoordinateSource: "google" as const,
+    coordinatePrecision: "place_pin" as const,
+    coordinateConfidence:
+      candidate.matchConfidence >= 0.78
+        ? ("high" as const)
+        : candidate.matchConfidence >= 0.62
+          ? ("medium" as const)
+          : ("low" as const),
     samePlaceDecision: "Unsure" as const,
     samePlaceReason:
       "Text Search fallback returned one candidate, but the row evidence was not strong enough to auto-verify. Candidate metadata was saved for manual review.",

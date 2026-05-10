@@ -55,6 +55,8 @@ type CliOptions = {
   inputPath: string;
   limit: number | null;
   maxApiCalls: number | null;
+  monthlyBudgetUsd: number;
+  estimatedCostPerCallUsd: number;
   name: string | null;
   outputPath: string;
   help: boolean;
@@ -92,6 +94,8 @@ function parseArgs(argv: string[]): CliOptions {
     inputPath: path.join(process.cwd(), "src/data/places.json"),
     limit: null,
     maxApiCalls: null,
+    monthlyBudgetUsd: 5,
+    estimatedCostPerCallUsd: 0.02,
     name: null,
     outputPath: path.join(
       process.cwd(),
@@ -140,6 +144,15 @@ function parseArgs(argv: string[]): CliOptions {
       options.maxApiCalls =
         Number.isFinite(maxApiCalls) && maxApiCalls >= 0 ? maxApiCalls : null;
       index += 1;
+    } else if (arg === "--monthly-budget-usd") {
+      const budget = Number(argv[index + 1]);
+      options.monthlyBudgetUsd = Number.isFinite(budget) && budget > 0 ? budget : 5;
+      index += 1;
+    } else if (arg === "--estimated-cost-per-call-usd") {
+      const cost = Number(argv[index + 1]);
+      options.estimatedCostPerCallUsd =
+        Number.isFinite(cost) && cost > 0 ? cost : 0.02;
+      index += 1;
     } else if (arg === "--city") {
       options.city = argv[index + 1] ?? null;
       index += 1;
@@ -160,11 +173,12 @@ Safety defaults:
   --cache-only makes zero live Google calls and uses .cache/google-places-cache.json only.
   Live Google calls require --confirm-live-api and --max-api-calls N.
   City-wide live runs over 25 rows also require --force.
+  Budget estimate defaults to $5/month and $0.02/call unless overridden.
 
 Examples:
   pnpm verify:places -- --dry-run --cache-only --city "Taipei"
   pnpm verify:places -- --dry-run --city "Taipei" --name "Ironwood coffee" --confirm-live-api --max-api-calls 5
-  GOOGLE_PLACES_LIVE_ENABLED=true pnpm verify:places -- --dry-run --city "Taipei" --confirm-live-api --max-api-calls 100 --force
+  GOOGLE_PLACES_LIVE_ENABLED=true pnpm verify:places -- --dry-run --city "Taipei" --confirm-live-api --max-api-calls 100 --force --monthly-budget-usd 5
 `);
 }
 
@@ -187,6 +201,9 @@ function printPreRunEstimate(input: {
       place.googleMapsUrl?.trim() &&
       !extractGooglePlaceIdFromUrl(place.googleMapsUrl),
   ).length;
+  const effectiveMaxCalls = input.maxApiCalls ?? 0;
+  const estimatedMaxCostUsd =
+    effectiveMaxCalls * input.options.estimatedCostPerCallUsd;
 
   console.log("\nGoogle Places pre-run safety estimate");
   console.table({
@@ -197,6 +214,13 @@ function printPreRunEstimate(input: {
     estimatedMaxTotalGoogleCalls:
       textSearchCalls + placeDetailsCandidates + urlExpansionAttempts,
     maxApiCallsConfigured: input.maxApiCalls ?? "not set",
+    monthlyBudgetUsd: input.options.monthlyBudgetUsd,
+    estimatedCostPerCallUsd: input.options.estimatedCostPerCallUsd,
+    estimatedCostAtConfiguredCapUsd: estimatedMaxCostUsd.toFixed(2),
+    withinMonthlyBudget:
+      input.maxApiCalls === null
+        ? "unknown"
+        : estimatedMaxCostUsd <= input.options.monthlyBudgetUsd,
     cacheOnly: input.options.cacheOnly || !input.options.confirmLiveApi,
     liveApiEnabled:
       input.liveEnabled && input.options.confirmLiveApi && input.maxApiCalls !== null,

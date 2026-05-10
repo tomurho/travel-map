@@ -677,6 +677,14 @@ function applyCandidateFields(
     lastChecked: formatDateForInput(today),
     matchConfidence: candidate.matchConfidence,
     nameScore: candidate.nameScore,
+    candidateCoordinateSource: "google" as const,
+    coordinatePrecision: "place_pin" as const,
+    coordinateConfidence:
+      candidate.matchConfidence >= 0.78
+        ? ("high" as const)
+        : candidate.matchConfidence >= 0.62
+          ? ("medium" as const)
+          : ("low" as const),
     verifiedLatitude: candidate.location?.latitude,
     verifiedLongitude: candidate.location?.longitude,
   };

@@ -238,6 +238,21 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
     "verified longitude",
     "verifiedLongitude",
   ]);
+  const candidateCoordinateSource = readText(row, [
+    "Candidate Coordinate Source",
+    "candidate coordinate source",
+    "candidateCoordinateSource",
+  ]) as Place["candidateCoordinateSource"];
+  const coordinatePrecision = readText(row, [
+    "Coordinate Precision",
+    "coordinate precision",
+    "coordinatePrecision",
+  ]) as Place["coordinatePrecision"];
+  const coordinateConfidence = readText(row, [
+    "Coordinate Confidence",
+    "coordinate confidence",
+    "coordinateConfidence",
+  ]) as Place["coordinateConfidence"];
   const distanceDeltaMeters = readNumber(row, [
     "Distance Delta Meters",
     "distance delta meters",
@@ -353,6 +368,27 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
       canonicalAddress,
       verifiedLatitude: verifiedLatitude ?? undefined,
       verifiedLongitude: verifiedLongitude ?? undefined,
+      candidateCoordinateSource:
+        candidateCoordinateSource === "existing" ||
+        candidateCoordinateSource === "cache" ||
+        candidateCoordinateSource === "osm" ||
+        candidateCoordinateSource === "google" ||
+        candidateCoordinateSource === "manual"
+          ? candidateCoordinateSource
+          : undefined,
+      coordinatePrecision:
+        coordinatePrecision === "place_pin" ||
+        coordinatePrecision === "address_geocode" ||
+        coordinatePrecision === "approximate" ||
+        coordinatePrecision === "manual"
+          ? coordinatePrecision
+          : undefined,
+      coordinateConfidence:
+        coordinateConfidence === "high" ||
+        coordinateConfidence === "medium" ||
+        coordinateConfidence === "low"
+          ? coordinateConfidence
+          : undefined,
       distanceDeltaMeters: distanceDeltaMeters ?? undefined,
       businessStatus,
       matchConfidence: matchConfidence ?? undefined,

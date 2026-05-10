@@ -453,6 +453,9 @@ function getProductionExportRows(places: Place[]) {
     "Canonical Address",
     "Verified Latitude",
     "Verified Longitude",
+    "Candidate Coordinate Source",
+    "Coordinate Precision",
+    "Coordinate Confidence",
     "Distance Delta Meters",
     "Business Status",
     "Match Confidence",
@@ -487,6 +490,9 @@ function getProductionExportRows(places: Place[]) {
     place.canonicalAddress ?? "",
     place.verifiedLatitude ?? "",
     place.verifiedLongitude ?? "",
+    place.candidateCoordinateSource ?? "",
+    place.coordinatePrecision ?? "",
+    place.coordinateConfidence ?? "",
     place.distanceDeltaMeters ?? "",
     place.businessStatus ?? "",
     place.matchConfidence ?? "",
@@ -615,7 +621,7 @@ function applyProductionExportWorksheetFormatting(
     { wch: 18 },
     { wch: 44 },
   ];
-  worksheet["!autofilter"] = { ref: `A1:AD${Math.max(1, rowCount)}` };
+  worksheet["!autofilter"] = { ref: `A1:AG${Math.max(1, rowCount)}` };
   worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
 }
 

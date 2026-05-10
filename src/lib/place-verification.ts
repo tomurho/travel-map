@@ -68,6 +68,9 @@ export function acceptCandidateCoordinates<
     ...place,
     latitude: place.verifiedLatitude,
     longitude: place.verifiedLongitude,
+    candidateCoordinateSource: "manual" as const,
+    coordinateConfidence: "high" as const,
+    coordinatePrecision: "manual" as const,
     lastChecked: formatDateForInput(today),
     verifiedStatus: "Yes" as const,
     verificationNotes: appendVerificationNote(

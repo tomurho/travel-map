@@ -19,6 +19,13 @@ export type VerificationSource =
   | "google_maps_url"
   | "text_search"
   | "manual";
+export type CoordinateSource = "existing" | "cache" | "osm" | "google" | "manual";
+export type CoordinatePrecision =
+  | "place_pin"
+  | "address_geocode"
+  | "approximate"
+  | "manual";
+export type CoordinateConfidence = "high" | "medium" | "low";
 
 export interface Place {
   id: string;
@@ -39,6 +46,9 @@ export interface Place {
   canonicalAddress?: string;
   verifiedLatitude?: number;
   verifiedLongitude?: number;
+  candidateCoordinateSource?: CoordinateSource;
+  coordinatePrecision?: CoordinatePrecision;
+  coordinateConfidence?: CoordinateConfidence;
   distanceDeltaMeters?: number;
   businessStatus?: string;
   matchConfidence?: number;

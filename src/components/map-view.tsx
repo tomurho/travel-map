@@ -10,7 +10,7 @@ import {
   useJsApiLoader,
 } from "@react-google-maps/api";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
-import { getPlaceDetailsLookupAddress, type Place } from "@/lib/place";
+import type { Place } from "@/lib/place";
 
 type MapViewProps = {
   places: Place[];
@@ -30,6 +30,8 @@ const containerStyle = {
 };
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+export const publicPlaceDetailsLookupEnabled =
+  process.env.NEXT_PUBLIC_ENABLE_PLACE_DETAILS_LOOKUP === "true";
 const nearbyCityRadiusKm = 80;
 
 export type CityCenter = {
@@ -175,7 +177,7 @@ export function MapView({
   }, []);
 
   useEffect(() => {
-    if (!openPlace) {
+    if (!publicPlaceDetailsLookupEnabled || !openPlace) {
       return;
     }
 
@@ -193,7 +195,7 @@ export function MapView({
 
     const params = new URLSearchParams({
       name: openPlace.name,
-      address: getPlaceDetailsLookupAddress(openPlace),
+      address: openPlace.canonicalAddress?.trim() || openPlace.address,
     });
 
     fetch(`/api/place-details?${params.toString()}`, {
@@ -495,10 +497,11 @@ export function MapView({
       {openPlace.address ? <address>{openPlace.address}</address> : null}
       {openPlace.subway ? <p>Nearest subway: {openPlace.subway}</p> : null}
       {openPlace.tabelog ? <p>Tabelog score: {openPlace.tabelog}</p> : null}
-      {openPlaceDetails?.status === "loading" ? (
+      {publicPlaceDetailsLookupEnabled && openPlaceDetails?.status === "loading" ? (
         <p>Loading Google details...</p>
       ) : null}
-      {openPlaceDetails?.status === "loaded" &&
+      {publicPlaceDetailsLookupEnabled &&
+      openPlaceDetails?.status === "loaded" &&
       openPlaceDetails.photoUrls.length === 0 &&
       !openPlaceDetails.openingHours?.length ? (
         <p>
@@ -507,7 +510,8 @@ export function MapView({
             : "Google could not find a matching place for this location."}
         </p>
       ) : null}
-      {openPlaceDetails?.status === "loaded" &&
+      {publicPlaceDetailsLookupEnabled &&
+      openPlaceDetails?.status === "loaded" &&
       openPlaceDetails.photoUrls.length > 0 ? (
         <div className="map-popup-photo-group">
           <div className="map-popup-photo-carousel" style={photoCarouselStyle}>
@@ -572,7 +576,8 @@ export function MapView({
           </div>
         </div>
       ) : null}
-      {openPlaceDetails?.status === "loaded" &&
+      {publicPlaceDetailsLookupEnabled &&
+      openPlaceDetails?.status === "loaded" &&
       openPlaceDetails.openingHours?.length ? (
         <div className={isCompactPopup ? "map-popup-hours is-preview" : "map-popup-hours"}>
           <strong>Opening hours</strong>
@@ -583,7 +588,7 @@ export function MapView({
           </ul>
         </div>
       ) : null}
-      {openPlaceDetails?.status === "error" ? (
+      {publicPlaceDetailsLookupEnabled && openPlaceDetails?.status === "error" ? (
         <p>Google details could not be loaded for this place.</p>
       ) : null}
     </>

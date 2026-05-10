@@ -14,6 +14,7 @@ import {
   GooglePlacesLiveCallBlockedError,
   writeGooglePlacesCache,
 } from "@/lib/google-places-access";
+import { publicPlaceDetailsLookupEnabled } from "@/components/map-view";
 import {
   assertAutoDecisionSafetyGate,
   assertCoordinateAuditFields,
@@ -444,6 +445,9 @@ test("normalizePlaceRow preserves Google candidate verification fields", () => {
     "Canonical Address": "No. 17, Taipei City",
     "Verified Latitude": 25.031,
     "Verified Longitude": 121.531,
+    "Candidate Coordinate Source": "google",
+    "Coordinate Precision": "place_pin",
+    "Coordinate Confidence": "high",
     "Distance Delta Meters": 18.4,
     "Business Status": "OPERATIONAL",
     "Match Confidence": 0.91,
@@ -455,6 +459,9 @@ test("normalizePlaceRow preserves Google candidate verification fields", () => {
     assert.equal(result.place.canonicalAddress, "No. 17, Taipei City");
     assert.equal(result.place.verifiedLatitude, 25.031);
     assert.equal(result.place.verifiedLongitude, 121.531);
+    assert.equal(result.place.candidateCoordinateSource, "google");
+    assert.equal(result.place.coordinatePrecision, "place_pin");
+    assert.equal(result.place.coordinateConfidence, "high");
     assert.equal(result.place.distanceDeltaMeters, 18.4);
     assert.equal(result.place.businessStatus, "OPERATIONAL");
     assert.equal(result.place.matchConfidence, 0.91);
@@ -1955,4 +1962,8 @@ test("city-wide live Google Places runs are blocked without force", () => {
       rowCount: 26,
     }),
   );
+});
+
+test("public map details lookup is disabled by default to avoid paid Places calls", () => {
+  assert.equal(publicPlaceDetailsLookupEnabled, false);
 });
