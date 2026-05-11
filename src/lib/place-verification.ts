@@ -1,4 +1,4 @@
-import type { PlaceVerifiedStatus } from "@/lib/place";
+import type { Place, PlaceVerifiedStatus } from "@/lib/place";
 
 export type AdminVerificationFilter =
   | "all"
@@ -49,6 +49,7 @@ export function acceptCandidateCoordinates<
     latitude: number | null;
     longitude: number | null;
     lastChecked?: string;
+    samePlaceReason?: string;
     verificationNotes?: string;
     verifiedLatitude?: number;
     verifiedLongitude?: number;
@@ -72,10 +73,69 @@ export function acceptCandidateCoordinates<
     coordinateConfidence: "high" as const,
     coordinatePrecision: "manual" as const,
     lastChecked: formatDateForInput(today),
+    samePlaceDecision: "Yes" as const,
+    samePlaceReason:
+      place.samePlaceReason ||
+      "Admin accepted candidate coordinates into the stored map pin.",
+    verificationDecision: "manually_verified" as const,
     verifiedStatus: "Yes" as const,
     verificationNotes: appendVerificationNote(
       place.verificationNotes,
       "Google Places candidate coordinates were accepted manually.",
+    ),
+  };
+}
+
+export type AdminSelectedCandidateInput = {
+  addressScore: number;
+  businessStatus: string;
+  candidateCoordinateSource?: Place["candidateCoordinateSource"];
+  canonicalAddress: string;
+  canonicalName: string;
+  coordinateConfidence?: Place["coordinateConfidence"];
+  coordinatePrecision?: Place["coordinatePrecision"];
+  distanceDeltaMeters: number | null;
+  googleMapsUrl: string;
+  googlePlaceId: string;
+  latitude: number | null;
+  longitude: number | null;
+  matchConfidence: number;
+  nameScore: number;
+  provider: Place["verificationSource"];
+};
+
+export function applyAdminSelectedCandidate(
+  place: Place,
+  candidate: AdminSelectedCandidateInput,
+  verificationNotes = place.verificationNotes ?? "",
+): Place {
+  return {
+    ...place,
+    addressScore: candidate.addressScore,
+    businessStatus: candidate.businessStatus,
+    canonicalAddress: candidate.canonicalAddress,
+    canonicalName: candidate.canonicalName,
+    candidateCoordinateSource:
+      candidate.candidateCoordinateSource ?? "google_places",
+    coordinateConfidence:
+      candidate.coordinateConfidence ??
+      (candidate.matchConfidence >= 0.78 ? "high" : "medium"),
+    coordinatePrecision: candidate.coordinatePrecision ?? "place_pin",
+    distanceDeltaMeters: candidate.distanceDeltaMeters ?? undefined,
+    googleMapsUrl: candidate.googleMapsUrl || place.googleMapsUrl,
+    googlePlaceId: candidate.googlePlaceId,
+    matchConfidence: candidate.matchConfidence,
+    nameScore: candidate.nameScore,
+    samePlaceDecision: "manually_selected",
+    samePlaceReason: "Admin selected from multiple Google Places candidates.",
+    verificationDecision: "manually_selected_candidate",
+    verificationSource: candidate.provider,
+    verifiedLatitude: candidate.latitude ?? undefined,
+    verifiedLongitude: candidate.longitude ?? undefined,
+    verifiedStatus: "Review",
+    verificationNotes: appendVerificationNote(
+      verificationNotes,
+      "Admin selected from multiple Google Places candidates.",
     ),
   };
 }

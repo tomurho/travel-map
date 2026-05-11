@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export type GooglePlacesCounters = {
+  blockedByLiveDisabled: number;
   blockedByMaxApiCalls: number;
   blockedByMissingConfirm: number;
   cacheHits: number;
@@ -38,6 +39,7 @@ export class GooglePlacesLiveCallBlockedError extends Error {
 
 export function createEmptyGooglePlacesCounters(): GooglePlacesCounters {
   return {
+    blockedByLiveDisabled: 0,
     blockedByMaxApiCalls: 0,
     blockedByMissingConfirm: 0,
     cacheHits: 0,
@@ -236,12 +238,17 @@ export class GooglePlacesAccess {
   }
 
   private assertLiveCallAllowed() {
-    if (this.cacheOnly || !this.confirmLiveApi || !this.liveEnabled) {
+    if (!this.liveEnabled) {
+      this.counters.blockedByLiveDisabled += 1;
+      throw new GooglePlacesLiveCallBlockedError(
+        "Live Google Places calls are disabled. Use cached data or set GOOGLE_PLACES_LIVE_ENABLED=true.",
+      );
+    }
+
+    if (this.cacheOnly || !this.confirmLiveApi) {
       this.counters.blockedByMissingConfirm += 1;
       throw new GooglePlacesLiveCallBlockedError(
-        this.liveEnabled
-          ? "Live Google Places calls require --confirm-live-api and --max-api-calls. Use --cache-only for zero-call runs."
-          : "Live Google Places calls are disabled. Use cached data or set GOOGLE_PLACES_LIVE_ENABLED=true.",
+        "Live Google Places calls require --confirm-live-api and --max-api-calls. Use --cache-only for zero-call runs.",
       );
     }
 

@@ -2,9 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { filterPlaces } from "@/lib/filtering";
+import { formatProviderAttemptSummary } from "@/lib/admin-ui";
+import { FreeGeocodingAccess } from "@/lib/free-geocoding";
 import {
   fetchCandidatesFromGoogleMapsUrl,
   getAdminResolverSearchAttempts,
+  summarizeAdminCandidates,
 } from "@/lib/google-place-admin-resolver";
 import {
   assertBroadLiveRunAllowed,
@@ -29,6 +32,7 @@ import {
 } from "@/lib/place";
 import {
   acceptCandidateCoordinates,
+  applyAdminSelectedCandidate,
   markVerifiedToday,
   useCanonicalAddress,
   validatePlaceVerification,
@@ -1779,6 +1783,98 @@ test("admin resolver search attempts include saved and canonical addresses", () 
   assert.ok(attempts.includes("Ironwood coffee, Taipei"));
 });
 
+test("admin resolver can summarize multiple Google candidates for UI selection", () => {
+  const place = makePlace({
+    address: "No. 1, Taipei",
+    city: "Taipei",
+    name: "Beckhome",
+  });
+  const summaries = summarizeAdminCandidates(place, {
+    candidates: [
+      {
+        businessStatus: "OPERATIONAL",
+        displayName: { text: "Roasting House - Beckhome Roasting House" },
+        formattedAddress: "No. 1, Songshan District, Taipei City, Taiwan",
+        googleMapsUri: "https://maps.google.com/beckhome-roasting",
+        id: "candidate-1",
+        location: { latitude: 25.05, longitude: 121.55 },
+      },
+      {
+        businessStatus: "OPERATIONAL",
+        displayName: { text: "Beckhome" },
+        formattedAddress: "No. 16, Da'an District, Taipei City, Taiwan",
+        googleMapsUri: "https://maps.google.com/beckhome",
+        id: "candidate-2",
+        location: { latitude: 25.04, longitude: 121.54 },
+      },
+    ],
+    resolutionNotes: [],
+    source: "text_search",
+    textSearchQueries: [],
+  });
+
+  assert.equal(summaries.length, 2);
+  assert.equal(summaries[0]?.candidateCoordinateSource, "google_places");
+  assert.equal(summaries[0]?.coordinatePrecision, "place_pin");
+  assert.equal(typeof summaries[0]?.matchConfidence, "number");
+});
+
+test("admin candidate selection populates metadata without moving stored coordinates", () => {
+  const place = makePlace({
+    latitude: 25.01,
+    longitude: 121.51,
+  });
+  const selectedPlace = applyAdminSelectedCandidate(place, {
+    addressScore: 0.7,
+    businessStatus: "OPERATIONAL",
+    canonicalAddress: "No. 16, Taipei City, Taiwan",
+    canonicalName: "Beckhome",
+    distanceDeltaMeters: 1400,
+    googleMapsUrl: "https://maps.google.com/beckhome",
+    googlePlaceId: "candidate-2",
+    latitude: 25.04,
+    longitude: 121.54,
+    matchConfidence: 0.82,
+    nameScore: 1,
+    provider: "text_search",
+  });
+
+  assert.equal(selectedPlace.latitude, 25.01);
+  assert.equal(selectedPlace.longitude, 121.51);
+  assert.equal(selectedPlace.verifiedLatitude, 25.04);
+  assert.equal(selectedPlace.verifiedLongitude, 121.54);
+  assert.equal(selectedPlace.googlePlaceId, "candidate-2");
+  assert.equal(selectedPlace.samePlaceDecision, "manually_selected");
+  assert.equal(selectedPlace.verificationDecision, "manually_selected_candidate");
+  assert.equal(selectedPlace.verifiedStatus, "Review");
+});
+
+test("accepting an admin-selected candidate is still required to move the pin", () => {
+  const selectedPlace = applyAdminSelectedCandidate(
+    makePlace({ latitude: 25.01, longitude: 121.51 }),
+    {
+      addressScore: 0.7,
+      businessStatus: "OPERATIONAL",
+      canonicalAddress: "No. 16, Taipei City, Taiwan",
+      canonicalName: "Beckhome",
+      distanceDeltaMeters: 1400,
+      googleMapsUrl: "https://maps.google.com/beckhome",
+      googlePlaceId: "candidate-2",
+      latitude: 25.04,
+      longitude: 121.54,
+      matchConfidence: 0.82,
+      nameScore: 1,
+      provider: "text_search",
+    },
+  );
+  const acceptedPlace = acceptCandidateCoordinates(selectedPlace, new Date(2026, 4, 10));
+
+  assert.equal(acceptedPlace.latitude, 25.04);
+  assert.equal(acceptedPlace.longitude, 121.54);
+  assert.equal(acceptedPlace.verifiedStatus, "Yes");
+  assert.equal(acceptedPlace.verificationDecision, "manually_verified");
+});
+
 test("Google Places access blocks live calls without confirm flag", async () => {
   const access = new GooglePlacesAccess({
     cachePath: join("/private/tmp", `places-cache-no-confirm-${Date.now()}.json`),
@@ -1935,12 +2031,67 @@ test("admin resolver does not call Google when live usage is disabled", async ()
   assert.equal(called, false);
   assert.equal(result.candidates.length, 0);
   assert.equal(access.getLiveCallCount(), 0);
-  assert.equal(access.counters.blockedByMissingConfirm > 0, true);
+  assert.equal(access.counters.blockedByLiveDisabled > 0, true);
 });
 
 test("Google Places wildcard field masks are blocked", () => {
   assert.throws(() => assertNarrowFieldMask("*"), /Wildcard/);
   assert.doesNotThrow(() => assertNarrowFieldMask("places.id,places.location"));
+});
+
+test("free geocoding live lookup is disabled by default", async () => {
+  const access = new FreeGeocodingAccess({
+    cachePath: join("/private/tmp", `free-geocode-disabled-${Date.now()}.json`),
+  });
+  let called = false;
+  const result = await access.searchOsm(
+    "Ironwood coffee Taipei",
+    (async () => {
+      called = true;
+      return { ok: true, json: async () => [] } as Response;
+    }) as typeof fetch,
+  );
+
+  assert.equal(result, null);
+  assert.equal(called, false);
+  assert.equal(access.counters.blockedByLiveDisabled, 1);
+});
+
+test("free geocoding caches live results when explicitly enabled", async () => {
+  const cachePath = join("/private/tmp", `free-geocode-cache-${Date.now()}.json`);
+  const access = new FreeGeocodingAccess({
+    cachePath,
+    liveEnabled: true,
+    minIntervalMs: 0,
+  });
+  let calls = 0;
+  const fetcher = (async () => {
+    calls += 1;
+    return {
+      json: async () => [
+        {
+          display_name: "Ironwood Coffee, Taipei City, Taiwan",
+          importance: 0.7,
+          lat: "25.04",
+          lon: "121.56",
+          type: "cafe",
+        },
+      ],
+      ok: true,
+    } as Response;
+  }) as typeof fetch;
+
+  const firstResult = await access.searchOsm("Ironwood coffee Taipei", fetcher);
+  const secondAccess = new FreeGeocodingAccess({ cachePath });
+  const secondResult = await secondAccess.searchOsm(
+    "Ironwood coffee Taipei",
+    fetcher,
+  );
+
+  assert.equal(calls, 1);
+  assert.equal(firstResult?.[0]?.latitude, 25.04);
+  assert.equal(secondResult?.[0]?.longitude, 121.56);
+  assert.equal(secondAccess.counters.cacheHits, 1);
 });
 
 test("city-wide live Google Places runs are blocked without force", () => {
@@ -1966,4 +2117,23 @@ test("city-wide live Google Places runs are blocked without force", () => {
 
 test("public map details lookup is disabled by default to avoid paid Places calls", () => {
   assert.equal(publicPlaceDetailsLookupEnabled, false);
+});
+
+test("admin provider attempts are summarized for the main QA view", () => {
+  assert.equal(formatProviderAttemptSummary([]), "No provider attempts yet.");
+  assert.equal(
+    formatProviderAttemptSummary([
+      {
+        detail: "No cached candidate was found.",
+        provider: "cache",
+        status: "miss",
+      },
+      {
+        detail: "Google live lookup is disabled.",
+        provider: "google_places",
+        status: "blocked",
+      },
+    ]),
+    "cache: miss. google_places: blocked",
+  );
 });

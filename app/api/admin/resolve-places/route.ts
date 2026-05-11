@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import places from "@/data/places.json";
+import {
+  getTextSearchCacheKey,
+  GooglePlacesAccess,
+} from "@/lib/google-places-access";
 import { normalizeArea } from "@/lib/import";
 import type { Place } from "@/lib/place";
 
@@ -114,6 +118,8 @@ const CATEGORY_PRIORITY_TYPES = [
   "bakery",
   "restaurant",
 ];
+const GOOGLE_PLACE_SEARCH_FIELD_MASK =
+  "places.displayName,places.formattedAddress,places.location,places.primaryType,places.primaryTypeDisplayName,places.types";
 
 function isAuthorized(request: NextRequest) {
   const adminPassword = process.env.ADMIN_PASSWORD ?? "";
@@ -866,33 +872,43 @@ async function extractFromImage(
   return JSON.parse(outputText || "{}") as OpenAIExtraction;
 }
 
-async function searchGooglePlace(query: string) {
+async function searchGooglePlace(query: string, access: GooglePlacesAccess) {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? "";
 
-  if (!apiKey) {
+  if (process.env.GOOGLE_PLACES_LIVE_ENABLED === "true" && !apiKey) {
     throw new Error("Google Places API key is not configured.");
   }
 
-  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-        "places.displayName,places.formattedAddress,places.location,places.primaryType,places.primaryTypeDisplayName,places.types",
-    },
-    body: JSON.stringify({
-      textQuery: query,
-      maxResultCount: 1,
+  const data = await access.fetchJson<SearchTextResponse>(
+    "textSearch",
+    getTextSearchCacheKey({
+      city: "",
+      fieldMask: GOOGLE_PLACE_SEARCH_FIELD_MASK,
+      query,
     }),
-    cache: "no-store",
-  });
+    "textSearch",
+    async () => {
+      const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": GOOGLE_PLACE_SEARCH_FIELD_MASK,
+        },
+        body: JSON.stringify({
+          textQuery: query,
+          maxResultCount: 1,
+        }),
+        cache: "no-store",
+      });
 
-  if (!response.ok) {
-    throw new Error("Google Places lookup failed.");
-  }
+      if (!response.ok) {
+        throw new Error("Google Places lookup failed.");
+      }
 
-  const data = (await response.json()) as SearchTextResponse;
+      return (await response.json()) as SearchTextResponse;
+    },
+  );
   return data.places?.[0] ?? null;
 }
 
@@ -1023,6 +1039,13 @@ export async function POST(request: NextRequest) {
   }
 
   const drafts: DraftPlace[] = [];
+  const googleLiveEnabled = process.env.GOOGLE_PLACES_LIVE_ENABLED === "true";
+  const googleAccess = new GooglePlacesAccess({
+    cacheOnly: !googleLiveEnabled,
+    confirmLiveApi: googleLiveEnabled,
+    liveEnabled: googleLiveEnabled,
+    maxApiCalls: 5,
+  });
 
   for (const context of queryContexts) {
     const extraction = context.imageExtraction;
@@ -1035,7 +1058,7 @@ export async function POST(request: NextRequest) {
     const notes: string[] = [];
 
     try {
-      match = await searchGooglePlace(searchQuery);
+      match = await searchGooglePlace(searchQuery, googleAccess);
     } catch (error) {
       notes.push(
         error instanceof Error

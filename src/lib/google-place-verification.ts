@@ -677,7 +677,7 @@ function applyCandidateFields(
     lastChecked: formatDateForInput(today),
     matchConfidence: candidate.matchConfidence,
     nameScore: candidate.nameScore,
-    candidateCoordinateSource: "google" as const,
+    candidateCoordinateSource: "google_places" as const,
     coordinatePrecision: "place_pin" as const,
     coordinateConfidence:
       candidate.matchConfidence >= 0.78

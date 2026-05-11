@@ -1,6 +1,12 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 import {
+  FreeGeocodingAccess,
+  type FreeGeocodeCandidate,
+  type FreeGeocodingCounters,
+} from "@/lib/free-geocoding";
+import {
+  getDistanceMeters,
   type GoogleCandidate,
   scoreGoogleCandidate,
   verifyPlaceFromCandidates,
@@ -43,6 +49,30 @@ type CandidateSearchResult = {
   source: VerificationSource;
   resolutionNotes: string[];
   textSearchQueries: string[];
+};
+
+export type CoordinateResolverProviderAttempt = {
+  provider: "existing" | "free_geocoding" | "google_places" | "manual";
+  status: "hit" | "miss" | "skipped" | "blocked" | "error";
+  detail: string;
+};
+
+export type AdminCandidateSummary = {
+  addressScore: number;
+  businessStatus: string;
+  candidateCoordinateSource: Place["candidateCoordinateSource"];
+  canonicalAddress: string;
+  canonicalName: string;
+  coordinateConfidence: Place["coordinateConfidence"];
+  coordinatePrecision: Place["coordinatePrecision"];
+  distanceDeltaMeters: number | null;
+  googleMapsUrl: string;
+  googlePlaceId: string;
+  latitude: number | null;
+  longitude: number | null;
+  matchConfidence: number;
+  nameScore: number;
+  provider: VerificationSource;
 };
 
 function stripAccentsAndPunctuation(value: string) {
@@ -362,6 +392,61 @@ export async function fetchCandidatesFromGoogleMapsUrl(
   );
 }
 
+async function fetchGoogleCandidatesForAdminPlace(
+  place: Place,
+  googleMapsUrl: string,
+  apiKey: string,
+  fetcher: typeof fetch,
+  access: GooglePlacesAccess,
+): Promise<CandidateSearchResult> {
+  const googlePlaceId = place.googlePlaceId?.trim().replace(/^places\//, "");
+
+  if (googlePlaceId) {
+    const candidate = await access.fetchJson<GoogleCandidate>(
+      "placeDetails",
+      getPlaceDetailsCacheKey(googlePlaceId, DETAILS_FIELD_MASK),
+      "placeDetails",
+      () =>
+        fetchJson<GoogleCandidate>(
+          `${PLACE_DETAILS_URL}/${encodeURIComponent(googlePlaceId)}`,
+          {
+            apiKey,
+            fetcher,
+            fieldMask: DETAILS_FIELD_MASK,
+            method: "GET",
+          },
+        ),
+    );
+
+    return {
+      candidates: [candidate],
+      counters: access.counters,
+      placeIdFromUrl: googlePlaceId,
+      resolutionNotes: ["Stored Google Place ID was used for Place Details."],
+      source: "place_id",
+      textSearchQueries: [],
+    };
+  }
+
+  if (googleMapsUrl.trim()) {
+    return fetchCandidatesFromGoogleMapsUrl(
+      place,
+      googleMapsUrl,
+      apiKey,
+      fetcher,
+      access,
+    );
+  }
+
+  return fetchTextSearchCandidates(
+    place,
+    apiKey,
+    ["No Google Maps URL or Place ID was supplied; Google Text Search fallback was used."],
+    fetcher,
+    access,
+  );
+}
+
 export function readProductionPlaces() {
   return JSON.parse(readFileSync(PLACES_FILE_PATH, "utf8")) as Place[];
 }
@@ -375,6 +460,136 @@ function hasVerifiedCandidateCoordinates(place: Place) {
     typeof place.verifiedLatitude === "number" &&
     typeof place.verifiedLongitude === "number"
   );
+}
+
+function getFreeGeocodingQueries(place: Place) {
+  const addresses = Array.from(
+    new Set(
+      [place.canonicalAddress, place.address]
+        .map((address) => address?.trim())
+        .filter((address): address is string => Boolean(address)),
+    ),
+  );
+  const queryParts = [
+    ...addresses.map((address) => [place.name, address, place.city]),
+    [place.name, place.city],
+    [place.name, place.district, place.city],
+  ];
+  const seen = new Set<string>();
+
+  return queryParts
+    .map((parts) =>
+      parts
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join(", "),
+    )
+    .filter(Boolean)
+    .filter((query) => {
+      const key = stripAccentsAndPunctuation(query).toLowerCase();
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+}
+
+function applyFreeGeocodingCandidateForReview(
+  place: Place,
+  candidate: FreeGeocodeCandidate,
+  provider: "osm" | "free_geocoding" = "osm",
+) {
+  const distanceDeltaMeters =
+    Number.isFinite(place.latitude) && Number.isFinite(place.longitude)
+      ? Number(
+          getDistanceMeters(
+            { latitude: place.latitude, longitude: place.longitude },
+            {
+              latitude: candidate.latitude,
+              longitude: candidate.longitude,
+            },
+          ).toFixed(1),
+        )
+      : undefined;
+
+  return {
+    ...place,
+    businessStatus: place.businessStatus ?? "",
+    canonicalAddress: candidate.address,
+    candidateCoordinateSource: provider,
+    coordinateConfidence: candidate.confidence,
+    coordinatePrecision: candidate.precision,
+    distanceDeltaMeters,
+    lastChecked: new Date().toISOString().slice(0, 10),
+    matchConfidence:
+      candidate.confidence === "high" ? 0.82 : candidate.confidence === "medium" ? 0.62 : 0.35,
+    samePlaceDecision: "Unsure" as const,
+    samePlaceReason:
+      "Free geocoding returned candidate coordinates. Review before accepting because free geocoding can return address centroids or approximate pins.",
+    verificationDecision: "candidate_only_review" as const,
+    verificationSource: provider,
+    verifiedLatitude: candidate.latitude,
+    verifiedLongitude: candidate.longitude,
+    verifiedStatus: "Review" as const,
+    verificationNotes: [
+      place.verificationNotes,
+      `Free geocoding candidate from ${provider} saved for manual review.`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  };
+}
+
+async function resolveFreeGeocodingCandidate(
+  place: Place,
+  attempts: CoordinateResolverProviderAttempt[],
+  options: {
+    fetcher?: typeof fetch;
+    freeAccess: FreeGeocodingAccess;
+  },
+) {
+  const queries = getFreeGeocodingQueries(place);
+
+  for (const query of queries) {
+    const candidates = await options.freeAccess.searchOsm(
+      query,
+      options.fetcher ?? fetch,
+    );
+
+    if (candidates === null) {
+      attempts.push({
+        provider: "free_geocoding",
+        status: "blocked",
+        detail:
+          "Free geocoding live lookup is disabled and no cached free result exists.",
+      });
+      continue;
+    }
+
+    if (candidates.length === 0) {
+      attempts.push({
+        provider: "free_geocoding",
+        status: "miss",
+        detail: `OSM/Nominatim returned no candidates for "${query}".`,
+      });
+      continue;
+    }
+
+    attempts.push({
+      provider: "free_geocoding",
+      status: "hit",
+      detail: `OSM/Nominatim returned ${candidates.length} candidate${
+        candidates.length === 1 ? "" : "s"
+      } for "${query}".`,
+    });
+
+    return candidates[0];
+  }
+
+  return null;
 }
 
 function addSingleFallbackCandidateForReview(
@@ -411,7 +626,7 @@ function addSingleFallbackCandidateForReview(
     googlePlaceId: candidate.id,
     matchConfidence: candidate.matchConfidence,
     nameScore: candidate.nameScore,
-    candidateCoordinateSource: "google" as const,
+    candidateCoordinateSource: "google_places" as const,
     coordinatePrecision: "place_pin" as const,
     coordinateConfidence:
       candidate.matchConfidence >= 0.78
@@ -438,6 +653,59 @@ function addSingleFallbackCandidateForReview(
   };
 }
 
+function getCoordinateConfidence(matchConfidence: number) {
+  return matchConfidence >= 0.78
+    ? ("high" as const)
+    : matchConfidence >= 0.62
+      ? ("medium" as const)
+      : ("low" as const);
+}
+
+function summarizeAdminCandidate(
+  place: Place,
+  rawCandidate: GoogleCandidate,
+  provider: VerificationSource,
+): AdminCandidateSummary | null {
+  if (!rawCandidate.id) {
+    return null;
+  }
+
+  const candidate = scoreGoogleCandidate(place, rawCandidate);
+
+  return {
+    addressScore: candidate.addressScore,
+    businessStatus: candidate.businessStatus ?? "",
+    candidateCoordinateSource: "google_places",
+    canonicalAddress: candidate.formattedAddress ?? "",
+    canonicalName: candidate.displayName?.text ?? "",
+    coordinateConfidence: getCoordinateConfidence(candidate.matchConfidence),
+    coordinatePrecision: "place_pin",
+    distanceDeltaMeters: candidate.distanceMeters,
+    googleMapsUrl: candidate.googleMapsUri ?? "",
+    googlePlaceId: candidate.id,
+    latitude: candidate.location?.latitude ?? null,
+    longitude: candidate.location?.longitude ?? null,
+    matchConfidence: candidate.matchConfidence,
+    nameScore: candidate.nameScore,
+    provider,
+  };
+}
+
+export function summarizeAdminCandidates(
+  place: Place,
+  searchResult: CandidateSearchResult,
+) {
+  return searchResult.candidates
+    .map((candidate) =>
+      summarizeAdminCandidate(place, candidate, searchResult.source),
+    )
+    .filter((candidate): candidate is AdminCandidateSummary => candidate !== null)
+    .sort(
+      (firstCandidate, secondCandidate) =>
+        secondCandidate.matchConfidence - firstCandidate.matchConfidence,
+    );
+}
+
 export async function resolveGoogleMapsUrlForProductionPlace(
   id: string,
   googleMapsUrl: string,
@@ -445,6 +713,19 @@ export async function resolveGoogleMapsUrlForProductionPlace(
   options: {
     access?: GooglePlacesAccess;
     fetcher?: typeof fetch;
+    freeAccess?: FreeGeocodingAccess;
+    placeOverrides?: Partial<
+      Pick<
+        Place,
+        | "address"
+        | "canonicalAddress"
+        | "googleMapsUrl"
+        | "latitude"
+        | "longitude"
+        | "verifiedStatus"
+        | "verificationNotes"
+      >
+    >;
   } = {},
 ) {
   const currentPlaces = readProductionPlaces();
@@ -454,11 +735,14 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     return { error: "Production place was not found." };
   }
 
-  const currentPlace = currentPlaces[placeIndex];
+  const currentPlace = {
+    ...currentPlaces[placeIndex],
+    ...options.placeOverrides,
+  } as Place;
   const trimmedGoogleMapsUrl = googleMapsUrl.trim();
 
-  if (!currentPlace || !trimmedGoogleMapsUrl) {
-    return { error: "Google Maps URL is required." };
+  if (!currentPlace) {
+    return { error: "Production place was not found." };
   }
 
   const placeForResolution: Place = {
@@ -466,11 +750,67 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     address: currentPlace.canonicalAddress?.trim() || currentPlace.address,
     googleMapsUrl: trimmedGoogleMapsUrl,
   };
-  let nextPlace: Place;
+  let nextPlace: Place | null = null;
   const access = options.access ?? new GooglePlacesAccess();
+  const freeAccess = options.freeAccess ?? new FreeGeocodingAccess();
+  const providerAttempts: CoordinateResolverProviderAttempt[] = [];
+  let candidateSummaries: AdminCandidateSummary[] = [];
+
+  if (hasVerifiedCandidateCoordinates(currentPlace)) {
+    providerAttempts.push({
+      provider: "existing",
+      status: "hit",
+      detail: "Existing candidate coordinates are already present on this row.",
+    });
+    nextPlace = {
+      ...currentPlace,
+      googleMapsUrl: trimmedGoogleMapsUrl || currentPlace.googleMapsUrl,
+      verificationNotes: [
+        currentPlace.verificationNotes,
+        "Existing candidate coordinates were reused; no live lookup was needed.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  }
+
+  if (!nextPlace) {
+    const freeCandidate = await resolveFreeGeocodingCandidate(
+      placeForResolution,
+      providerAttempts,
+      {
+        fetcher: options.fetcher,
+        freeAccess,
+      },
+    );
+
+    if (freeCandidate) {
+      nextPlace = applyFreeGeocodingCandidateForReview(
+        {
+          ...currentPlace,
+          googleMapsUrl: trimmedGoogleMapsUrl || currentPlace.googleMapsUrl,
+        },
+        freeCandidate,
+        freeCandidate.provider,
+      );
+    }
+  }
+
+  if (!nextPlace) {
+    providerAttempts.push({
+      provider: "google_places",
+      status: "skipped",
+      detail:
+        "Trying cached Google Places next; live Google Places calls require GOOGLE_PLACES_LIVE_ENABLED=true and the server-side call cap.",
+    });
+  }
 
   try {
-    const searchResult = await fetchCandidatesFromGoogleMapsUrl(
+    if (nextPlace) {
+      throw new Error("__candidate_already_resolved__");
+    }
+
+    const searchResult = await fetchGoogleCandidatesForAdminPlace(
       placeForResolution,
       trimmedGoogleMapsUrl,
       apiKey,
@@ -484,6 +824,10 @@ export async function resolveGoogleMapsUrlForProductionPlace(
         applyAutoDecisions: false,
         candidateSource: searchResult.source,
       },
+    );
+    candidateSummaries = summarizeAdminCandidates(
+      placeForResolution,
+      searchResult,
     );
     const note =
       [
@@ -511,14 +855,54 @@ export async function resolveGoogleMapsUrlForProductionPlace(
         .filter(Boolean)
         .join("\n"),
     };
+    if (decision.kind === "ambiguous") {
+      nextPlace = {
+        ...nextPlace,
+        samePlaceReason:
+          "Multiple candidates were found. Choose the correct listing below.",
+        verificationNotes: [
+          nextPlace.verificationNotes,
+          "Multiple candidates were found. Choose the correct listing below.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      };
+    }
     nextPlace = addSingleFallbackCandidateForReview(
       nextPlace,
       placeForResolution,
       searchResult,
     );
+    providerAttempts.push({
+      provider: "google_places",
+      status:
+        searchResult.candidates.length > 0
+          ? "hit"
+          : searchResult.counters?.blockedByMissingConfirm
+            ? "blocked"
+            : "miss",
+      detail:
+        searchResult.candidates.length > 0
+          ? `Google Places returned ${searchResult.candidates.length} candidate${
+              searchResult.candidates.length === 1 ? "" : "s"
+            }.`
+          : searchResult.resolutionNotes.join(" ") ||
+            "Google Places returned no cached candidate.",
+    });
   } catch (error) {
+    if (error instanceof Error && error.message === "__candidate_already_resolved__") {
+      // Free/cache candidate already populated nextPlace.
+    } else {
     const message = error instanceof Error ? error.message : String(error);
     const isBlockedLiveCall = error instanceof GooglePlacesLiveCallBlockedError;
+
+    providerAttempts.push({
+      provider: "google_places",
+      status: isBlockedLiveCall ? "blocked" : "error",
+      detail: isBlockedLiveCall
+        ? "Live Google Places calls are disabled and no cached Google result exists."
+        : `Google Places lookup failed: ${message}`,
+    });
 
     nextPlace = {
       ...currentPlace,
@@ -538,17 +922,21 @@ export async function resolveGoogleMapsUrlForProductionPlace(
         .filter(Boolean)
         .join("\n"),
     };
+    }
   }
 
   const nextPlaces = currentPlaces.map((place) =>
-    place.id === id ? nextPlace : place,
+    place.id === id ? (nextPlace as Place) : place,
   );
 
   writeProductionPlaces(nextPlaces);
 
   return {
+    candidateSummaries,
     counters: access.counters,
+    freeCounters: freeAccess.counters,
     place: nextPlace,
     places: nextPlaces,
+    providerAttempts,
   };
 }

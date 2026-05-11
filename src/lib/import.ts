@@ -371,16 +371,22 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
       candidateCoordinateSource:
         candidateCoordinateSource === "existing" ||
         candidateCoordinateSource === "cache" ||
+        candidateCoordinateSource === "free_geocoding" ||
         candidateCoordinateSource === "osm" ||
         candidateCoordinateSource === "google" ||
+        candidateCoordinateSource === "google_places" ||
+        candidateCoordinateSource === "google_place_id" ||
+        candidateCoordinateSource === "google_text_search" ||
         candidateCoordinateSource === "manual"
           ? candidateCoordinateSource
           : undefined,
       coordinatePrecision:
         coordinatePrecision === "place_pin" ||
         coordinatePrecision === "address_geocode" ||
+        coordinatePrecision === "building_centroid" ||
         coordinatePrecision === "approximate" ||
-        coordinatePrecision === "manual"
+        coordinatePrecision === "manual" ||
+        coordinatePrecision === "unknown"
           ? coordinatePrecision
           : undefined,
       coordinateConfidence:
@@ -395,7 +401,8 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
       samePlaceDecision:
         samePlaceDecision === "Yes" ||
         samePlaceDecision === "No" ||
-        samePlaceDecision === "Unsure"
+        samePlaceDecision === "Unsure" ||
+        samePlaceDecision === "manually_selected"
           ? samePlaceDecision
           : undefined,
       samePlaceReason,
@@ -405,6 +412,8 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
         verificationDecision === "auto_corrected_from_google_url" ||
         verificationDecision === "auto_corrected_from_place_id" ||
         verificationDecision === "auto_corrected_from_text_search" ||
+        verificationDecision === "manually_verified" ||
+        verificationDecision === "manually_selected_candidate" ||
         verificationDecision === "candidate_only_review" ||
         verificationDecision === "ambiguous_multiple_candidates" ||
         verificationDecision === "no_candidate_found" ||
@@ -414,7 +423,14 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
       verificationSource:
         verificationSource === "place_id" ||
         verificationSource === "google_maps_url" ||
-        verificationSource === "text_search"
+        verificationSource === "google_place_id" ||
+        verificationSource === "google_places" ||
+        verificationSource === "google_text_search" ||
+        verificationSource === "free_geocoding" ||
+        verificationSource === "osm" ||
+        verificationSource === "cache" ||
+        verificationSource === "text_search" ||
+        verificationSource === "manual"
           ? verificationSource
           : undefined,
       nameScore: nameScore ?? undefined,

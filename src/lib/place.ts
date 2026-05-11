@@ -3,6 +3,7 @@ export type LovedFilter = "all" | "loved" | "unrated";
 export type VerifiedStatus = "Yes" | "Review" | "No" | "Closed/Moved";
 export type PlaceVerifiedStatus = VerifiedStatus | "";
 export type SamePlaceDecision = "Yes" | "No" | "Unsure";
+export type AdminSelectedSamePlaceDecision = SamePlaceDecision | "manually_selected";
 export type VerificationDecisionKind =
   | "auto_verified_small_delta"
   | "auto_corrected_large_delta"
@@ -10,6 +11,7 @@ export type VerificationDecisionKind =
   | "auto_corrected_from_place_id"
   | "auto_corrected_from_text_search"
   | "manually_verified"
+  | "manually_selected_candidate"
   | "candidate_only_review"
   | "ambiguous_multiple_candidates"
   | "no_candidate_found"
@@ -17,14 +19,31 @@ export type VerificationDecisionKind =
 export type VerificationSource =
   | "place_id"
   | "google_maps_url"
+  | "google_place_id"
+  | "google_places"
+  | "google_text_search"
+  | "free_geocoding"
+  | "osm"
+  | "cache"
   | "text_search"
   | "manual";
-export type CoordinateSource = "existing" | "cache" | "osm" | "google" | "manual";
+export type CoordinateSource =
+  | "existing"
+  | "cache"
+  | "free_geocoding"
+  | "osm"
+  | "google"
+  | "google_places"
+  | "google_place_id"
+  | "google_text_search"
+  | "manual";
 export type CoordinatePrecision =
   | "place_pin"
   | "address_geocode"
+  | "building_centroid"
   | "approximate"
-  | "manual";
+  | "manual"
+  | "unknown";
 export type CoordinateConfidence = "high" | "medium" | "low";
 
 export interface Place {
@@ -52,7 +71,7 @@ export interface Place {
   distanceDeltaMeters?: number;
   businessStatus?: string;
   matchConfidence?: number;
-  samePlaceDecision?: SamePlaceDecision;
+  samePlaceDecision?: AdminSelectedSamePlaceDecision;
   samePlaceReason?: string;
   verificationDecision?: VerificationDecisionKind;
   verificationSource?: VerificationSource;

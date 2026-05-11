@@ -3,8 +3,13 @@ import path from "node:path";
 import process from "node:process";
 
 import {
+  FreeGeocodingAccess,
+  type FreeGeocodeCandidate,
+} from "@/lib/free-geocoding";
+import {
   assertAutoDecisionSafetyGate,
   assertCoordinateAuditFields,
+  getDistanceMeters,
   getCandidateDiagnostics,
   type GoogleCandidate,
   summarizeAutoDecisions,
@@ -171,6 +176,7 @@ function printHelp() {
 Safety defaults:
   --dry-run does not write data. It does not call Google unless --confirm-live-api is present.
   --cache-only makes zero live Google calls and uses .cache/google-places-cache.json only.
+  Free geocoding live calls are also disabled unless FREE_GEOCODING_LIVE_ENABLED=true.
   Live Google calls require --confirm-live-api and --max-api-calls N.
   City-wide live runs over 25 rows also require --force.
   Budget estimate defaults to $5/month and $0.02/call unless overridden.
@@ -187,6 +193,7 @@ function estimateMaxTextSearchCalls(places: Place[]) {
 }
 
 function printPreRunEstimate(input: {
+  freeLiveEnabled: boolean;
   liveEnabled: boolean;
   maxApiCalls: number | null;
   options: CliOptions;
@@ -208,6 +215,9 @@ function printPreRunEstimate(input: {
   console.log("\nGoogle Places pre-run safety estimate");
   console.table({
     rowsToProcess: input.placesToProcess.length,
+    providerOrder:
+      "existing candidate -> free geocoding cache/live -> Google cache/live -> manual review",
+    estimatedMaxFreeGeocodingCalls: input.placesToProcess.length * 3,
     estimatedMaxTextSearchCalls: textSearchCalls,
     estimatedMaxPlaceDetailsCalls: placeDetailsCandidates,
     estimatedMaxUrlExpansionAttempts: urlExpansionAttempts,
@@ -224,6 +234,7 @@ function printPreRunEstimate(input: {
     cacheOnly: input.options.cacheOnly || !input.options.confirmLiveApi,
     liveApiEnabled:
       input.liveEnabled && input.options.confirmLiveApi && input.maxApiCalls !== null,
+    liveFreeGeocodingEnabled: input.freeLiveEnabled,
   });
 }
 
@@ -320,6 +331,99 @@ function getSearchAttempts(place: Place) {
     seen.add(key);
     return true;
   });
+}
+
+function getFreeGeocodingAttempts(place: Place) {
+  const addresses = Array.from(
+    new Set(
+      [place.canonicalAddress, place.address]
+        .map((address) => address?.trim())
+        .filter((address): address is string => Boolean(address)),
+    ),
+  );
+  const attempts = [
+    ...addresses.map((address) => [place.name, address, place.city]),
+    [place.name, place.city],
+    [place.name, place.district, place.city],
+  ]
+    .map((parts) =>
+      parts
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(", "),
+    )
+    .filter(Boolean);
+  const seen = new Set<string>();
+
+  return attempts.filter((query) => {
+    const key = stripAccentsAndPunctuation(query).toLowerCase();
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+async function fetchFreeGeocodingCandidate(
+  place: Place,
+  access: FreeGeocodingAccess,
+) {
+  for (const query of getFreeGeocodingAttempts(place)) {
+    const candidates = await access.searchOsm(query);
+
+    if (candidates && candidates.length > 0) {
+      return {
+        candidate: candidates[0],
+        query,
+      };
+    }
+  }
+
+  return null;
+}
+
+function applyFreeGeocodingCandidate(
+  place: Place,
+  candidate: FreeGeocodeCandidate,
+) {
+  const distanceDeltaMeters =
+    Number.isFinite(place.latitude) && Number.isFinite(place.longitude)
+      ? Number(
+          getDistanceMeters(
+            { latitude: place.latitude, longitude: place.longitude },
+            { latitude: candidate.latitude, longitude: candidate.longitude },
+          ).toFixed(1),
+        )
+      : undefined;
+
+  return {
+    ...place,
+    canonicalAddress: candidate.address,
+    candidateCoordinateSource: candidate.provider,
+    coordinateConfidence: candidate.confidence,
+    coordinatePrecision: candidate.precision,
+    distanceDeltaMeters,
+    lastChecked: formatDateForInput(new Date()),
+    matchConfidence:
+      candidate.confidence === "high" ? 0.82 : candidate.confidence === "medium" ? 0.62 : 0.35,
+    samePlaceDecision: "Unsure" as const,
+    samePlaceReason:
+      "Free geocoding returned candidate coordinates. Review before accepting because free geocoding can return approximate coordinates.",
+    verificationDecision: "candidate_only_review" as const,
+    verificationSource: candidate.provider,
+    verifiedLatitude: candidate.latitude,
+    verifiedLongitude: candidate.longitude,
+    verifiedStatus: "Review" as const,
+    verificationNotes: [
+      place.verificationNotes,
+      `Free geocoding candidate from ${candidate.provider} saved for manual review.`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  };
 }
 
 function getLocationBias(place: Place) {
@@ -933,6 +1037,7 @@ async function main() {
 
   await loadLocalEnvFile();
   const liveEnabled = process.env.GOOGLE_PLACES_LIVE_ENABLED === "true";
+  const freeLiveEnabled = process.env.FREE_GEOCODING_LIVE_ENABLED === "true";
   const apiKey =
     process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
 
@@ -961,6 +1066,7 @@ async function main() {
   const liveCallsRequested = options.confirmLiveApi && !options.cacheOnly;
 
   printPreRunEstimate({
+    freeLiveEnabled,
     liveEnabled,
     maxApiCalls: options.maxApiCalls,
     options,
@@ -992,12 +1098,52 @@ async function main() {
     liveEnabled,
     maxApiCalls: options.maxApiCalls,
   });
+  const freeAccess = new FreeGeocodingAccess({
+    liveEnabled: freeLiveEnabled && !options.cacheOnly,
+    maxLiveCalls: Math.min(25, placesToProcess.length * 3),
+  });
   const today = new Date();
   const summary = getEmptySummary();
   const updatedById = new Map<string, Place>();
 
   for (const [index, place] of placesToProcess.entries()) {
     try {
+      if (
+        place.verifiedLatitude !== undefined &&
+        place.verifiedLongitude !== undefined
+      ) {
+        updatedById.set(place.id, place);
+        summary.rowsProcessed += 1;
+        console.log(
+          `${index + 1}/${placesToProcess.length} ${place.city} - ${place.name}: existing_candidate`,
+        );
+        continue;
+      }
+
+      const freeResult = await fetchFreeGeocodingCandidate(place, freeAccess);
+
+      if (freeResult) {
+        const freePlace = applyFreeGeocodingCandidate(
+          place,
+          freeResult.candidate,
+        );
+
+        updatedById.set(place.id, freePlace);
+        updateSummary(summary, place, {
+          kind: "no_match",
+          place: freePlace,
+        });
+        console.log(
+          `${index + 1}/${placesToProcess.length} ${place.city} - ${place.name}: free_geocoding_candidate`,
+        );
+        if (options.debug) {
+          console.log(
+            `Free geocoding query "${freeResult.query}" returned ${freeResult.candidate.latitude}, ${freeResult.candidate.longitude}`,
+          );
+        }
+        continue;
+      }
+
       const searchResult = await fetchCandidates(place, apiKey, access);
       const decision = verifyPlaceFromCandidates(place, searchResult.candidates, {
         applyAutoDecisions: options.applyAutoDecisions,
@@ -1075,6 +1221,8 @@ async function main() {
     ...access.counters,
     liveCallsMade: access.getLiveCallCount(),
   });
+  console.log("\nFree geocoding cache/live counters");
+  console.table(freeAccess.counters);
   console.log("\nAuto-decision safety report");
   console.table({
     rowsProcessed: autoDecisionSummary.rowsProcessed,

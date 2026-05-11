@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { FreeGeocodingAccess } from "@/lib/free-geocoding";
 import { resolveGoogleMapsUrlForProductionPlace } from "@/lib/google-place-admin-resolver";
 import { GooglePlacesAccess } from "@/lib/google-places-access";
+import type { Place } from "@/lib/place";
 
 function isAuthorized(request: NextRequest) {
   const adminPassword = process.env.ADMIN_PASSWORD ?? "";
@@ -26,9 +28,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   const apiKey =
     process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
-  const liveEnabled = process.env.GOOGLE_PLACES_LIVE_ENABLED === "true";
+  const googleLiveEnabled = process.env.GOOGLE_PLACES_LIVE_ENABLED === "true";
+  const freeLiveEnabled = process.env.FREE_GEOCODING_LIVE_ENABLED === "true";
 
-  if (liveEnabled && !apiKey) {
+  if (googleLiveEnabled && !apiKey) {
     return NextResponse.json(
       { error: "GOOGLE_MAPS_API_KEY or GOOGLE_PLACES_API_KEY is required." },
       { status: 500 },
@@ -36,18 +39,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const input = (await request.json()) as { googleMapsUrl?: string };
+  const input = (await request.json()) as {
+    googleMapsUrl?: string;
+    place?: Partial<Pick<Place, "address" | "canonicalAddress" | "latitude" | "longitude">>;
+  };
   const result = await resolveGoogleMapsUrlForProductionPlace(
     decodeURIComponent(id),
     input.googleMapsUrl ?? "",
     apiKey,
     {
       access: new GooglePlacesAccess({
-        cacheOnly: !liveEnabled,
-        confirmLiveApi: liveEnabled,
-        liveEnabled,
+        cacheOnly: !googleLiveEnabled,
+        confirmLiveApi: googleLiveEnabled,
+        liveEnabled: googleLiveEnabled,
         maxApiCalls: 5,
       }),
+      freeAccess: new FreeGeocodingAccess({
+        liveEnabled: freeLiveEnabled,
+        maxLiveCalls: 3,
+      }),
+      placeOverrides: input.place,
     },
   );
 

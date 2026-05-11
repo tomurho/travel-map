@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { formatProviderAttemptSummary } from "@/lib/admin-ui";
 import { formatDistance } from "@/lib/geo";
 import {
   hasMaterialCanonicalAddressDifference,
@@ -11,6 +12,7 @@ import {
 import {
   type AdminVerificationFilter,
   acceptCandidateCoordinates,
+  applyAdminSelectedCandidate,
   getCompactVerificationLabel,
   getVerificationFilterBucket,
   markVerifiedToday,
@@ -93,6 +95,24 @@ type ProductionPlaceEdit = {
   verifiedStatus: PlaceVerifiedStatus;
   lastChecked: string;
   verificationNotes: string;
+};
+
+type AdminCandidateSummary = {
+  addressScore: number;
+  businessStatus: string;
+  candidateCoordinateSource?: Place["candidateCoordinateSource"];
+  canonicalAddress: string;
+  canonicalName: string;
+  coordinateConfidence?: Place["coordinateConfidence"];
+  coordinatePrecision?: Place["coordinatePrecision"];
+  distanceDeltaMeters: number | null;
+  googleMapsUrl: string;
+  googlePlaceId: string;
+  latitude: number | null;
+  longitude: number | null;
+  matchConfidence: number;
+  nameScore: number;
+  provider: Place["verificationSource"];
 };
 
 function formatOptionalValue(value: string | number | undefined | null) {
@@ -223,6 +243,12 @@ export function AdminWorkflow({
   );
   const [productionEdits, setProductionEdits] = useState<
     Record<string, ProductionPlaceEdit>
+  >({});
+  const [candidateOptionsByPlaceId, setCandidateOptionsByPlaceId] = useState<
+    Record<string, AdminCandidateSummary[]>
+  >({});
+  const [providerAttemptsByPlaceId, setProviderAttemptsByPlaceId] = useState<
+    Record<string, Array<{ detail: string; provider: string; status: string }>>
   >({});
   const [savingProductionPlaceId, setSavingProductionPlaceId] = useState<
     string | null
@@ -387,9 +413,30 @@ export function AdminWorkflow({
 
     return {
       address: edit.address,
+      addressScore: place.addressScore,
+      ambiguityScore: place.ambiguityScore,
+      businessStatus: place.businessStatus,
+      candidateCoordinateSource: place.candidateCoordinateSource,
+      canonicalAddress: place.canonicalAddress,
+      canonicalName: place.canonicalName,
+      cityScore: place.cityScore,
+      coordinateConfidence: place.coordinateConfidence,
+      coordinatePrecision: place.coordinatePrecision,
+      countryScore: place.countryScore,
+      distanceDeltaMeters: place.distanceDeltaMeters,
+      districtScore: place.districtScore,
       googleMapsUrl: edit.googleMapsUrl,
+      googlePlaceId: place.googlePlaceId,
       latitude: parseCoordinate(edit.latitude),
       longitude: parseCoordinate(edit.longitude),
+      matchConfidence: place.matchConfidence,
+      nameScore: place.nameScore,
+      samePlaceDecision: place.samePlaceDecision,
+      samePlaceReason: place.samePlaceReason,
+      verificationDecision: place.verificationDecision,
+      verificationSource: place.verificationSource,
+      verifiedLatitude: place.verifiedLatitude,
+      verifiedLongitude: place.verifiedLongitude,
       verifiedStatus: edit.verifiedStatus,
       lastChecked: edit.lastChecked,
       verificationNotes: edit.verificationNotes,
@@ -713,13 +760,18 @@ export function AdminWorkflow({
       ...place,
       address: currentEdit.address,
       googleMapsUrl: currentEdit.googleMapsUrl,
-      latitude: currentLatitude,
-      longitude: currentLongitude,
+      latitude: currentLatitude ?? place.latitude,
+      longitude: currentLongitude ?? place.longitude,
       lastChecked: currentEdit.lastChecked,
       verificationNotes: currentEdit.verificationNotes,
       verifiedStatus: currentEdit.verifiedStatus,
     });
 
+    setProductionPlaces((currentPlaces) =>
+      currentPlaces.map((currentPlace) =>
+        currentPlace.id === place.id ? { ...currentPlace, ...acceptedPlace } : currentPlace,
+      ),
+    );
     setProductionEdits((currentEdits) => ({
       ...currentEdits,
       [place.id]: {
@@ -756,18 +808,48 @@ export function AdminWorkflow({
     );
   }
 
-  async function resolveProductionGoogleMapsUrl(place: Place) {
+  function useProductionCandidate(
+    place: Place,
+    candidate: AdminCandidateSummary,
+  ) {
+    const currentEdit = getProductionEdit(place);
+    const nextPlace = applyAdminSelectedCandidate(
+      {
+        ...place,
+        googleMapsUrl: currentEdit.googleMapsUrl,
+      },
+      candidate,
+      currentEdit.verificationNotes || place.verificationNotes,
+    );
+
+    setProductionPlaces((currentPlaces) =>
+      currentPlaces.map((currentPlace) =>
+        currentPlace.id === place.id ? nextPlace : currentPlace,
+      ),
+    );
+    setProductionEdits((currentEdits) => ({
+      ...currentEdits,
+      [place.id]: {
+        ...currentEdit,
+        googleMapsUrl: nextPlace.googleMapsUrl ?? currentEdit.googleMapsUrl,
+        latitude: currentEdit.latitude,
+        longitude: currentEdit.longitude,
+        verifiedStatus: "Review",
+        verificationNotes: nextPlace.verificationNotes ?? "",
+      },
+    }));
+    setProductionMessage(
+      "Candidate selected. Accept coordinates to move the saved map pin.",
+    );
+  }
+
+  async function resolveProductionCandidateCoordinates(place: Place) {
     const currentEdit = getProductionEdit(place);
     const googleMapsUrl = currentEdit.googleMapsUrl.trim();
 
-    if (!googleMapsUrl) {
-      setError("Paste a Google Maps URL before resolving a candidate.");
-      return;
-    }
-
     setResolvingProductionPlaceId(place.id);
     setError(null);
-    setProductionMessage("Resolving Google Maps URL...");
+    setProductionMessage("Resolving candidate coordinates...");
 
     try {
       const response = await fetch(
@@ -778,20 +860,50 @@ export function AdminWorkflow({
             "Content-Type": "application/json",
             ...(authHeaders() ?? {}),
           },
-          body: JSON.stringify({ googleMapsUrl }),
+          body: JSON.stringify({
+            googleMapsUrl,
+            place: {
+              address: currentEdit.address,
+              googleMapsUrl,
+              latitude: parseCoordinate(currentEdit.latitude) ?? undefined,
+              longitude: parseCoordinate(currentEdit.longitude) ?? undefined,
+            },
+          }),
         },
       );
       const responsePayload = (await response.json()) as {
         error?: string;
+        freeCounters?: {
+          blockedByLiveDisabled: number;
+          cacheHits: number;
+          cacheMisses: number;
+          freeGeocodingCalls: number;
+        };
+        candidateSummaries?: AdminCandidateSummary[];
         place?: Place;
         places?: Place[];
+        providerAttempts?: Array<{
+          detail: string;
+          provider: string;
+          status: string;
+        }>;
       };
 
       if (!response.ok || !responsePayload.place || !responsePayload.places) {
-        throw new Error(responsePayload.error ?? "URL could not be resolved.");
+        throw new Error(
+          responsePayload.error ?? "Candidate coordinates could not be resolved.",
+        );
       }
 
       setProductionPlaces(responsePayload.places);
+      setCandidateOptionsByPlaceId((currentOptions) => ({
+        ...currentOptions,
+        [place.id]: responsePayload.candidateSummaries ?? [],
+      }));
+      setProviderAttemptsByPlaceId((currentAttempts) => ({
+        ...currentAttempts,
+        [place.id]: responsePayload.providerAttempts ?? [],
+      }));
       setProductionEdits((currentEdits) => ({
         ...currentEdits,
         [place.id]: {
@@ -814,24 +926,36 @@ export function AdminWorkflow({
         resolvedPlace.verificationDecision === "candidate_only_review" ||
         resolvedPlace.verificationDecision === "ambiguous_multiple_candidates";
 
+      const providerSummary = responsePayload.providerAttempts
+        ?.map((attempt) => `${attempt.provider}: ${attempt.status} - ${attempt.detail}`)
+        .join(" ");
       setProductionMessage(
-        hasCandidateCoordinates
+        responsePayload.candidateSummaries &&
+          responsePayload.candidateSummaries.length > 1
+          ? `Multiple candidates were found. Choose the correct listing below.${
+              providerSummary ? ` ${providerSummary}` : ""
+            }`
+          : hasCandidateCoordinates
           ? isReviewCandidate
-            ? "Candidate found, but it still needs review before accepting coordinates."
-            : "Candidate found. Review it, then accept candidate coordinates if it is the right pin."
-          : `URL could not be resolved to candidate coordinates.${
+            ? `Candidate found, but it still needs review before accepting coordinates.${
+                providerSummary ? ` ${providerSummary}` : ""
+              }`
+            : `Candidate found. Review it, then accept candidate coordinates if it is the right pin.${
+                providerSummary ? ` ${providerSummary}` : ""
+              }`
+          : `Candidate coordinates could not be resolved.${
               resolvedPlace.samePlaceReason
                 ? ` ${resolvedPlace.samePlaceReason}`
                 : getLatestVerificationNote(resolvedPlace)
                   ? ` ${getLatestVerificationNote(resolvedPlace)}`
                   : ""
-            }`,
+            }${providerSummary ? ` ${providerSummary}` : ""}`,
       );
     } catch (resolveError) {
       setError(
         resolveError instanceof Error
           ? resolveError.message
-          : "URL could not be resolved.",
+          : "Candidate coordinates could not be resolved.",
       );
       setProductionMessage(null);
     } finally {
@@ -1069,7 +1193,6 @@ export function AdminWorkflow({
                 const edit = getProductionEdit(selectedProductionPlace);
                 const canOpenGoogleMaps = edit.googleMapsUrl.trim().length > 0;
                 const canResolveGoogleMapsUrl =
-                  canOpenGoogleMaps &&
                   resolvingProductionPlaceId !== selectedProductionPlace.id;
                 const hasCandidateMetadata =
                   selectedProductionPlace.googlePlaceId !== undefined ||
@@ -1077,6 +1200,17 @@ export function AdminWorkflow({
                   selectedProductionPlace.canonicalAddress !== undefined ||
                   selectedProductionPlace.verifiedLatitude !== undefined ||
                   selectedProductionPlace.verifiedLongitude !== undefined;
+                const candidateOptions =
+                  candidateOptionsByPlaceId[selectedProductionPlace.id] ?? [];
+                const providerAttempts =
+                  providerAttemptsByPlaceId[selectedProductionPlace.id] ?? [];
+                const hasUnsavedQaChanges =
+                  productionEdits[selectedProductionPlace.id] !== undefined;
+                const hasCandidateCoordinates =
+                  selectedProductionPlace.verifiedLatitude !== undefined &&
+                  selectedProductionPlace.verifiedLongitude !== undefined;
+                const hasCanonicalAddressDifference =
+                  hasMaterialCanonicalAddressDifference(selectedProductionPlace);
 
                 return (
                   <div className="admin-verification-detail">
@@ -1084,16 +1218,14 @@ export function AdminWorkflow({
                       <div>
                         <h3>{selectedProductionPlace.name}</h3>
                         <p className="admin-source">
-                          {selectedProductionPlace.address || "No address"}
+                          {[
+                            selectedProductionPlace.city,
+                            selectedProductionPlace.category,
+                            selectedProductionPlace.district,
+                          ]
+                            .filter(Boolean)
+                            .join(" / ")}
                         </p>
-                        {hasMaterialCanonicalAddressDifference(
-                          selectedProductionPlace,
-                        ) ? (
-                          <p className="admin-source">
-                            Canonical:{" "}
-                            {selectedProductionPlace.canonicalAddress}
-                          </p>
-                        ) : null}
                       </div>
                       <span
                         className={`admin-verification-badge${getVerificationClass(
@@ -1104,332 +1236,420 @@ export function AdminWorkflow({
                       </span>
                     </div>
 
-                    <div className="admin-draft-fields">
-                      <label className="admin-field-full">
-                        <span>Address</span>
-                        <textarea
-                          className="admin-draft-input admin-draft-textarea"
-                          onChange={(event) =>
-                            setProductionEditField(
-                              selectedProductionPlace,
-                              "address",
-                              event.target.value,
-                            )
-                          }
-                          rows={2}
-                          value={edit.address}
-                        />
-                      </label>
-                      <label>
-                        <span>Latitude</span>
-                        <input
-                          className="admin-draft-input"
-                          inputMode="decimal"
-                          onChange={(event) =>
-                            setProductionEditField(
-                              selectedProductionPlace,
-                              "latitude",
-                              event.target.value,
-                            )
-                          }
-                          value={edit.latitude}
-                        />
-                      </label>
-                      <label>
-                        <span>Longitude</span>
-                        <input
-                          className="admin-draft-input"
-                          inputMode="decimal"
-                          onChange={(event) =>
-                            setProductionEditField(
-                              selectedProductionPlace,
-                              "longitude",
-                              event.target.value,
-                            )
-                          }
-                          value={edit.longitude}
-                        />
-                      </label>
-                      <label>
-                        <span>Google Maps URL</span>
-                        <input
-                          className="admin-draft-input"
-                          onChange={(event) =>
-                            setProductionEditField(
-                              selectedProductionPlace,
-                              "googleMapsUrl",
-                              event.target.value,
-                            )
-                          }
-                          placeholder="https://maps.google.com/..."
-                          type="url"
-                          value={edit.googleMapsUrl}
-                        />
-                        <small className="admin-field-helper">
-                          Paste a Google Maps listing URL, then click Resolve
-                          Google Maps URL to fetch the candidate pin. This may
-                          call Google Places API.
-                        </small>
-                      </label>
-                      <label>
-                        <span>Verified?</span>
-                        <select
-                          className="admin-draft-input"
-                          onChange={(event) =>
-                            setProductionEditField(
-                              selectedProductionPlace,
-                              "verifiedStatus",
-                              event.target.value as PlaceVerifiedStatus,
-                            )
-                          }
-                          value={edit.verifiedStatus}
-                        >
-                          {VERIFIED_STATUS_OPTIONS.map((status) => (
-                            <option key={status || "blank"} value={status}>
-                              {status || "No"}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span>Last Checked</span>
-                        <input
-                          className="admin-draft-input"
-                          onChange={(event) =>
-                            setProductionEditField(
-                              selectedProductionPlace,
-                              "lastChecked",
-                              event.target.value,
-                            )
-                          }
-                          type="date"
-                          value={edit.lastChecked}
-                        />
-                      </label>
-                      <label>
-                        <span>Verification Notes</span>
-                        <textarea
-                          className="admin-draft-input admin-draft-textarea"
-                          onChange={(event) =>
-                            setProductionEditField(
-                              selectedProductionPlace,
-                              "verificationNotes",
-                              event.target.value,
-                            )
-                          }
-                          rows={3}
-                          value={edit.verificationNotes}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="admin-candidate-panel">
-                      <div>
-                        <h4>Google candidate</h4>
-                        <p>
-                          {hasCandidateMetadata
-                            ? "Read-only metadata from the URL resolver or batch verifier. Accepting coordinates still requires saving QA changes."
-                            : "No candidate loaded yet. Resolve a Google Maps URL or run the batch verifier."}
-                        </p>
+                    {hasUnsavedQaChanges ? (
+                      <div className="admin-unsaved-banner">
+                        Unsaved QA changes.
                       </div>
-                      <dl className="admin-candidate-grid">
-                        <div>
-                          <dt>Candidate Google Maps URL</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.googleMapsUrl,
-                            )}
-                          </dd>
+                    ) : null}
+
+                    <div className="admin-qa-grid">
+                      <section className="admin-qa-card">
+                        <div className="admin-qa-card-header">
+                          <h4>Current saved pin</h4>
+                          <span>{edit.verifiedStatus || "No"}</span>
                         </div>
-                        <div>
-                          <dt>Canonical name</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.canonicalName,
-                            )}
-                          </dd>
+                        <div className="admin-draft-fields admin-qa-fields">
+                          <label className="admin-field-full">
+                            <span>Address</span>
+                            <textarea
+                              className="admin-draft-input admin-draft-textarea"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "address",
+                                  event.target.value,
+                                )
+                              }
+                              rows={2}
+                              value={edit.address}
+                            />
+                          </label>
+                          <label>
+                            <span>Latitude</span>
+                            <input
+                              className="admin-draft-input"
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "latitude",
+                                  event.target.value,
+                                )
+                              }
+                              value={edit.latitude}
+                            />
+                          </label>
+                          <label>
+                            <span>Longitude</span>
+                            <input
+                              className="admin-draft-input"
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "longitude",
+                                  event.target.value,
+                                )
+                              }
+                              value={edit.longitude}
+                            />
+                          </label>
+                          <label className="admin-field-full">
+                            <span>Google Maps URL</span>
+                            <input
+                              className="admin-draft-input"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "googleMapsUrl",
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="https://maps.google.com/..."
+                              type="url"
+                              value={edit.googleMapsUrl}
+                            />
+                            <small className="admin-field-helper">
+                              Uses cache/free sources first. Google Places is only
+                              used if live Google lookups are enabled.
+                            </small>
+                          </label>
+                          <label>
+                            <span>Verification status</span>
+                            <select
+                              className="admin-draft-input"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "verifiedStatus",
+                                  event.target.value as PlaceVerifiedStatus,
+                                )
+                              }
+                              value={edit.verifiedStatus}
+                            >
+                              {VERIFIED_STATUS_OPTIONS.map((status) => (
+                                <option key={status || "blank"} value={status}>
+                                  {status || "No"}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>Last checked</span>
+                            <input
+                              className="admin-draft-input"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "lastChecked",
+                                  event.target.value,
+                                )
+                              }
+                              type="date"
+                              value={edit.lastChecked}
+                            />
+                          </label>
+                          <label className="admin-field-full">
+                            <span>Verification notes</span>
+                            <textarea
+                              className="admin-draft-input admin-draft-textarea"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "verificationNotes",
+                                  event.target.value,
+                                )
+                              }
+                              rows={3}
+                              value={edit.verificationNotes}
+                            />
+                          </label>
                         </div>
-                        <div>
-                          <dt>Canonical address</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.canonicalAddress,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Verified latitude</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.verifiedLatitude,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Verified longitude</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.verifiedLongitude,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Distance delta</dt>
-                          <dd>
-                            {selectedProductionPlace.distanceDeltaMeters ===
-                            undefined
-                              ? "Not populated"
-                              : `${Math.round(
-                                  selectedProductionPlace.distanceDeltaMeters,
-                                )}m`}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Business status</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.businessStatus,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Same place decision</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.samePlaceDecision,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Verification decision</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.verificationDecision,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Correction source</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.verificationSource,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Current latitude</dt>
-                          <dd>
-                            {formatOptionalValue(selectedProductionPlace.latitude)}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Current longitude</dt>
-                          <dd>
-                            {formatOptionalValue(selectedProductionPlace.longitude)}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Same place reason</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.samePlaceReason,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Name score</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.nameScore,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Address score</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.addressScore,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>City score</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.cityScore,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>District score</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.districtScore,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Country score</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.countryScore,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Ambiguity score</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.ambiguityScore,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Candidate source</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.candidateCoordinateSource,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Coordinate precision</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.coordinatePrecision,
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Confidence</dt>
-                          <dd>
+                      </section>
+
+                      <section className="admin-qa-card admin-resolved-card">
+                        <div className="admin-qa-card-header">
+                          <h4>Resolved candidate</h4>
+                          <span>
                             {formatOptionalValue(
                               selectedProductionPlace.coordinateConfidence,
                             )}
-                          </dd>
+                          </span>
+                        </div>
+                        {hasCandidateMetadata ? (
+                          <div className="admin-candidate-summary">
+                            <strong>
+                              {formatOptionalValue(
+                                selectedProductionPlace.canonicalName,
+                              )}
+                            </strong>
+                            <p>
+                              {formatOptionalValue(
+                                selectedProductionPlace.canonicalAddress,
+                              )}
+                            </p>
+                            <dl>
+                              <div>
+                                <dt>Candidate lat/lng</dt>
+                                <dd>
+                                  {formatOptionalValue(
+                                    selectedProductionPlace.verifiedLatitude,
+                                  )}
+                                  ,{" "}
+                                  {formatOptionalValue(
+                                    selectedProductionPlace.verifiedLongitude,
+                                  )}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Distance from current pin</dt>
+                                <dd>
+                                  {selectedProductionPlace.distanceDeltaMeters ===
+                                  undefined
+                                    ? "Not populated"
+                                    : `${Math.round(
+                                        selectedProductionPlace.distanceDeltaMeters,
+                                      )}m`}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Source</dt>
+                                <dd>
+                                  {formatOptionalValue(
+                                    selectedProductionPlace.candidateCoordinateSource,
+                                  )}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Business status</dt>
+                                <dd>
+                                  {formatOptionalValue(
+                                    selectedProductionPlace.businessStatus,
+                                  )}
+                                </dd>
+                              </div>
+                            </dl>
+                            {selectedProductionPlace.googleMapsUrl ? (
+                              <a
+                                href={selectedProductionPlace.googleMapsUrl}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Open Google Maps
+                              </a>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="admin-empty-state">
+                            No candidate loaded yet. Click Resolve candidate
+                            coordinates to try cache/free sources first. Google is
+                            only used if enabled.
+                          </p>
+                        )}
+                      </section>
+                    </div>
+
+                    {candidateOptions.length > 1 ? (
+                      <div className="admin-candidate-options">
+                        <h4>Multiple candidates found</h4>
+                        <p className="admin-source">
+                          Choose the correct listing below. This only loads
+                          candidate metadata; it will not move the map pin.
+                        </p>
+                        {candidateOptions.map((candidate) => {
+                          const isSelectedCandidate =
+                            selectedProductionPlace.googlePlaceId ===
+                            candidate.googlePlaceId;
+
+                          return (
+                            <article
+                              className={`admin-candidate-option${
+                                isSelectedCandidate ? " is-selected" : ""
+                              }`}
+                              key={`${candidate.provider}-${candidate.googlePlaceId}`}
+                            >
+                              <div>
+                                {isSelectedCandidate ? (
+                                  <span className="admin-selected-chip">
+                                    Selected candidate
+                                  </span>
+                                ) : null}
+                                <strong>
+                                  {candidate.canonicalName || "Unnamed candidate"}
+                                </strong>
+                                <p>
+                                  {candidate.canonicalAddress || "No address"}
+                                </p>
+                                {candidate.googleMapsUrl ? (
+                                  <a
+                                    href={candidate.googleMapsUrl}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    Open Google Maps
+                                  </a>
+                                ) : null}
+                              </div>
+                              <dl className="admin-candidate-metrics">
+                                <div>
+                                  <dt>Lat/Lng</dt>
+                                  <dd>
+                                    {candidate.latitude ?? "Not populated"},{" "}
+                                    {candidate.longitude ?? "Not populated"}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Status</dt>
+                                  <dd>
+                                    {formatOptionalValue(
+                                      candidate.businessStatus,
+                                    )}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Confidence</dt>
+                                  <dd>{candidate.matchConfidence}</dd>
+                                </div>
+                                <div>
+                                  <dt>Name score</dt>
+                                  <dd>{candidate.nameScore}</dd>
+                                </div>
+                                <div>
+                                  <dt>Address score</dt>
+                                  <dd>{candidate.addressScore}</dd>
+                                </div>
+                                <div>
+                                  <dt>Distance</dt>
+                                  <dd>
+                                    {candidate.distanceDeltaMeters === null
+                                      ? "Unknown"
+                                      : `${Math.round(
+                                          candidate.distanceDeltaMeters,
+                                        )}m`}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Source</dt>
+                                  <dd>{candidate.provider}</dd>
+                                </div>
+                              </dl>
+                              <button
+                                disabled={
+                                  candidate.latitude === null ||
+                                  candidate.longitude === null
+                                }
+                                onClick={() =>
+                                  useProductionCandidate(
+                                    selectedProductionPlace,
+                                    candidate,
+                                  )
+                                }
+                                type="button"
+                              >
+                                Use this candidate
+                              </button>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    <details className="admin-technical-details">
+                      <summary>Technical details</summary>
+                      <p className="admin-provider-summary">
+                        {formatProviderAttemptSummary(providerAttempts)}
+                      </p>
+                      {providerAttempts.length > 0 ? (
+                        <details className="admin-provider-details">
+                          <summary>Show provider details</summary>
+                          <ul>
+                            {providerAttempts.map((attempt, index) => (
+                              <li key={`${attempt.provider}-${index}`}>
+                                <strong>{attempt.provider}</strong>:{" "}
+                                {attempt.status} - {attempt.detail}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
+                      <dl className="admin-candidate-grid">
+                        <div>
+                          <dt>googlePlaceId</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.googlePlaceId)}</dd>
                         </div>
                         <div>
-                          <dt>Match confidence</dt>
-                          <dd>
-                            {formatOptionalValue(
-                              selectedProductionPlace.matchConfidence,
-                            )}
-                          </dd>
+                          <dt>verificationDecision</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.verificationDecision)}</dd>
+                        </div>
+                        <div>
+                          <dt>verificationSource</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.verificationSource)}</dd>
+                        </div>
+                        <div>
+                          <dt>samePlaceDecision</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.samePlaceDecision)}</dd>
+                        </div>
+                        <div>
+                          <dt>samePlaceReason</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.samePlaceReason)}</dd>
+                        </div>
+                        <div>
+                          <dt>matchConfidence</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.matchConfidence)}</dd>
+                        </div>
+                        <div>
+                          <dt>nameScore</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.nameScore)}</dd>
+                        </div>
+                        <div>
+                          <dt>addressScore</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.addressScore)}</dd>
+                        </div>
+                        <div>
+                          <dt>cityScore</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.cityScore)}</dd>
+                        </div>
+                        <div>
+                          <dt>countryScore</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.countryScore)}</dd>
+                        </div>
+                        <div>
+                          <dt>districtScore</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.districtScore)}</dd>
+                        </div>
+                        <div>
+                          <dt>ambiguityScore</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.ambiguityScore)}</dd>
+                        </div>
+                        <div>
+                          <dt>coordinatePrecision</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.coordinatePrecision)}</dd>
+                        </div>
+                        <div>
+                          <dt>coordinateConfidence</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.coordinateConfidence)}</dd>
+                        </div>
+                        <div>
+                          <dt>candidateCoordinateSource</dt>
+                          <dd>{formatOptionalValue(selectedProductionPlace.candidateCoordinateSource)}</dd>
                         </div>
                       </dl>
-                    </div>
+                    </details>
 
                     <div className="admin-verification-actions">
                       <button
+                        className="admin-primary-action"
                         disabled={!canResolveGoogleMapsUrl}
                         onClick={() =>
-                          resolveProductionGoogleMapsUrl(selectedProductionPlace)
+                          resolveProductionCandidateCoordinates(
+                            selectedProductionPlace,
+                          )
                         }
                         type="button"
                       >
                         {resolvingProductionPlaceId === selectedProductionPlace.id
                           ? "Resolving..."
-                          : "Resolve Google Maps URL"}
+                          : "Resolve candidate coordinates"}
                       </button>
                       <button
                         onClick={() =>
@@ -1440,9 +1660,9 @@ export function AdminWorkflow({
                         Mark Verified Today
                       </button>
                       <button
+                        className="admin-primary-action"
                         disabled={
-                          selectedProductionPlace.verifiedLatitude === undefined ||
-                          selectedProductionPlace.verifiedLongitude === undefined
+                          !hasCandidateCoordinates
                         }
                         onClick={() =>
                           acceptProductionCandidateCoordinates(
@@ -1455,8 +1675,7 @@ export function AdminWorkflow({
                       </button>
                       <button
                         disabled={
-                          selectedProductionPlace.verifiedLatitude === undefined ||
-                          selectedProductionPlace.verifiedLongitude === undefined
+                          !hasCandidateCoordinates
                         }
                         onClick={() =>
                           setProductionMessage(
@@ -1468,7 +1687,7 @@ export function AdminWorkflow({
                         Reject candidate
                       </button>
                       <button
-                        disabled={!selectedProductionPlace.canonicalAddress?.trim()}
+                        disabled={!hasCanonicalAddressDifference}
                         onClick={() =>
                           useProductionCanonicalAddress(selectedProductionPlace)
                         }
@@ -1490,6 +1709,7 @@ export function AdminWorkflow({
                         </span>
                       )}
                       <button
+                        className="admin-save-action"
                         disabled={savingProductionPlaceId === selectedProductionPlace.id}
                         onClick={() => saveProductionPlace(selectedProductionPlace)}
                         type="button"

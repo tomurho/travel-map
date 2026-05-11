@@ -64,9 +64,30 @@ export interface AdminStagedPlaceInput {
 
 export interface AdminProductionPlaceVerificationInput {
   address?: string;
+  addressScore?: number;
+  ambiguityScore?: number;
+  businessStatus?: string;
+  candidateCoordinateSource?: Place["candidateCoordinateSource"];
+  canonicalAddress?: string;
+  canonicalName?: string;
+  cityScore?: number;
+  coordinateConfidence?: Place["coordinateConfidence"];
+  coordinatePrecision?: Place["coordinatePrecision"];
+  countryScore?: number;
+  distanceDeltaMeters?: number;
+  districtScore?: number;
   googleMapsUrl: string;
+  googlePlaceId?: string;
   latitude: number | null;
   longitude: number | null;
+  matchConfidence?: number;
+  nameScore?: number;
+  samePlaceDecision?: Place["samePlaceDecision"];
+  samePlaceReason?: string;
+  verificationDecision?: Place["verificationDecision"];
+  verificationSource?: Place["verificationSource"];
+  verifiedLatitude?: number;
+  verifiedLongitude?: number;
   verifiedStatus: PlaceVerifiedStatus;
   lastChecked: string;
   verificationNotes: string;
@@ -655,6 +676,32 @@ export function updateProductionPlaceVerification(
     ...currentPlace,
     address: input.address?.trim() || currentPlace.address,
     googleMapsUrl: input.googleMapsUrl.trim(),
+    googlePlaceId: input.googlePlaceId ?? currentPlace.googlePlaceId,
+    canonicalName: input.canonicalName ?? currentPlace.canonicalName,
+    canonicalAddress: input.canonicalAddress ?? currentPlace.canonicalAddress,
+    verifiedLatitude: input.verifiedLatitude ?? currentPlace.verifiedLatitude,
+    verifiedLongitude: input.verifiedLongitude ?? currentPlace.verifiedLongitude,
+    candidateCoordinateSource:
+      input.candidateCoordinateSource ?? currentPlace.candidateCoordinateSource,
+    coordinatePrecision: input.coordinatePrecision ?? currentPlace.coordinatePrecision,
+    coordinateConfidence:
+      input.coordinateConfidence ?? currentPlace.coordinateConfidence,
+    distanceDeltaMeters:
+      input.distanceDeltaMeters ?? currentPlace.distanceDeltaMeters,
+    businessStatus: input.businessStatus ?? currentPlace.businessStatus,
+    matchConfidence: input.matchConfidence ?? currentPlace.matchConfidence,
+    samePlaceDecision:
+      input.samePlaceDecision ?? currentPlace.samePlaceDecision,
+    samePlaceReason: input.samePlaceReason ?? currentPlace.samePlaceReason,
+    verificationDecision:
+      input.verificationDecision ?? currentPlace.verificationDecision,
+    verificationSource: input.verificationSource ?? currentPlace.verificationSource,
+    nameScore: input.nameScore ?? currentPlace.nameScore,
+    addressScore: input.addressScore ?? currentPlace.addressScore,
+    cityScore: input.cityScore ?? currentPlace.cityScore,
+    districtScore: input.districtScore ?? currentPlace.districtScore,
+    countryScore: input.countryScore ?? currentPlace.countryScore,
+    ambiguityScore: input.ambiguityScore ?? currentPlace.ambiguityScore,
     latitude: input.latitude,
     longitude: input.longitude,
     verifiedStatus: input.verifiedStatus,

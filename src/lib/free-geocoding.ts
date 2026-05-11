@@ -3,6 +3,14 @@ import { dirname, join } from "node:path";
 
 import type { CoordinateConfidence, CoordinatePrecision } from "@/lib/place";
 
+export type FreeGeocodingCounters = {
+  blockedByLiveDisabled: number;
+  blockedByMaxLiveCalls: number;
+  cacheHits: number;
+  cacheMisses: number;
+  freeGeocodingCalls: number;
+};
+
 export type FreeGeocodeCandidate = {
   address: string;
   confidence: CoordinateConfidence;
@@ -44,8 +52,17 @@ function writeCache(cache: FreeGeocodeCache, cachePath = DEFAULT_CACHE_PATH) {
 }
 
 export class FreeGeocodingAccess {
+  readonly counters: FreeGeocodingCounters = {
+    blockedByLiveDisabled: 0,
+    blockedByMaxLiveCalls: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+    freeGeocodingCalls: 0,
+  };
+
   private readonly cachePath: string;
   private readonly liveEnabled: boolean;
+  private readonly maxLiveCalls: number;
   private readonly minIntervalMs: number;
   private cache: FreeGeocodeCache;
   private lastLiveCallAt = 0;
@@ -53,20 +70,31 @@ export class FreeGeocodingAccess {
   constructor({
     cachePath = DEFAULT_CACHE_PATH,
     liveEnabled = false,
+    maxLiveCalls = 25,
     minIntervalMs = 1100,
   }: {
     cachePath?: string;
     liveEnabled?: boolean;
+    maxLiveCalls?: number;
     minIntervalMs?: number;
   } = {}) {
     this.cachePath = cachePath;
     this.liveEnabled = liveEnabled;
+    this.maxLiveCalls = maxLiveCalls;
     this.minIntervalMs = minIntervalMs;
     this.cache = readCache(cachePath);
   }
 
   getCachedOsmCandidates(query: string) {
-    return this.cache.osm[normalizeKey(query)] ?? null;
+    const cached = this.cache.osm[normalizeKey(query)];
+
+    if (cached) {
+      this.counters.cacheHits += 1;
+      return cached;
+    }
+
+    this.counters.cacheMisses += 1;
+    return null;
   }
 
   async searchOsm(query: string, fetcher: typeof fetch = fetch) {
@@ -74,10 +102,19 @@ export class FreeGeocodingAccess {
     const cached = this.cache.osm[key];
 
     if (cached) {
+      this.counters.cacheHits += 1;
       return cached;
     }
 
+    this.counters.cacheMisses += 1;
+
     if (!this.liveEnabled) {
+      this.counters.blockedByLiveDisabled += 1;
+      return null;
+    }
+
+    if (this.counters.freeGeocodingCalls + 1 > this.maxLiveCalls) {
+      this.counters.blockedByMaxLiveCalls += 1;
       return null;
     }
 
@@ -92,6 +129,7 @@ export class FreeGeocodingAccess {
     url.searchParams.set("limit", "3");
     url.searchParams.set("q", query);
 
+    this.counters.freeGeocodingCalls += 1;
     const response = await fetcher(url, {
       headers: {
         "User-Agent": "travel-map-admin/1.0 (local coordinate QA)",
