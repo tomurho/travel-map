@@ -5208,6 +5208,24 @@
     "verificationSource": "text_search"
   },
   {
+    "id": "taipei-fa-burger-no-172-section-1-da-an-rd-da-an-district-taipei-city-taiwan-106",
+    "name": "Fa Burger",
+    "city": "Taipei",
+    "category": "Burger",
+    "status": "location",
+    "loved": null,
+    "district": "Da’an",
+    "address": "No. 172號, Section 1, Da'an Rd, Da’an District, Taipei City, Taiwan 106",
+    "latitude": 25.0364984,
+    "longitude": 121.5458924,
+    "tabelog": "",
+    "subway": "",
+    "googleMapsUrl": "https://maps.app.goo.gl/uB4qbYhnCps5sMAv5",
+    "verifiedStatus": "",
+    "lastChecked": "",
+    "verificationNotes": ""
+  },
+  {
     "id": "fika-fika-shiu-xiang-no-33-yitong-st-zhongshan-district-taipei-city-104",
     "name": "Fika Fika Shiu Xiang",
     "city": "Taipei",
@@ -7741,6 +7759,24 @@
     "verificationSource": "text_search"
   },
   {
+    "id": "taipei-yo-sushi-no-14-1-lane-126-section-1-zhongshan-n-rd-zhongshan-district-tai",
+    "name": "Yo Sushi",
+    "city": "Taipei",
+    "category": "Sushi",
+    "status": "location",
+    "loved": null,
+    "district": "Zhongshan",
+    "address": "No. 14-1, Lane 126, Section 1, Zhongshan N Rd, Zhongshan District, Taipei City, Taiwan 10491",
+    "latitude": 25.0509348,
+    "longitude": 121.52134909999998,
+    "tabelog": "",
+    "subway": "",
+    "googleMapsUrl": "https://maps.app.goo.gl/4yShxk5EDxi9hUSq5",
+    "verifiedStatus": "",
+    "lastChecked": "",
+    "verificationNotes": ""
+  },
+  {
     "id": "yong-kang-15-shaved-ice-no-15-yongkang-st-daan-district-taipei-city-106",
     "name": "Yong Kang 15 – Shaved Ice",
     "city": "Taipei",
@@ -8074,6 +8110,24 @@
     "samePlaceReason": "Google candidate matched with nameScore 0.6, addressScore 0.875, cityScore 1, countryScore 1, and distance 162m. The candidate came from Google Place ID, so stored coordinates are treated as derived data.",
     "verificationDecision": "auto_corrected_from_place_id",
     "verificationSource": "place_id"
+  },
+  {
+    "id": "taipei-106-taiwan-taipei-city-da-an-district-section-1-fuxing-s-rd-267-25-035872",
+    "name": "周記切仔麵",
+    "city": "Taipei",
+    "category": "Taiwanese restaurant",
+    "status": "location",
+    "loved": null,
+    "district": "Da’an",
+    "address": "106, Taiwan, Taipei City, Da’an District, Section 1, Fuxing S Rd, 267號一樓",
+    "latitude": 25.035872599999998,
+    "longitude": 121.543848,
+    "tabelog": "",
+    "subway": "",
+    "googleMapsUrl": "https://maps.app.goo.gl/3hXrYFYFnA1BV2KVA",
+    "verifiedStatus": "",
+    "lastChecked": "",
+    "verificationNotes": ""
   },
   {
     "id": "no-28-lane-11-leli-rd-daan-district-taipei-city-106",
@@ -9024,6 +9078,24 @@
     "samePlaceReason": "Google Places candidates were too weak, ambiguous, or mismatched for automatic verification.",
     "verificationDecision": "candidate_only_review",
     "verificationSource": "text_search"
+  },
+  {
+    "id": "taipei-no-7-1-lane-51-section-1-da-an-rd-da-an-district-taipei-city-taiwan-106-2",
+    "name": "旺旺雞養生土雞湯",
+    "city": "Taipei",
+    "category": "Taiwanese restaurant",
+    "status": "location",
+    "loved": null,
+    "district": "Da’an",
+    "address": "No. 7-1號, Lane 51, Section 1, Da'an Rd, Da’an District, Taipei City, Taiwan 106",
+    "latitude": 25.043208099999998,
+    "longitude": 121.54658669999999,
+    "tabelog": "",
+    "subway": "",
+    "googleMapsUrl": "https://maps.app.goo.gl/ePtbthA7VYnKm5ff9",
+    "verifiedStatus": "",
+    "lastChecked": "",
+    "verificationNotes": ""
   },
   {
     "id": "shun-restaurant-no-490-changchun-rd-songshan-district-taipei-city-taiwan-105",
@@ -10634,6 +10706,24 @@
     "samePlaceReason": "Google candidate matched with nameScore 0.75, addressScore 0.818, cityScore 1, countryScore 1, and distance 470m. The candidate came from Google Place ID, so stored coordinates are treated as derived data.",
     "verificationDecision": "auto_corrected_from_place_id",
     "verificationSource": "place_id"
+  },
+  {
+    "id": "taipei-machi-machi-106-taiwan-taipei-city-da-an-district-lane-51-section-1-da-an",
+    "name": "麥吉machi machi",
+    "city": "Taipei",
+    "category": "Tea shop",
+    "status": "location",
+    "loved": null,
+    "district": "Da’an",
+    "address": "106, Taiwan, Taipei City, Da’an District, Lane 51, Section 1, Da'an Rd, 16號一樓",
+    "latitude": 25.0430259,
+    "longitude": 121.5467882,
+    "tabelog": "",
+    "subway": "",
+    "googleMapsUrl": "https://maps.app.goo.gl/LfFUQJyxZVpuMACCA",
+    "verifiedStatus": "",
+    "lastChecked": "",
+    "verificationNotes": ""
   },
   {
     "id": "251-no-251-section-1-daan-rd-daan-district-taipei-city-106",
