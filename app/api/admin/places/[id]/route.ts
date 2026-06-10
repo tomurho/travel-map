@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  deleteProductionPlace,
   type AdminProductionPlaceVerificationInput,
   updateProductionPlaceVerification,
 } from "@/lib/admin-staging";
@@ -29,6 +30,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const input = (await request.json()) as AdminProductionPlaceVerificationInput;
   const result = updateProductionPlaceVerification(decodeURIComponent(id), input);
+
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+
+  return NextResponse.json(result);
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "Admin access required." }, { status: 401 });
+  }
+
+  const { id } = await context.params;
+  const result = deleteProductionPlace(decodeURIComponent(id));
 
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });

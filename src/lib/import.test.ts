@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { filterPlaces } from "@/lib/filtering";
 import { formatProviderAttemptSummary } from "@/lib/admin-ui";
@@ -37,6 +38,14 @@ import {
   useCanonicalAddress,
   validatePlaceVerification,
 } from "@/lib/place-verification";
+import {
+  getCityAuditReport,
+  parseArgs,
+  readSelectedNames,
+  selectPlacesForAudit,
+  shouldUseGoogleCacheOnly,
+  shouldWriteCandidateOutput,
+} from "../../scripts/verify-places-google";
 
 function makePlace(overrides: Partial<Place> = {}): Place {
   return {
@@ -2115,6 +2124,149 @@ test("city-wide live Google Places runs are blocked without force", () => {
   );
 });
 
+test("city audit report counts verification readiness without live calls", () => {
+  const report = getCityAuditReport([
+    makePlace({
+      name: "Verified",
+      verifiedStatus: "Yes",
+      googlePlaceId: "ChIJverified",
+      verifiedLatitude: 25.1,
+      verifiedLongitude: 121.5,
+    }),
+    makePlace({
+      id: "review-place",
+      name: "Review",
+      verifiedStatus: "Review",
+      canonicalName: "Review Candidate",
+      googleMapsUrl: "https://maps.google.com/?cid=123",
+    }),
+    makePlace({
+      id: "unverified-place",
+      name: "Unverified",
+      verifiedStatus: "No",
+      address: "1 Test Street",
+    }),
+  ]);
+
+  assert.equal(report.totalRows, 3);
+  assert.equal(report.verifiedRows, 1);
+  assert.equal(report.reviewRows, 1);
+  assert.equal(report.unverifiedRows, 1);
+  assert.equal(report.rowsWithGooglePlaceId, 1);
+  assert.equal(report.rowsWithGoogleMapsUrl, 1);
+  assert.equal(report.rowsWithCachedCandidateMetadata, 2);
+  assert.equal(report.rowsWithNoCandidateMetadata, 1);
+  assert.equal(report.eligibleForCacheOnlyVerification, 1);
+  assert.equal(report.eligibleForFreeGeocodingAttempt, 1);
+  assert.equal(report.rowsThatWouldRequireGoogleLiveLookup, 1);
+  assert.equal(report.estimatedMaxGoogleCallsIfLiveEnabled > 0, true);
+});
+
+test("verify CLI cache-only and free-only modes keep Google cache-only", () => {
+  assert.equal(
+    shouldUseGoogleCacheOnly(parseArgs(["--dry-run", "--cache-only", "--city", "Tokyo"])),
+    true,
+  );
+  assert.equal(
+    shouldUseGoogleCacheOnly(parseArgs(["--dry-run", "--free-only", "--city", "Tokyo"])),
+    true,
+  );
+});
+
+test("verify CLI only-review limits rows processed", () => {
+  const places = [
+    makePlace({ id: "verified", name: "Verified", city: "Tokyo", verifiedStatus: "Yes" }),
+    makePlace({ id: "review", name: "Review", city: "Tokyo", verifiedStatus: "Review" }),
+    makePlace({ id: "unverified", name: "Unverified", city: "Tokyo", verifiedStatus: "No" }),
+  ];
+  const selected = selectPlacesForAudit(
+    places,
+    parseArgs(["--city", "Tokyo", "--only-review"]),
+  );
+
+  assert.deepEqual(
+    selected.map((place) => place.id),
+    ["review"],
+  );
+});
+
+test("verify CLI only-unverified limits rows processed", () => {
+  const places = [
+    makePlace({ id: "verified", name: "Verified", city: "Tokyo", verifiedStatus: "Yes" }),
+    makePlace({ id: "review", name: "Review", city: "Tokyo", verifiedStatus: "Review" }),
+    makePlace({ id: "unverified", name: "Unverified", city: "Tokyo", verifiedStatus: "No" }),
+  ];
+  const selected = selectPlacesForAudit(
+    places,
+    parseArgs(["--city", "Tokyo", "--only-unverified"]),
+  );
+
+  assert.deepEqual(
+    selected.map((place) => place.id),
+    ["unverified"],
+  );
+});
+
+test("verify CLI names-file limits rows processed", async () => {
+  const namesPath = join("/private/tmp", `selected-google-lookups-${Date.now()}.txt`);
+  writeFileSync(namesPath, "Selected One\n# ignored\nSelected Two\n");
+  const options = parseArgs(["--city", "Tokyo", "--names-file", namesPath]);
+  const names = await readSelectedNames(options);
+  const selected = selectPlacesForAudit(
+    [
+      makePlace({ id: "one", name: "Selected One", city: "Tokyo" }),
+      makePlace({ id: "two", name: "Selected Two", city: "Tokyo" }),
+      makePlace({ id: "three", name: "Not Selected", city: "Tokyo" }),
+    ],
+    options,
+    names,
+  );
+
+  assert.deepEqual(
+    selected.map((place) => place.id),
+    ["one", "two"],
+  );
+});
+
+test("verify CLI report-only and no-write never write", () => {
+  assert.equal(
+    shouldWriteCandidateOutput(parseArgs(["--write-candidates", "--report-only"])),
+    false,
+  );
+  assert.equal(
+    shouldWriteCandidateOutput(parseArgs(["--write-candidates", "--no-write"])),
+    false,
+  );
+  assert.equal(
+    shouldWriteCandidateOutput(parseArgs(["--write-candidates", "--dry-run"])),
+    false,
+  );
+});
+
+test("verify CLI write mode only changes selected rows", () => {
+  const options = parseArgs([
+    "--write-candidates",
+    "--city",
+    "Tokyo",
+    "--name",
+    "Selected",
+  ]);
+  const selected = selectPlacesForAudit(
+    [
+      makePlace({ id: "selected", name: "Selected", city: "Tokyo" }),
+      makePlace({ id: "other", name: "Other", city: "Tokyo" }),
+    ],
+    options,
+    new Set(["Selected"]),
+  );
+
+  assert.equal(shouldWriteCandidateOutput(options), true);
+  assert.deepEqual(
+    selected.map((place) => place.id),
+    ["selected"],
+  );
+});
+
 test("public map details lookup is disabled by default to avoid paid Places calls", () => {
   assert.equal(publicPlaceDetailsLookupEnabled, false);
 });
@@ -2136,4 +2288,38 @@ test("admin provider attempts are summarized for the main QA view", () => {
     ]),
     "cache: miss. google_places: blocked",
   );
+});
+
+test("admin place management renders three-pane controls", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/components/admin-workflow.tsx"),
+    "utf8",
+  );
+
+  assert.match(source, /Admin \/ Place Management/);
+  assert.match(source, /admin-places-pane/);
+  assert.match(source, /admin-editor-pane/);
+  assert.match(source, /admin-verification-flow/);
+  assert.match(source, /type="search"/);
+  assert.match(source, /Add Place/);
+  assert.match(source, /Basic info/);
+  assert.match(source, /Location source/);
+  assert.match(source, /Current saved pin/);
+  assert.match(source, /Candidate match/);
+  assert.match(source, /Copy candidate pin/);
+  assert.match(source, /Mark saved pin verified/);
+});
+
+test("admin verification debug details stay collapsed and candidates stay selectable", () => {
+  const source = readFileSync(
+    join(process.cwd(), "src/components/admin-workflow.tsx"),
+    "utf8",
+  );
+
+  assert.match(source, /<details className="admin-technical-details">/);
+  assert.doesNotMatch(source, /<details className="admin-technical-details" open/);
+  assert.match(source, /admin-candidate-option/);
+  assert.match(source, /Use this candidate/);
+  assert.match(source, /useProductionCandidate/);
+  assert.match(source, /acceptProductionCandidateCoordinates/);
 });

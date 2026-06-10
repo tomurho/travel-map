@@ -7,13 +7,18 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "enrich:places": "tsx scripts/enrich-places-from-sheet.ts",
     "import:places": "tsx scripts/import-places.ts",
+    "publish:places": "tsx scripts/publish-places-from-sheet.ts",
+    "sync:published:places": "tsx scripts/sync-published-places-to-json.ts",
     "verify:places": "tsx scripts/verify-places-google.ts",
     "repair:hcmc:places": "pnpm verify:places -- --city \"Ho Chi Minh City\" --cache-only --write-candidates --apply-auto-decisions --output src/data/places.json",
     "test": "node --import tsx --test src/lib/import.test.ts"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",
+    "dotenv": "^17.4.2",
+    "google-auth-library": "^10.7.0",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^5.3.0",
     "next": "^16.0.0",

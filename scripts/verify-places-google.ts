@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 import {
   FreeGeocodingAccess,
@@ -56,6 +57,7 @@ type CliOptions = {
   coordinateReportJson: boolean;
   debug: boolean;
   dryRun: boolean;
+  freeOnly: boolean;
   force: boolean;
   inputPath: string;
   limit: number | null;
@@ -63,8 +65,13 @@ type CliOptions = {
   monthlyBudgetUsd: number;
   estimatedCostPerCallUsd: number;
   name: string | null;
+  namesFile: string | null;
+  noWrite: boolean;
+  onlyReview: boolean;
+  onlyUnverified: boolean;
   outputPath: string;
   help: boolean;
+  reportOnly: boolean;
   writeCandidates: boolean;
 };
 
@@ -84,7 +91,7 @@ type VerificationSummary = {
   safeCoordinateUpdatesApplied: number;
 };
 
-function parseArgs(argv: string[]): CliOptions {
+export function parseArgs(argv: string[]): CliOptions {
   const today = formatDateForInput(new Date());
   const options: CliOptions = {
     applySafeCoordinateUpdates: false,
@@ -95,6 +102,7 @@ function parseArgs(argv: string[]): CliOptions {
     coordinateReportJson: false,
     debug: false,
     dryRun: false,
+    freeOnly: false,
     force: false,
     inputPath: path.join(process.cwd(), "src/data/places.json"),
     limit: null,
@@ -102,12 +110,17 @@ function parseArgs(argv: string[]): CliOptions {
     monthlyBudgetUsd: 5,
     estimatedCostPerCallUsd: 0.02,
     name: null,
+    namesFile: null,
+    noWrite: false,
+    onlyReview: false,
+    onlyUnverified: false,
     outputPath: path.join(
       process.cwd(),
       "outputs",
       `google-places-candidates-${today}.json`,
     ),
     help: false,
+    reportOnly: false,
     writeCandidates: false,
   };
 
@@ -120,6 +133,8 @@ function parseArgs(argv: string[]): CliOptions {
       options.dryRun = true;
     } else if (arg === "--cache-only") {
       options.cacheOnly = true;
+    } else if (arg === "--free-only") {
+      options.freeOnly = true;
     } else if (arg === "--confirm-live-api") {
       options.confirmLiveApi = true;
     } else if (arg === "--debug") {
@@ -134,6 +149,17 @@ function parseArgs(argv: string[]): CliOptions {
       options.applyAutoDecisions = true;
     } else if (arg === "--force") {
       options.force = true;
+    } else if (arg === "--report-only") {
+      options.reportOnly = true;
+      options.dryRun = true;
+      options.noWrite = true;
+    } else if (arg === "--no-write") {
+      options.noWrite = true;
+      options.dryRun = true;
+    } else if (arg === "--only-review") {
+      options.onlyReview = true;
+    } else if (arg === "--only-unverified") {
+      options.onlyUnverified = true;
     } else if (arg === "--input") {
       options.inputPath = path.resolve(argv[index + 1] ?? options.inputPath);
       index += 1;
@@ -164,6 +190,9 @@ function parseArgs(argv: string[]): CliOptions {
     } else if (arg === "--name") {
       options.name = argv[index + 1] ?? null;
       index += 1;
+    } else if (arg === "--names-file") {
+      options.namesFile = path.resolve(argv[index + 1] ?? "");
+      index += 1;
     }
   }
 
@@ -174,22 +203,254 @@ function printHelp() {
   console.log(`Google Places verifier
 
 Safety defaults:
-  --dry-run does not write data. It does not call Google unless --confirm-live-api is present.
+  Default runs do not make live Google calls and do not write output.
+  --dry-run, --report-only, and --no-write never write data.
   --cache-only makes zero live Google calls and uses .cache/google-places-cache.json only.
-  Free geocoding live calls are also disabled unless FREE_GEOCODING_LIVE_ENABLED=true.
+  --free-only allows cache + free geocoding only. Live free geocoding still requires FREE_GEOCODING_LIVE_ENABLED=true.
   Live Google calls require --confirm-live-api and --max-api-calls N.
   City-wide live runs over 25 rows also require --force.
+  Use --name or --names-file for selected Google lookups.
   Budget estimate defaults to $5/month and $0.02/call unless overridden.
 
 Examples:
-  pnpm verify:places -- --dry-run --cache-only --city "Taipei"
-  pnpm verify:places -- --dry-run --city "Taipei" --name "Ironwood coffee" --confirm-live-api --max-api-calls 5
-  GOOGLE_PLACES_LIVE_ENABLED=true pnpm verify:places -- --dry-run --city "Taipei" --confirm-live-api --max-api-calls 100 --force --monthly-budget-usd 5
+  Zero-cost city report:
+  pnpm verify:places -- --dry-run --cache-only --city "Tokyo"
+
+  Free-only city audit:
+  FREE_GEOCODING_LIVE_ENABLED=true GOOGLE_PLACES_LIVE_ENABLED=false pnpm verify:places -- --dry-run --free-only --city "Tokyo" --limit 25
+
+  Selected Google lookup:
+  GOOGLE_PLACES_LIVE_ENABLED=true pnpm verify:places -- --dry-run --city "Tokyo" --name "PLACE NAME" --confirm-live-api --max-api-calls 5
+
+  Selected names file:
+  GOOGLE_PLACES_LIVE_ENABLED=true pnpm verify:places -- --dry-run --city "Tokyo" --names-file selected-google-lookups.txt --confirm-live-api --max-api-calls 25 --force
 `);
 }
 
 function estimateMaxTextSearchCalls(places: Place[]) {
   return places.reduce((total, place) => total + getSearchAttempts(place).length, 0);
+}
+
+function estimateMaxGoogleCalls(places: Place[]) {
+  const placeDetailsCandidates = places.filter(
+    (place) => place.googlePlaceId?.trim() || place.googleMapsUrl?.trim(),
+  ).length;
+  const urlExpansionAttempts = places.filter(
+    (place) =>
+      place.googleMapsUrl?.trim() &&
+      !extractGooglePlaceIdFromUrl(place.googleMapsUrl),
+  ).length;
+
+  return estimateMaxTextSearchCalls(places) + placeDetailsCandidates + urlExpansionAttempts;
+}
+
+function hasCandidateMetadata(place: Place) {
+  return Boolean(
+    place.verifiedLatitude !== undefined ||
+      place.verifiedLongitude !== undefined ||
+      place.canonicalName ||
+      place.canonicalAddress ||
+      place.candidateCoordinateSource ||
+      place.verificationDecision ||
+      place.verificationSource,
+  );
+}
+
+function isVerified(place: Place) {
+  return place.verifiedStatus === "Yes";
+}
+
+function isReview(place: Place) {
+  return place.verifiedStatus === "Review";
+}
+
+function isUnverified(place: Place) {
+  return !isVerified(place) && !isReview(place);
+}
+
+export async function readSelectedNames(options: CliOptions) {
+  const names = new Set<string>();
+
+  if (options.name?.trim()) {
+    names.add(options.name.trim());
+  }
+
+  if (options.namesFile) {
+    const content = await fs.readFile(options.namesFile, "utf8");
+
+    for (const line of content.split(/\r?\n/)) {
+      const name = line.trim();
+
+      if (name && !name.startsWith("#")) {
+        names.add(name);
+      }
+    }
+  }
+
+  return names;
+}
+
+export function selectPlacesForAudit(
+  places: Place[],
+  options: CliOptions,
+  selectedNames: Set<string> = new Set(),
+) {
+  let selectedPlaces = options.city
+    ? places.filter(
+        (place) =>
+          place.city.localeCompare(options.city ?? "", undefined, {
+            sensitivity: "accent",
+          }) === 0,
+      )
+    : places;
+
+  if (selectedNames.size > 0) {
+    selectedPlaces = selectedPlaces.filter((place) => selectedNames.has(place.name));
+  }
+
+  if (options.onlyReview) {
+    selectedPlaces = selectedPlaces.filter(isReview);
+  }
+
+  if (options.onlyUnverified) {
+    selectedPlaces = selectedPlaces.filter(isUnverified);
+  }
+
+  return options.limit === null ? selectedPlaces : selectedPlaces.slice(0, options.limit);
+}
+
+export type CityAuditReport = {
+  eligibleForCacheOnlyVerification: number;
+  eligibleForFreeGeocodingAttempt: number;
+  estimatedMaxGoogleCallsIfLiveEnabled: number;
+  reviewRows: number;
+  rowsThatWouldRequireGoogleLiveLookup: number;
+  rowsWithCachedCandidateMetadata: number;
+  rowsWithGoogleMapsUrl: number;
+  rowsWithGooglePlaceId: number;
+  rowsWithNoCandidateMetadata: number;
+  totalRows: number;
+  unverifiedRows: number;
+  verifiedRows: number;
+};
+
+export function getCityAuditReport(places: Place[]): CityAuditReport {
+  const rowsWithCachedCandidateMetadata = places.filter(hasCandidateMetadata).length;
+  const rowsWithGooglePlaceId = places.filter((place) =>
+    Boolean(place.googlePlaceId?.trim()),
+  ).length;
+  const rowsWithGoogleMapsUrl = places.filter((place) =>
+    Boolean(place.googleMapsUrl?.trim()),
+  ).length;
+  const rowsWithNoCandidateMetadata = places.length - rowsWithCachedCandidateMetadata;
+  const eligibleForCacheOnlyVerification = places.filter(
+    (place) => !isVerified(place) && hasCandidateMetadata(place),
+  ).length;
+  const eligibleForFreeGeocodingAttempt = places.filter(
+    (place) =>
+      !hasCandidateMetadata(place) &&
+      Boolean(place.name.trim()) &&
+      Boolean((place.address || place.district || place.city).trim()),
+  ).length;
+  const rowsThatWouldRequireGoogleLiveLookup = rowsWithNoCandidateMetadata;
+
+  return {
+    eligibleForCacheOnlyVerification,
+    eligibleForFreeGeocodingAttempt,
+    estimatedMaxGoogleCallsIfLiveEnabled: estimateMaxGoogleCalls(places),
+    reviewRows: places.filter(isReview).length,
+    rowsThatWouldRequireGoogleLiveLookup,
+    rowsWithCachedCandidateMetadata,
+    rowsWithGoogleMapsUrl,
+    rowsWithGooglePlaceId,
+    rowsWithNoCandidateMetadata,
+    totalRows: places.length,
+    unverifiedRows: places.filter(isUnverified).length,
+    verifiedRows: places.filter(isVerified).length,
+  };
+}
+
+function printCityAuditReport(places: Place[], options: CliOptions) {
+  console.log("\nCity audit report");
+  console.table({
+    city: options.city ?? "all",
+    ...getCityAuditReport(places),
+  });
+}
+
+export function shouldWriteCandidateOutput(options: CliOptions) {
+  return options.writeCandidates && !options.dryRun && !options.reportOnly && !options.noWrite;
+}
+
+export function shouldUseGoogleCacheOnly(options: CliOptions) {
+  return options.cacheOnly || options.freeOnly || !options.confirmLiveApi;
+}
+
+function assertWriteScopeIsSelected(options: CliOptions, selectedNames: Set<string>) {
+  if (!shouldWriteCandidateOutput(options)) {
+    return;
+  }
+
+  if (selectedNames.size === 0 && options.limit === null) {
+    throw new Error(
+      "Write mode requires --name, --names-file, or --limit so changes are selected explicitly.",
+    );
+  }
+}
+
+function printRowsThatWillChange(
+  originalPlacesById: Map<string, Place>,
+  places: Place[],
+) {
+  const changedRows = places
+    .map((place) => {
+      const originalPlace = originalPlacesById.get(place.id);
+
+      if (!originalPlace) {
+        return null;
+      }
+
+      const changedFields = [
+        originalPlace.latitude !== place.latitude ||
+        originalPlace.longitude !== place.longitude
+          ? "coordinates"
+          : null,
+        originalPlace.verifiedStatus !== place.verifiedStatus
+          ? "verifiedStatus"
+          : null,
+        originalPlace.googlePlaceId !== place.googlePlaceId ? "googlePlaceId" : null,
+        originalPlace.googleMapsUrl !== place.googleMapsUrl ? "googleMapsUrl" : null,
+        originalPlace.verifiedLatitude !== place.verifiedLatitude ||
+        originalPlace.verifiedLongitude !== place.verifiedLongitude
+          ? "candidateCoordinates"
+          : null,
+        originalPlace.verificationDecision !== place.verificationDecision
+          ? "verificationDecision"
+          : null,
+      ].filter(Boolean);
+
+      if (changedFields.length === 0) {
+        return null;
+      }
+
+      return {
+        city: place.city,
+        name: place.name,
+        changedFields: changedFields.join(", "),
+        verificationDecision: place.verificationDecision ?? "",
+        verificationSource: place.verificationSource ?? "",
+        samePlaceReason: place.samePlaceReason ?? "",
+      };
+    })
+    .filter((row) => row !== null);
+
+  if (changedRows.length === 0) {
+    console.log("\nRows that will change: none");
+    return;
+  }
+
+  console.log("\nRows that will change before writing");
+  console.table(changedRows);
 }
 
 function printPreRunEstimate(input: {
@@ -1043,35 +1304,26 @@ async function main() {
 
   const rawPlaces = await fs.readFile(options.inputPath, "utf8");
   const places = JSON.parse(rawPlaces) as Place[];
-  const cityFilteredPlaces = options.city
-    ? places.filter(
-        (place) =>
-          place.city.localeCompare(options.city ?? "", undefined, {
-            sensitivity: "accent",
-          }) === 0,
-      )
-    : places;
-  const nameFilteredPlaces = options.name
-    ? cityFilteredPlaces.filter(
-        (place) =>
-          place.name.localeCompare(options.name ?? "", undefined, {
-            sensitivity: "accent",
-          }) === 0,
-      )
-    : cityFilteredPlaces;
-  const placesToProcess =
-    options.limit === null
-      ? nameFilteredPlaces
-      : nameFilteredPlaces.slice(0, options.limit);
-  const liveCallsRequested = options.confirmLiveApi && !options.cacheOnly;
+  const selectedNames = await readSelectedNames(options);
+  const placesToProcess = selectPlacesForAudit(places, options, selectedNames);
+  const liveCallsRequested =
+    options.confirmLiveApi && !options.cacheOnly && !options.freeOnly;
+
+  assertWriteScopeIsSelected(options, selectedNames);
+  printCityAuditReport(placesToProcess, options);
 
   printPreRunEstimate({
-    freeLiveEnabled,
+    freeLiveEnabled: options.freeOnly && freeLiveEnabled,
     liveEnabled,
     maxApiCalls: options.maxApiCalls,
     options,
     placesToProcess,
   });
+
+  if (options.reportOnly) {
+    console.log("Report-only mode: no verification run and no file writes.");
+    return;
+  }
 
   if (liveCallsRequested && !apiKey) {
     throw new Error(
@@ -1093,13 +1345,13 @@ async function main() {
   });
 
   const access = new GooglePlacesAccess({
-    cacheOnly: options.cacheOnly || !options.confirmLiveApi,
+    cacheOnly: shouldUseGoogleCacheOnly(options),
     confirmLiveApi: options.confirmLiveApi,
     liveEnabled,
     maxApiCalls: options.maxApiCalls,
   });
   const freeAccess = new FreeGeocodingAccess({
-    liveEnabled: freeLiveEnabled && !options.cacheOnly,
+    liveEnabled: options.freeOnly && freeLiveEnabled && !options.cacheOnly,
     maxLiveCalls: Math.min(25, placesToProcess.length * 3),
   });
   const today = new Date();
@@ -1141,6 +1393,30 @@ async function main() {
             `Free geocoding query "${freeResult.query}" returned ${freeResult.candidate.latitude}, ${freeResult.candidate.longitude}`,
           );
         }
+        continue;
+      }
+
+      if (options.freeOnly) {
+        const failedPlace: Place = {
+          ...place,
+          lastChecked: formatDateForInput(today),
+          verifiedStatus: "Review",
+          samePlaceDecision: "Unsure",
+          samePlaceReason:
+            "Free-only run found no cached/free geocoding candidate. Google Places was not called.",
+          verificationDecision: "no_candidate_found",
+          verificationSource: place.verificationSource ?? "free_geocoding",
+          verificationNotes: place.verificationNotes
+            ? `${place.verificationNotes}\nFree-only run found no candidate.`
+            : "Free-only run found no candidate.",
+        };
+
+        updatedById.set(place.id, failedPlace);
+        summary.rowsProcessed += 1;
+        summary.rowsNeedingReview += 1;
+        console.log(
+          `${index + 1}/${placesToProcess.length} ${place.city} - ${place.name}: free_only_no_candidate`,
+        );
         continue;
       }
 
@@ -1254,12 +1530,13 @@ async function main() {
     printGoogleMapsUrlReviewRows(processedNextPlaces);
   }
 
-  if (options.writeCandidates && !options.dryRun) {
+  if (shouldWriteCandidateOutput(options)) {
     if (options.applyAutoDecisions) {
       assertAutoDecisionSafetyGate(processedNextPlaces, { force: options.force });
     }
 
     assertCoordinateAuditFields(originalPlacesById, processedNextPlaces);
+    printRowsThatWillChange(originalPlacesById, processedNextPlaces);
 
     await fs.mkdir(path.dirname(options.outputPath), { recursive: true });
     await fs.writeFile(
@@ -1269,12 +1546,14 @@ async function main() {
     console.log(`Candidate output written to ${options.outputPath}`);
   } else {
     console.log(
-      "No file written. Pass --write-candidates to write candidate output JSON.",
+      "No file written. Pass --write-candidates without --dry-run/--report-only/--no-write to write selected candidate output JSON.",
     );
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

@@ -84,6 +84,7 @@ export interface Place {
   verifiedStatus?: PlaceVerifiedStatus;
   lastChecked?: string;
   verificationNotes?: string;
+  notes?: string[] | string;
 }
 
 export interface PlaceFilterState {
@@ -124,4 +125,35 @@ export function hasMaterialCanonicalAddressDifference(
     normalizeAddressForComparison(address) !==
     normalizeAddressForComparison(canonicalAddress)
   );
+}
+
+export function getGoogleMapsHandoffUrl(
+  place: Pick<Place, "address" | "googleMapsUrl" | "latitude" | "longitude" | "name">,
+) {
+  if (place.googleMapsUrl?.trim()) {
+    return place.googleMapsUrl;
+  }
+
+  const query = [place.name, place.address].filter(Boolean).join(", ");
+
+  if (query.trim()) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  }
+
+  return `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`;
+}
+
+export function getPublicNotes(place: Pick<Place, "notes">) {
+  if (Array.isArray(place.notes)) {
+    return place.notes.map((note) => note.trim()).filter(Boolean);
+  }
+
+  if (typeof place.notes === "string") {
+    return place.notes
+      .split("\n")
+      .map((note) => note.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 }

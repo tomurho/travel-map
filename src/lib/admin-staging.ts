@@ -63,6 +63,12 @@ export interface AdminStagedPlaceInput {
 }
 
 export interface AdminProductionPlaceVerificationInput {
+  name?: string;
+  city?: string;
+  category?: string;
+  status?: Place["status"];
+  loved?: Place["loved"];
+  district?: string;
   address?: string;
   addressScore?: number;
   ambiguityScore?: number;
@@ -80,6 +86,7 @@ export interface AdminProductionPlaceVerificationInput {
   googlePlaceId?: string;
   latitude: number | null;
   longitude: number | null;
+  notes?: string[];
   matchConfidence?: number;
   nameScore?: number;
   samePlaceDecision?: Place["samePlaceDecision"];
@@ -674,6 +681,12 @@ export function updateProductionPlaceVerification(
 
   const updatedPlace: Place = {
     ...currentPlace,
+    name: input.name?.trim() || currentPlace.name,
+    city: input.city?.trim() || currentPlace.city,
+    category: input.category?.trim() || currentPlace.category,
+    status: input.status ?? currentPlace.status,
+    loved: input.loved ?? currentPlace.loved,
+    district: input.district?.trim() || currentPlace.district,
     address: input.address?.trim() || currentPlace.address,
     googleMapsUrl: input.googleMapsUrl.trim(),
     googlePlaceId: input.googlePlaceId ?? currentPlace.googlePlaceId,
@@ -704,6 +717,7 @@ export function updateProductionPlaceVerification(
     ambiguityScore: input.ambiguityScore ?? currentPlace.ambiguityScore,
     latitude: input.latitude,
     longitude: input.longitude,
+    notes: input.notes ?? currentPlace.notes,
     verifiedStatus: input.verifiedStatus,
     lastChecked: input.lastChecked.trim(),
     verificationNotes: input.verificationNotes.trim(),
@@ -715,6 +729,21 @@ export function updateProductionPlaceVerification(
   writeFileSync(PLACES_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
 
   return { place: updatedPlace, places: nextPlaces };
+}
+
+export function deleteProductionPlace(id: string) {
+  const currentPlaces = readProductionPlaces();
+  const placeToDelete = currentPlaces.find((place) => place.id === id);
+
+  if (!placeToDelete) {
+    return { error: "Production place was not found." };
+  }
+
+  const nextPlaces = currentPlaces.filter((place) => place.id !== id);
+
+  writeFileSync(PLACES_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
+
+  return { place: placeToDelete, places: nextPlaces };
 }
 
 export function stagedPlacesToWorkbookBuffer(places: AdminStagedPlace[]) {

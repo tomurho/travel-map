@@ -4,6 +4,8 @@ node_modules
 dist
 .env.local
 .env*.local
+credentials/google-oauth-client.json
+credentials/google-sheets-token.json
 .DS_Store
 tsconfig.tsbuildinfo
 src/data/admin-staged-places.json

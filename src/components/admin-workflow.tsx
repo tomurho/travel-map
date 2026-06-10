@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { formatProviderAttemptSummary } from "@/lib/admin-ui";
 import { formatDistance } from "@/lib/geo";
 import {
   hasMaterialCanonicalAddressDifference,
   type Place,
+  type PlaceStatus,
   type PlaceVerifiedStatus,
 } from "@/lib/place";
 import {
@@ -88,14 +89,23 @@ type AdminWorkflowProps = {
 };
 
 type ProductionPlaceEdit = {
+  name: string;
+  city: string;
+  category: string;
+  status: PlaceStatus;
+  loved: "true" | "false" | "null";
+  district: string;
   address: string;
   googleMapsUrl: string;
   latitude: string;
   longitude: string;
+  notes: string;
   verifiedStatus: PlaceVerifiedStatus;
   lastChecked: string;
   verificationNotes: string;
 };
+
+type ProductionSortMode = "name" | "city" | "status" | "verification";
 
 type AdminCandidateSummary = {
   addressScore: number;
@@ -114,6 +124,66 @@ type AdminCandidateSummary = {
   nameScore: number;
   provider: Place["verificationSource"];
 };
+
+type PipelineSyncResult = {
+  changes?: Array<{
+    action: "insert" | "update";
+    id: string;
+    name: string;
+    rowNumber: number;
+  }>;
+  error?: string;
+  inserted?: number;
+  rowsRead?: number;
+  skipped?: number;
+  updated?: number;
+  validationErrors?: Array<{
+    errors: string[];
+    id: string;
+    rowNumber: number;
+  }>;
+  wrote?: boolean;
+};
+
+type PipelinePublishResult = {
+  approvedRowsFound?: number;
+  blankIdRowsSkipped?: number;
+  duplicateIdsSkipped?: string[];
+  duplicateRowsSkipped?: number;
+  error?: string;
+  mode?: "preview" | "write";
+  publishedRows?: number;
+  rowsSkipped?: number;
+  rowsToPublish?: number;
+  validationIssues?: number;
+  verifiedRowsFound?: number;
+  wouldPublishRows?: Array<{
+    id: string;
+    name: string;
+  }>;
+  wrote?: boolean;
+};
+
+type PipelineReviewResult = {
+  apiCallsMade?: number;
+  blankRawName?: number;
+  duplicateReviewId?: string;
+  duplicateReviewIds?: string[];
+  duplicateReviewRows?: Array<{
+    id: string;
+    rowNumber: number;
+  }>;
+  enrichedRows?: number;
+  error?: string;
+  skippedRowDetails?: Array<{
+    reason: string;
+    rowNumber: number;
+  }>;
+  skippedRows?: number;
+};
+
+const DEFAULT_PIPELINE_SHEET_ID =
+  "1kVnvUBm-jxAR8zIxh8PyhFEDUgC8b1Y0Q3SObITMpJw";
 
 function formatOptionalValue(value: string | number | undefined | null) {
   if (value === undefined || value === null || value === "") {
@@ -199,6 +269,19 @@ const VERIFICATION_FILTER_OPTIONS: Array<{
   { label: "Closed/Moved", value: "closed_moved" },
 ];
 
+const PLACE_STATUS_OPTIONS: Array<{ label: string; value: PlaceStatus }> = [
+  { label: "Location", value: "location" },
+  { label: "Been", value: "been" },
+  { label: "Want to go", value: "want_to_go" },
+];
+
+const PRODUCTION_SORT_OPTIONS: Array<{ label: string; value: ProductionSortMode }> = [
+  { label: "Name", value: "name" },
+  { label: "City", value: "city" },
+  { label: "Status", value: "status" },
+  { label: "Verification", value: "verification" },
+];
+
 function getVerificationClass(status: PlaceVerifiedStatus | undefined) {
   if (status === "Yes") {
     return " is-verified";
@@ -219,11 +302,77 @@ function getVerificationClass(status: PlaceVerifiedStatus | undefined) {
   return "";
 }
 
+function getProductionStatusLabel(
+  place: Pick<Place, "loved" | "status">,
+) {
+  if (place.loved) {
+    return "Loved";
+  }
+
+  if (place.status === "been") {
+    return "Been";
+  }
+
+  if (place.status === "want_to_go") {
+    return "Want to go";
+  }
+
+  return "Location";
+}
+
+function formatNotesForEdit(notes: Place["notes"]) {
+  if (Array.isArray(notes)) {
+    return notes.join("\n");
+  }
+
+  return notes ?? "";
+}
+
+function parseNotesForPayload(notes: string) {
+  return notes
+    .split("\n")
+    .map((note) => note.trim())
+    .filter(Boolean);
+}
+
+function parseLovedForPayload(loved: ProductionPlaceEdit["loved"]) {
+  if (loved === "true") {
+    return true;
+  }
+
+  if (loved === "false") {
+    return false;
+  }
+
+  return null;
+}
+
+function getLovedEditValue(loved: Place["loved"]) {
+  if (loved === true) {
+    return "true" as const;
+  }
+
+  if (loved === false) {
+    return "false" as const;
+  }
+
+  return "null" as const;
+}
+
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function AdminWorkflow({
   categoryOptions,
   cityOptions,
   productionPlaces: initialProductionPlaces,
 }: AdminWorkflowProps) {
+  const capturePanelRef = useRef<HTMLDetailsElement | null>(null);
   const [cityHint, setCityHint] = useState("all");
   const [plainText, setPlainText] = useState("");
   const [placeUrl, setPlaceUrl] = useState("");
@@ -232,6 +381,16 @@ export function AdminWorkflow({
   const [productionPlaces, setProductionPlaces] = useState(initialProductionPlaces);
   const [productionFilter, setProductionFilter] =
     useState<AdminVerificationFilter>("all");
+  const [productionSearch, setProductionSearch] = useState("");
+  const [productionCityFilter, setProductionCityFilter] = useState("all");
+  const [productionCategoryFilter, setProductionCategoryFilter] = useState("all");
+  const [productionStatusFilter, setProductionStatusFilter] = useState<
+    PlaceStatus | "all"
+  >("all");
+  const [productionSort, setProductionSort] =
+    useState<ProductionSortMode>("name");
+  const [deleteProductionPlace, setDeleteProductionPlace] =
+    useState<Place | null>(null);
   const [selectedProductionPlaceId, setSelectedProductionPlaceId] = useState<
     string | null
   >(
@@ -280,6 +439,28 @@ export function AdminWorkflow({
     downloadUrl: string;
     filePath: string;
   } | null>(null);
+  const [pipelineSheetId, setPipelineSheetId] = useState(
+    DEFAULT_PIPELINE_SHEET_ID,
+  );
+  const [pipelineResult, setPipelineResult] = useState<PipelineSyncResult | null>(
+    null,
+  );
+  const [pipelineMessage, setPipelineMessage] = useState<string | null>(null);
+  const [pipelinePublishResult, setPipelinePublishResult] =
+    useState<PipelinePublishResult | null>(null);
+  const [pipelinePublishMessage, setPipelinePublishMessage] = useState<
+    string | null
+  >(null);
+  const [pipelineReviewResult, setPipelineReviewResult] =
+    useState<PipelineReviewResult | null>(null);
+  const [pipelineReviewMessage, setPipelineReviewMessage] = useState<string | null>(
+    null,
+  );
+  const [pipelineMaxApiCalls, setPipelineMaxApiCalls] = useState("1");
+  const [isReviewingNewPlaces, setIsReviewingNewPlaces] = useState(false);
+  const [isSyncingPublished, setIsSyncingPublished] = useState(false);
+  const [isPublishingApprovedPlaces, setIsPublishingApprovedPlaces] =
+    useState(false);
   const [deletingStagedId, setDeletingStagedId] = useState<string | null>(null);
   const stagedDuplicateCount = stagedPlaces.filter(
     (place) => place.duplicateMatches?.length,
@@ -304,9 +485,68 @@ export function AdminWorkflow({
   const visibleStagedPlaces = stagedPlaces.filter((place) =>
     matchesVerificationFilter(place.verifiedStatus, verifiedFilter),
   );
-  const visibleProductionPlaces = productionPlaces.filter((place) =>
-    matchesVerificationFilter(place.verifiedStatus, productionFilter),
+  const productionCityOptions = Array.from(
+    new Set(productionPlaces.map((place) => place.city).filter(Boolean)),
+  ).sort((firstCity, secondCity) => firstCity.localeCompare(secondCity));
+  const productionCategoryOptions = Array.from(
+    new Set(productionPlaces.map((place) => place.category).filter(Boolean)),
+  ).sort((firstCategory, secondCategory) =>
+    firstCategory.localeCompare(secondCategory),
   );
+  const visibleProductionPlaces = productionPlaces
+    .filter((place) => {
+      const searchValue = normalizeSearchValue(productionSearch);
+      const searchableText = normalizeSearchValue(
+        [
+          place.name,
+          place.city,
+          place.category,
+          place.district,
+          place.address,
+          place.notes,
+          place.verificationNotes,
+        ]
+          .flat()
+          .filter(Boolean)
+          .join(" "),
+      );
+
+      return (
+        matchesVerificationFilter(place.verifiedStatus, productionFilter) &&
+        (productionCityFilter === "all" || place.city === productionCityFilter) &&
+        (productionCategoryFilter === "all" ||
+          place.category === productionCategoryFilter) &&
+        (productionStatusFilter === "all" ||
+          place.status === productionStatusFilter) &&
+        (!searchValue || searchableText.includes(searchValue))
+      );
+    })
+    .sort((firstPlace, secondPlace) => {
+      if (productionSort === "city") {
+        return (
+          firstPlace.city.localeCompare(secondPlace.city) ||
+          firstPlace.name.localeCompare(secondPlace.name)
+        );
+      }
+
+      if (productionSort === "status") {
+        return (
+          getProductionStatusLabel(firstPlace).localeCompare(
+            getProductionStatusLabel(secondPlace),
+          ) || firstPlace.name.localeCompare(secondPlace.name)
+        );
+      }
+
+      if (productionSort === "verification") {
+        return (
+          getCompactVerificationLabel(firstPlace.verifiedStatus).localeCompare(
+            getCompactVerificationLabel(secondPlace.verifiedStatus),
+          ) || firstPlace.name.localeCompare(secondPlace.name)
+        );
+      }
+
+      return firstPlace.name.localeCompare(secondPlace.name);
+    });
   const selectedProductionPlace =
     productionPlaces.find((place) => place.id === selectedProductionPlaceId) ??
     visibleProductionPlaces[0] ??
@@ -375,10 +615,17 @@ export function AdminWorkflow({
   function getProductionEdit(place: Place): ProductionPlaceEdit {
     return (
       productionEdits[place.id] ?? {
+        name: place.name,
+        city: place.city,
+        category: place.category,
+        status: place.status,
+        loved: getLovedEditValue(place.loved),
+        district: place.district,
         address: place.address ?? "",
         googleMapsUrl: place.googleMapsUrl ?? "",
         latitude: String(place.latitude ?? ""),
         longitude: String(place.longitude ?? ""),
+        notes: formatNotesForEdit(place.notes),
         verifiedStatus: place.verifiedStatus ?? "",
         lastChecked: place.lastChecked ?? "",
         verificationNotes: place.verificationNotes ?? "",
@@ -402,16 +649,103 @@ export function AdminWorkflow({
     }));
   }
 
+  function selectProductionPlace(placeId: string) {
+    if (
+      selectedProductionPlace &&
+      selectedProductionPlace.id !== placeId &&
+      hasProductionEditChanges(selectedProductionPlace)
+    ) {
+      const shouldSwitch = window.confirm(
+        "Switch places and discard unsaved editor changes?",
+      );
+
+      if (!shouldSwitch) {
+        return;
+      }
+
+      setProductionEdits((currentEdits) => {
+        const nextEdits = { ...currentEdits };
+        delete nextEdits[selectedProductionPlace.id];
+        return nextEdits;
+      });
+    }
+
+    setSelectedProductionPlaceId(placeId);
+  }
+
+  function cancelProductionEdit(place: Place) {
+    setProductionEdits((currentEdits) => {
+      const nextEdits = { ...currentEdits };
+      delete nextEdits[place.id];
+      return nextEdits;
+    });
+    setProductionMessage(`Discarded unsaved changes for ${place.name}.`);
+  }
+
+  function startAddPlaceFlow() {
+    setPlainText("");
+    setPlaceUrl("");
+    setFiles([]);
+    setResult(null);
+    setError(null);
+    setStagedMessage(null);
+    capturePanelRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
+
   function parseCoordinate(value: string) {
     const coordinate = Number(value);
 
     return Number.isFinite(coordinate) ? coordinate : null;
   }
 
+  function hasProductionEditChanges(place: Place) {
+    const edit = getProductionEdit(place);
+
+    return (
+      edit.name !== place.name ||
+      edit.city !== place.city ||
+      edit.category !== place.category ||
+      edit.status !== place.status ||
+      edit.loved !== getLovedEditValue(place.loved) ||
+      edit.district !== place.district ||
+      edit.address !== (place.address ?? "") ||
+      edit.googleMapsUrl !== (place.googleMapsUrl ?? "") ||
+      edit.latitude !== String(place.latitude ?? "") ||
+      edit.longitude !== String(place.longitude ?? "") ||
+      edit.notes !== formatNotesForEdit(place.notes) ||
+      edit.verifiedStatus !== (place.verifiedStatus ?? "") ||
+      edit.lastChecked !== (place.lastChecked ?? "") ||
+      edit.verificationNotes !== (place.verificationNotes ?? "")
+    );
+  }
+
+  function locationNeedsVerification(place: Place) {
+    const edit = getProductionEdit(place);
+
+    return (
+      edit.address !== (place.address ?? "") ||
+      edit.googleMapsUrl !== (place.googleMapsUrl ?? "") ||
+      edit.latitude !== String(place.latitude ?? "") ||
+      edit.longitude !== String(place.longitude ?? "") ||
+      edit.verifiedStatus === "Review" ||
+      edit.verifiedStatus === "No" ||
+      edit.verifiedStatus === ""
+    );
+  }
+
   function getProductionPayload(place: Place) {
     const edit = getProductionEdit(place);
 
     return {
+      name: edit.name,
+      city: edit.city,
+      category: edit.category,
+      status: edit.status,
+      loved: parseLovedForPayload(edit.loved),
+      district: edit.district,
       address: edit.address,
       addressScore: place.addressScore,
       ambiguityScore: place.ambiguityScore,
@@ -429,6 +763,7 @@ export function AdminWorkflow({
       googlePlaceId: place.googlePlaceId,
       latitude: parseCoordinate(edit.latitude),
       longitude: parseCoordinate(edit.longitude),
+      notes: parseNotesForPayload(edit.notes),
       matchConfidence: place.matchConfidence,
       nameScore: place.nameScore,
       samePlaceDecision: place.samePlaceDecision,
@@ -731,6 +1066,198 @@ export function AdminWorkflow({
     }
   }
 
+  async function syncPublishedToApp(write: boolean) {
+    if (!pipelineSheetId.trim()) {
+      setPipelineMessage(null);
+      setPipelineResult(null);
+      setError("Add a Google Sheet ID before syncing Published rows.");
+      return;
+    }
+
+    if (
+      write &&
+      !window.confirm(
+        "Write Published Google Sheet rows into src/data/places.json?",
+      )
+    ) {
+      return;
+    }
+
+    setIsSyncingPublished(true);
+    setError(null);
+    setPipelineMessage(null);
+    setPipelineResult(null);
+
+    try {
+      const response = await fetch("/api/admin/place-pipeline/sync-published", {
+        body: JSON.stringify({
+          confirmWrite: write,
+          sheetId: pipelineSheetId.trim(),
+          write,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeaders() ?? {}),
+        },
+        method: "POST",
+      });
+      const payload = (await response.json()) as PipelineSyncResult;
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not sync Published rows.");
+      }
+
+      setPipelineResult(payload);
+      setPipelineMessage(
+        write
+          ? "Published rows were written to the app dataset."
+          : "Dry run complete. No app data was changed.",
+      );
+    } catch (syncError) {
+      setError(
+        syncError instanceof Error
+          ? syncError.message
+          : "Could not sync Published rows.",
+      );
+    } finally {
+      setIsSyncingPublished(false);
+    }
+  }
+
+  async function reviewNewPlaces() {
+    if (!pipelineSheetId.trim()) {
+      setPipelineReviewMessage(null);
+      setPipelineReviewResult(null);
+      setError("Add a Google Sheet ID before reviewing new places.");
+      return;
+    }
+
+    const maxApiCalls = Number(pipelineMaxApiCalls);
+
+    if (!Number.isInteger(maxApiCalls) || maxApiCalls <= 0 || maxApiCalls > 10) {
+      setPipelineReviewMessage(null);
+      setPipelineReviewResult(null);
+      setError("Max API calls must be an integer from 1 to 10.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `This will call Google Places for up to ${maxApiCalls} rows. Continue?`,
+      )
+    ) {
+      return;
+    }
+
+    setIsReviewingNewPlaces(true);
+    setError(null);
+    setPipelineReviewMessage(null);
+    setPipelineReviewResult(null);
+
+    try {
+      const response = await fetch("/api/admin/place-pipeline/review-new", {
+        body: JSON.stringify({
+          confirmLiveApi: true,
+          maxApiCalls,
+          sheetId: pipelineSheetId.trim(),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeaders() ?? {}),
+        },
+        method: "POST",
+      });
+      const payload = (await response.json()) as PipelineReviewResult;
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not review new places.");
+      }
+
+      setPipelineReviewResult(payload);
+      setPipelineReviewMessage("New place review complete.");
+    } catch (reviewError) {
+      setError(
+        reviewError instanceof Error
+          ? reviewError.message
+          : "Could not review new places.",
+      );
+    } finally {
+      setIsReviewingNewPlaces(false);
+    }
+  }
+
+  async function publishApprovedPlaces() {
+    if (!pipelineSheetId.trim()) {
+      setPipelinePublishMessage(null);
+      setPipelinePublishResult(null);
+      setError("Add a Google Sheet ID before publishing verified Review rows.");
+      return;
+    }
+
+    if (!window.confirm("Move verified Review rows into the Published sheet?")) {
+      return;
+    }
+
+    setIsPublishingApprovedPlaces(true);
+    setError(null);
+    setPipelinePublishMessage(null);
+    setPipelinePublishResult(null);
+
+    try {
+      const previewResponse = await fetch(
+        "/api/admin/place-pipeline/publish-approved",
+        {
+          body: JSON.stringify({
+            sheetId: pipelineSheetId.trim(),
+            write: false,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            ...(authHeaders() ?? {}),
+          },
+          method: "POST",
+        },
+      );
+      const previewPayload =
+        (await previewResponse.json()) as PipelinePublishResult;
+
+      if (!previewResponse.ok) {
+        throw new Error(
+          previewPayload.error ?? "Could not preview verified Review rows.",
+        );
+      }
+
+      const response = await fetch("/api/admin/place-pipeline/publish-approved", {
+        body: JSON.stringify({
+          confirmWrite: true,
+          sheetId: pipelineSheetId.trim(),
+          write: true,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeaders() ?? {}),
+        },
+        method: "POST",
+      });
+      const payload = (await response.json()) as PipelinePublishResult;
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not publish verified Review rows.");
+      }
+
+      setPipelinePublishResult(payload);
+      setPipelinePublishMessage("Verified Review rows were moved to Published.");
+    } catch (publishError) {
+      setError(
+        publishError instanceof Error
+          ? publishError.message
+          : "Could not publish verified Review rows.",
+      );
+    } finally {
+      setIsPublishingApprovedPlaces(false);
+    }
+  }
+
   function markSelectedProductionPlaceVerified(place: Place) {
     const currentEdit = getProductionEdit(place);
     const nextEdit = markVerifiedToday({
@@ -906,16 +1433,18 @@ export function AdminWorkflow({
       }));
       setProductionEdits((currentEdits) => ({
         ...currentEdits,
-        [place.id]: {
-          address: responsePayload.place?.address ?? currentEdit.address,
-          googleMapsUrl:
-            responsePayload.place?.googleMapsUrl ?? currentEdit.googleMapsUrl,
-          latitude: String(responsePayload.place?.latitude ?? ""),
-          longitude: String(responsePayload.place?.longitude ?? ""),
-          lastChecked: responsePayload.place?.lastChecked ?? "",
-          verifiedStatus: responsePayload.place?.verifiedStatus ?? "",
-          verificationNotes: responsePayload.place?.verificationNotes ?? "",
-        },
+      [place.id]: {
+        ...currentEdit,
+        address: responsePayload.place?.address ?? currentEdit.address,
+        googleMapsUrl:
+          responsePayload.place?.googleMapsUrl ?? currentEdit.googleMapsUrl,
+          latitude: currentEdit.latitude,
+          longitude: currentEdit.longitude,
+          notes: formatNotesForEdit(responsePayload.place?.notes ?? parseNotesForPayload(currentEdit.notes)),
+        lastChecked: responsePayload.place?.lastChecked ?? "",
+        verifiedStatus: responsePayload.place?.verifiedStatus ?? "",
+        verificationNotes: responsePayload.place?.verificationNotes ?? "",
+      },
       }));
 
       const resolvedPlace = responsePayload.place;
@@ -1016,6 +1545,48 @@ export function AdminWorkflow({
     }
   }
 
+  async function confirmDeleteProductionPlace(place: Place) {
+    setSavingProductionPlaceId(place.id);
+    setError(null);
+    setProductionMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/admin/places/${encodeURIComponent(place.id)}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        },
+      );
+      const responsePayload = (await response.json()) as {
+        error?: string;
+        places?: Place[];
+      };
+
+      if (!response.ok || !responsePayload.places) {
+        throw new Error(responsePayload.error ?? "Could not delete place.");
+      }
+
+      setProductionPlaces(responsePayload.places);
+      setProductionEdits((currentEdits) => {
+        const nextEdits = { ...currentEdits };
+        delete nextEdits[place.id];
+        return nextEdits;
+      });
+      setSelectedProductionPlaceId(responsePayload.places[0]?.id ?? null);
+      setDeleteProductionPlace(null);
+      setProductionMessage(`Deleted ${place.name}.`);
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Could not delete place.",
+      );
+    } finally {
+      setSavingProductionPlaceId(null);
+    }
+  }
+
   async function deleteStagedPlace(place: StagedPlace) {
     const confirmed = window.confirm(`Remove ${place.name} from staging?`);
 
@@ -1095,83 +1666,410 @@ export function AdminWorkflow({
     }
   }
 
+  const googleSheetsPipelinePanel = (
+    <details className="panel admin-export-panel admin-secondary-panel" open>
+      <summary>Google Sheets Pipeline</summary>
+      <div className="admin-staged-header">
+        <div>
+          <h2>Google Sheets Pipeline</h2>
+          <p>
+            Move place data through the Google Sheet workflow, ending with the
+            local app dataset.
+          </p>
+        </div>
+      </div>
+      <label className="admin-search-field">
+        <span>Google Sheet ID</span>
+        <input
+          className="admin-draft-input"
+          onChange={(event) => setPipelineSheetId(event.target.value)}
+          value={pipelineSheetId}
+        />
+      </label>
+      <div className="admin-staged-actions">
+        <div>
+          <label className="admin-field-helper">
+            Max API calls
+            <input
+              className="admin-draft-input"
+              max="10"
+              min="1"
+              onChange={(event) => setPipelineMaxApiCalls(event.target.value)}
+              type="number"
+              value={pipelineMaxApiCalls}
+            />
+          </label>
+          <button
+            disabled={isReviewingNewPlaces}
+            onClick={reviewNewPlaces}
+            type="button"
+          >
+            {isReviewingNewPlaces ? "Reviewing..." : "Review New Places"}
+          </button>
+          <p className="admin-field-helper">
+            Looks up rows marked Ready and sends candidates to Review.
+          </p>
+        </div>
+        <div>
+          <button
+            disabled={isPublishingApprovedPlaces}
+            onClick={publishApprovedPlaces}
+            type="button"
+          >
+            {isPublishingApprovedPlaces
+              ? "Publishing..."
+              : "Publish Approved Places"}
+          </button>
+          <p className="admin-field-helper">
+            Moves Verified Review rows to Published.
+          </p>
+        </div>
+        <div>
+          <button
+            disabled={isSyncingPublished}
+            onClick={() => syncPublishedToApp(true)}
+            type="button"
+          >
+            {isSyncingPublished ? "Updating..." : "Update Travel Map"}
+          </button>
+          <p className="admin-field-helper">
+            Writes Published rows into the app data.
+          </p>
+        </div>
+      </div>
+      {pipelineReviewMessage ? (
+        <p className="admin-success">{pipelineReviewMessage}</p>
+      ) : null}
+      {pipelineReviewResult ? (
+        <div className="admin-export-result">
+          <strong>Review New Places summary</strong>
+          <div className="admin-preview-chips">
+            <span>
+              <strong>{pipelineReviewResult.enrichedRows ?? 0}</strong>{" "}
+              enriched
+            </span>
+            <span>
+              <strong>{pipelineReviewResult.skippedRows ?? 0}</strong> skipped
+            </span>
+            <span>
+              <strong>{pipelineReviewResult.apiCallsMade ?? 0}</strong> API calls
+            </span>
+            <span
+              className={
+                pipelineReviewResult.blankRawName ? "is-warning" : undefined
+              }
+            >
+              <strong>{pipelineReviewResult.blankRawName ?? 0}</strong>{" "}
+              blankRawName
+            </span>
+          </div>
+          {pipelineReviewResult.duplicateReviewRows?.length ? (
+            <ul className="admin-note-list">
+              {pipelineReviewResult.duplicateReviewRows
+                .slice(0, 8)
+                .map((row) => (
+                  <li key={`duplicate-review-${row.rowNumber}-${row.id}`}>
+                    Row {row.rowNumber}: skipped duplicate Review id {row.id}
+                  </li>
+                ))}
+            </ul>
+          ) : pipelineReviewResult.duplicateReviewIds?.length ? (
+            <ul className="admin-note-list">
+              {pipelineReviewResult.duplicateReviewIds
+                .slice(0, 8)
+                .map((id) => (
+                  <li key={`duplicate-review-${id}`}>
+                    Skipped duplicate Review id: {id}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+          {pipelineReviewResult.skippedRowDetails?.length ? (
+            <ul className="admin-note-list">
+              {pipelineReviewResult.skippedRowDetails
+                .slice(0, 8)
+                .map((row) => (
+                  <li key={`review-skip-${row.rowNumber}-${row.reason}`}>
+                    Row {row.rowNumber}: {row.reason}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      {pipelineMessage ? (
+        <p className="admin-success">{pipelineMessage}</p>
+      ) : null}
+      {pipelinePublishMessage ? (
+        <p className="admin-success">{pipelinePublishMessage}</p>
+      ) : null}
+      {pipelinePublishResult ? (
+        <div className="admin-export-result">
+          <strong>
+            {pipelinePublishResult.wrote
+              ? "Publish complete"
+              : "Verified Review preview"}
+          </strong>
+          <div className="admin-preview-chips">
+            <span>
+              <strong>
+                {pipelinePublishResult.verifiedRowsFound ??
+                  pipelinePublishResult.approvedRowsFound ??
+                  0}
+              </strong>{" "}
+              verified
+            </span>
+            <span>
+              <strong>{pipelinePublishResult.rowsToPublish ?? 0}</strong>{" "}
+              publishable
+            </span>
+            <span>
+              <strong>{pipelinePublishResult.rowsSkipped ?? 0}</strong> skipped
+            </span>
+            <span
+              className={
+                pipelinePublishResult.validationIssues ? "is-warning" : undefined
+              }
+            >
+              <strong>{pipelinePublishResult.validationIssues ?? 0}</strong>{" "}
+              validation issues
+            </span>
+          </div>
+          {pipelinePublishResult.wouldPublishRows?.length ? (
+            <ul className="admin-note-list">
+              {pipelinePublishResult.wouldPublishRows
+                .slice(0, 8)
+                .map((row) => (
+                  <li key={`publish-${row.id}`}>
+                    {row.name || "Unnamed place"} ({row.id})
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+          {pipelinePublishResult.duplicateIdsSkipped?.length ? (
+            <ul className="admin-note-list">
+              {pipelinePublishResult.duplicateIdsSkipped
+                .slice(0, 8)
+                .map((id) => (
+                  <li key={`duplicate-publish-${id}`}>
+                    Skipped duplicate id: {id}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      {pipelineResult ? (
+        <div className="admin-export-result">
+          <strong>
+            {pipelineResult.wrote ? "Write complete" : "Dry run summary"}
+          </strong>
+          <div className="admin-preview-chips">
+            <span>
+              <strong>{pipelineResult.rowsRead ?? 0}</strong> rows read
+            </span>
+            <span>
+              <strong>{pipelineResult.inserted ?? 0}</strong> inserted
+            </span>
+            <span>
+              <strong>{pipelineResult.updated ?? 0}</strong> updated
+            </span>
+            <span>
+              <strong>{pipelineResult.skipped ?? 0}</strong> skipped
+            </span>
+            <span
+              className={
+                pipelineResult.validationErrors?.length ? "is-warning" : undefined
+              }
+            >
+              <strong>{pipelineResult.validationErrors?.length ?? 0}</strong>{" "}
+              validation errors
+            </span>
+          </div>
+          {pipelineResult.changes?.length ? (
+            <ul className="admin-note-list">
+              {pipelineResult.changes.slice(0, 8).map((change) => (
+                <li key={`${change.action}-${change.id}-${change.rowNumber}`}>
+                  {change.action}: {change.name} ({change.id})
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </details>
+  );
+
   return (
     <main className="shell admin-shell">
       <section className="hero panel admin-hero">
-        <h1>Place intake.</h1>
+        <h1>Admin / Place Management</h1>
         <p>
-          Paste names, drop in a place URL, or upload a screenshot. The workflow
-          will turn that into a structured draft with address, area, category,
-          coordinates, and city-specific extra fields.
+          Add, edit, verify, and manage places with high-quality coordinates.
         </p>
+        <div className="admin-preview-chips admin-header-counts">
+          <span>
+            <strong>{productionPlaces.length}</strong> places
+          </span>
+          <span className="is-verified">
+            <strong>{productionVerificationSummary.verified ?? 0}</strong>{" "}
+            verified
+          </span>
+          <span className="is-warning">
+            <strong>{productionVerificationSummary.review ?? 0}</strong> review
+          </span>
+          <span>
+            <strong>{productionVerificationSummary.unverified ?? 0}</strong>{" "}
+            unverified
+          </span>
+          <span className="is-blocked">
+            <strong>{productionVerificationSummary.closed_moved ?? 0}</strong>{" "}
+            closed/moved
+          </span>
+        </div>
       </section>
+
+      {googleSheetsPipelinePanel}
 
       <section className="admin-grid">
         <section className="panel admin-verification-panel">
           <div className="admin-staged-header">
             <div>
-              <h2>Map-pin verification</h2>
+              <h2>Production places</h2>
               <p>
-                Review production places, open their Google Maps source, and mark
-                map pins as verified after manual checks.
+                Find a place, edit its curated record, then verify the saved map
+                pin in a separate workflow.
               </p>
             </div>
-            <div className="admin-preview-chips">
-              <span>
-                <strong>{productionPlaces.length}</strong> places
-              </span>
-              <span className="is-verified">
-                <strong>{productionVerificationSummary.verified ?? 0}</strong>{" "}
-                verified
-              </span>
-              <span className="is-warning">
-                <strong>{productionVerificationSummary.review ?? 0}</strong>{" "}
-                review
-              </span>
-              <span>
-                <strong>{productionVerificationSummary.unverified ?? 0}</strong>{" "}
-                unverified
-              </span>
-              <span className="is-blocked">
-                <strong>{productionVerificationSummary.closed_moved ?? 0}</strong>{" "}
-                closed/moved
-              </span>
-            </div>
+            <button
+              className="admin-add-place-button"
+              onClick={startAddPlaceFlow}
+              type="button"
+            >
+              Add Place
+            </button>
           </div>
 
           {productionMessage ? (
             <p className="admin-success">{productionMessage}</p>
           ) : null}
 
-          <div className="admin-verification-filters" aria-label="QA filters">
-            {VERIFICATION_FILTER_OPTIONS.map((option) => (
-              <button
-                className={productionFilter === option.value ? "is-active" : ""}
-                key={option.value}
-                onClick={() => setProductionFilter(option.value)}
-                type="button"
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="admin-verification-workspace">
-            <div className="admin-verification-list">
+          <div className="admin-management-board">
+            <section className="admin-pane admin-places-pane">
+              <div className="admin-pane-header">
+                <h3>Places list</h3>
+                <span>{visibleProductionPlaces.length} shown</span>
+              </div>
+              <div className="admin-production-toolbar">
+                <label className="admin-search-field">
+                  <span>Search</span>
+                  <input
+                    onChange={(event) => setProductionSearch(event.target.value)}
+                    placeholder="Name, area, address, notes"
+                    type="search"
+                    value={productionSearch}
+                  />
+                </label>
+                <label>
+                  <span>City</span>
+                  <select
+                    onChange={(event) => setProductionCityFilter(event.target.value)}
+                    value={productionCityFilter}
+                  >
+                    <option value="all">All cities</option>
+                    {productionCityOptions.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select
+                    onChange={(event) =>
+                      setProductionStatusFilter(
+                        event.target.value as PlaceStatus | "all",
+                      )
+                    }
+                    value={productionStatusFilter}
+                  >
+                    <option value="all">All statuses</option>
+                    {PLACE_STATUS_OPTIONS.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Verified?</span>
+                  <select
+                    onChange={(event) =>
+                      setProductionFilter(
+                        event.target.value as AdminVerificationFilter,
+                      )
+                    }
+                    value={productionFilter}
+                  >
+                    {VERIFICATION_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Category</span>
+                  <select
+                    onChange={(event) =>
+                      setProductionCategoryFilter(event.target.value)
+                    }
+                    value={productionCategoryFilter}
+                  >
+                    <option value="all">All categories</option>
+                    {productionCategoryOptions.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Sort</span>
+                  <select
+                    onChange={(event) =>
+                      setProductionSort(event.target.value as ProductionSortMode)
+                    }
+                    value={productionSort}
+                  >
+                    {PRODUCTION_SORT_OPTIONS.map((sortOption) => (
+                      <option key={sortOption.value} value={sortOption.value}>
+                        {sortOption.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="admin-verification-list">
               {visibleProductionPlaces.map((place) => (
                 <button
                   className={`admin-verification-row${
                     selectedProductionPlace?.id === place.id ? " is-active" : ""
                   }`}
                   key={place.id}
-                  onClick={() => setSelectedProductionPlaceId(place.id)}
+                  onClick={() => selectProductionPlace(place.id)}
                   type="button"
                 >
                   <span>
                     <strong>{place.name}</strong>
                     <small>
-                      {place.city} - {place.category || "Uncategorized"} -{" "}
-                      {place.district || "No area"}
+                      {[place.category || "Uncategorized", place.district || "No area"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                    <small>
+                      {place.city} · {getProductionStatusLabel(place)}
                     </small>
                   </span>
                   <span
@@ -1186,7 +2084,8 @@ export function AdminWorkflow({
               {visibleProductionPlaces.length === 0 ? (
                 <p className="admin-empty">No places match this QA filter.</p>
               ) : null}
-            </div>
+              </div>
+            </section>
 
             {selectedProductionPlace ? (
               (() => {
@@ -1204,49 +2103,186 @@ export function AdminWorkflow({
                   candidateOptionsByPlaceId[selectedProductionPlace.id] ?? [];
                 const providerAttempts =
                   providerAttemptsByPlaceId[selectedProductionPlace.id] ?? [];
-                const hasUnsavedQaChanges =
-                  productionEdits[selectedProductionPlace.id] !== undefined;
+                const hasUnsavedProductionChanges =
+                  productionEdits[selectedProductionPlace.id] !== undefined &&
+                  hasProductionEditChanges(selectedProductionPlace);
                 const hasCandidateCoordinates =
                   selectedProductionPlace.verifiedLatitude !== undefined &&
                   selectedProductionPlace.verifiedLongitude !== undefined;
                 const hasCanonicalAddressDifference =
                   hasMaterialCanonicalAddressDifference(selectedProductionPlace);
+                const needsLocationVerification =
+                  locationNeedsVerification(selectedProductionPlace);
+                const hasSavedPin =
+                  Number.isFinite(selectedProductionPlace.latitude) &&
+                  Number.isFinite(selectedProductionPlace.longitude);
 
                 return (
-                  <div className="admin-verification-detail">
-                    <div className="admin-draft-header">
-                      <div>
-                        <h3>{selectedProductionPlace.name}</h3>
-                        <p className="admin-source">
-                          {[
-                            selectedProductionPlace.city,
-                            selectedProductionPlace.category,
-                            selectedProductionPlace.district,
-                          ]
-                            .filter(Boolean)
-                            .join(" / ")}
-                        </p>
+                  <>
+                    <section className="admin-pane admin-editor-pane">
+                      <div className="admin-pane-header">
+                        <div>
+                          <h3>Place editor</h3>
+                          <p>
+                            {[edit.city, edit.category, edit.district]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        </div>
+                        <span
+                          className={`admin-verification-badge${getVerificationClass(
+                            edit.verifiedStatus,
+                          )}`}
+                        >
+                          {getCompactVerificationLabel(edit.verifiedStatus)}
+                        </span>
                       </div>
-                      <span
-                        className={`admin-verification-badge${getVerificationClass(
-                          edit.verifiedStatus,
-                        )}`}
-                      >
-                        {getCompactVerificationLabel(edit.verifiedStatus)}
-                      </span>
-                    </div>
 
-                    {hasUnsavedQaChanges ? (
-                      <div className="admin-unsaved-banner">
-                        Unsaved QA changes.
-                      </div>
-                    ) : null}
+                      {hasUnsavedProductionChanges ? (
+                        <div className="admin-unsaved-banner">
+                          Unsaved changes.
+                        </div>
+                      ) : null}
+                      {!hasSavedPin ? (
+                        <div className="admin-unsaved-banner is-warning">
+                          No saved pin yet.
+                        </div>
+                      ) : null}
+                      {needsLocationVerification ? (
+                        <div className="admin-unsaved-banner is-warning">
+                          Location changed. Verification recommended.
+                        </div>
+                      ) : null}
 
-                    <div className="admin-qa-grid">
-                      <section className="admin-qa-card">
+                      <div className="admin-editor-section">
                         <div className="admin-qa-card-header">
-                          <h4>Current saved pin</h4>
-                          <span>{edit.verifiedStatus || "No"}</span>
+                          <h4>Basic info</h4>
+                          <span>
+                            {getProductionStatusLabel({
+                              loved: parseLovedForPayload(edit.loved),
+                              status: edit.status,
+                            })}
+                          </span>
+                        </div>
+                        <div className="admin-draft-fields admin-qa-fields">
+                          <label>
+                            <span>Name</span>
+                            <input
+                              className="admin-draft-input"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "name",
+                                  event.target.value,
+                                )
+                              }
+                              value={edit.name}
+                            />
+                          </label>
+                          <label>
+                            <span>City</span>
+                            <input
+                              className="admin-draft-input"
+                              list="admin-city-options"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "city",
+                                  event.target.value,
+                                )
+                              }
+                              value={edit.city}
+                            />
+                          </label>
+                          <label>
+                            <span>Area/District</span>
+                            <input
+                              className="admin-draft-input"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "district",
+                                  event.target.value,
+                                )
+                              }
+                              value={edit.district}
+                            />
+                          </label>
+                          <label>
+                            <span>Category</span>
+                            <input
+                              className="admin-draft-input"
+                              list="admin-category-options"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "category",
+                                  event.target.value,
+                                )
+                              }
+                              value={edit.category}
+                            />
+                          </label>
+                          <label>
+                            <span>Status</span>
+                            <select
+                              className="admin-draft-input"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "status",
+                                  event.target.value as PlaceStatus,
+                                )
+                              }
+                              value={edit.status}
+                            >
+                              {PLACE_STATUS_OPTIONS.map((status) => (
+                                <option key={status.value} value={status.value}>
+                                  {status.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>Loved</span>
+                            <select
+                              className="admin-draft-input"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "loved",
+                                  event.target
+                                    .value as ProductionPlaceEdit["loved"],
+                                )
+                              }
+                              value={edit.loved}
+                            >
+                              <option value="null">Not set</option>
+                              <option value="true">Loved</option>
+                              <option value="false">Not loved</option>
+                            </select>
+                          </label>
+                          <label className="admin-field-full">
+                            <span>Notes</span>
+                            <textarea
+                              className="admin-draft-input admin-draft-textarea"
+                              onChange={(event) =>
+                                setProductionEditField(
+                                  selectedProductionPlace,
+                                  "notes",
+                                  event.target.value,
+                                )
+                              }
+                              rows={3}
+                              value={edit.notes}
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="admin-editor-section">
+                        <div className="admin-qa-card-header">
+                          <h4>Location source</h4>
                         </div>
                         <div className="admin-draft-fields admin-qa-fields">
                           <label className="admin-field-full">
@@ -1314,68 +2350,140 @@ export function AdminWorkflow({
                               used if live Google lookups are enabled.
                             </small>
                           </label>
-                          <label>
-                            <span>Verification status</span>
-                            <select
-                              className="admin-draft-input"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "verifiedStatus",
-                                  event.target.value as PlaceVerifiedStatus,
-                                )
-                              }
-                              value={edit.verifiedStatus}
-                            >
-                              {VERIFIED_STATUS_OPTIONS.map((status) => (
-                                <option key={status || "blank"} value={status}>
-                                  {status || "No"}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            <span>Last checked</span>
-                            <input
-                              className="admin-draft-input"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "lastChecked",
-                                  event.target.value,
-                                )
-                              }
-                              type="date"
-                              value={edit.lastChecked}
-                            />
-                          </label>
-                          <label className="admin-field-full">
-                            <span>Verification notes</span>
-                            <textarea
-                              className="admin-draft-input admin-draft-textarea"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "verificationNotes",
-                                  event.target.value,
-                                )
-                              }
-                              rows={3}
-                              value={edit.verificationNotes}
-                            />
-                          </label>
                         </div>
-                      </section>
+                      </div>
+                      <div className="admin-editor-actions">
+                        <button
+                          disabled={!hasUnsavedProductionChanges}
+                          onClick={() => cancelProductionEdit(selectedProductionPlace)}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className={`admin-save-action${
+                            hasUnsavedProductionChanges ? " is-active" : ""
+                          }`}
+                          disabled={
+                            savingProductionPlaceId === selectedProductionPlace.id
+                          }
+                          onClick={() => saveProductionPlace(selectedProductionPlace)}
+                          type="button"
+                        >
+                          {savingProductionPlaceId === selectedProductionPlace.id
+                            ? "Saving..."
+                            : "Save place record"}
+                        </button>
+                      </div>
+                    </section>
 
-                      <section className="admin-qa-card admin-resolved-card">
+                    <section className="admin-pane admin-verification-flow">
                         <div className="admin-qa-card-header">
-                          <h4>Resolved candidate</h4>
+                          <h3>Verification workflow</h3>
                           <span>
                             {formatOptionalValue(
                               selectedProductionPlace.coordinateConfidence,
                             )}
                           </span>
                         </div>
+                        <ol className="admin-workflow-steps">
+                          <li>
+                            <strong>Find a candidate</strong>
+                            <span>Load a likely listing for comparison. This does not move the saved pin.</span>
+                          </li>
+                          <li>
+                            <strong>Copy only what you trust</strong>
+                            <span>Copy the candidate pin only if it is better. Copy the address only if it is cleaner.</span>
+                          </li>
+                          <li>
+                            <strong>Save the record</strong>
+                            <span>Verification buttons stage edits. Saving commits them.</span>
+                          </li>
+                        </ol>
+                        <section className="admin-verification-block">
+                          <h4>Current saved pin</h4>
+                          <div className="admin-current-pin">
+                            <p>
+                              {hasSavedPin
+                                ? `${selectedProductionPlace.latitude}, ${selectedProductionPlace.longitude}`
+                                : "No saved pin yet"}
+                            </p>
+                            <p>{selectedProductionPlace.address || "No address saved"}</p>
+                            <p>
+                              Status:{" "}
+                              {getCompactVerificationLabel(edit.verifiedStatus)}
+                              {edit.lastChecked ? ` · ${edit.lastChecked}` : ""}
+                            </p>
+                            {canOpenGoogleMaps ? (
+                              <a
+                                href={edit.googleMapsUrl}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Open Google Maps
+                              </a>
+                            ) : null}
+                          </div>
+                          <div className="admin-draft-fields admin-qa-fields">
+                            <label>
+                              <span>Verification status</span>
+                              <select
+                                className="admin-draft-input"
+                                onChange={(event) =>
+                                  setProductionEditField(
+                                    selectedProductionPlace,
+                                    "verifiedStatus",
+                                    event.target.value as PlaceVerifiedStatus,
+                                  )
+                                }
+                                value={edit.verifiedStatus}
+                              >
+                                {VERIFIED_STATUS_OPTIONS.map((status) => (
+                                  <option key={status || "blank"} value={status}>
+                                    {status || "No"}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              <span>Last checked</span>
+                              <input
+                                className="admin-draft-input"
+                                onChange={(event) =>
+                                  setProductionEditField(
+                                    selectedProductionPlace,
+                                    "lastChecked",
+                                    event.target.value,
+                                  )
+                                }
+                                type="date"
+                                value={edit.lastChecked}
+                              />
+                            </label>
+                            <label className="admin-field-full">
+                              <span>Verification notes</span>
+                              <textarea
+                                className="admin-draft-input admin-draft-textarea"
+                                onChange={(event) =>
+                                  setProductionEditField(
+                                    selectedProductionPlace,
+                                    "verificationNotes",
+                                    event.target.value,
+                                  )
+                                }
+                                rows={2}
+                                value={edit.verificationNotes}
+                              />
+                            </label>
+                          </div>
+                        </section>
+
+                        <section className="admin-verification-block">
+                          <h4>Candidate match</h4>
+                          <p className="admin-field-helper">
+                            A candidate is an external listing used for comparison.
+                            Finding one does not move the saved pin.
+                          </p>
                         {hasCandidateMetadata ? (
                           <div className="admin-candidate-summary">
                             <strong>
@@ -1441,13 +2549,10 @@ export function AdminWorkflow({
                           </div>
                         ) : (
                           <p className="admin-empty-state">
-                            No candidate loaded yet. Click Resolve candidate
-                            coordinates to try cache/free sources first. Google is
-                            only used if enabled.
+                            No candidate loaded yet. Start with Find candidate.
                           </p>
                         )}
-                      </section>
-                    </div>
+                        </section>
 
                     {candidateOptions.length > 1 ? (
                       <div className="admin-candidate-options">
@@ -1555,7 +2660,7 @@ export function AdminWorkflow({
                     ) : null}
 
                     <details className="admin-technical-details">
-                      <summary>Technical details</summary>
+                      <summary>Details & verification</summary>
                       <p className="admin-provider-summary">
                         {formatProviderAttemptSummary(providerAttempts)}
                       </p>
@@ -1637,89 +2742,123 @@ export function AdminWorkflow({
                     </details>
 
                     <div className="admin-verification-actions">
-                      <button
-                        className="admin-primary-action"
-                        disabled={!canResolveGoogleMapsUrl}
-                        onClick={() =>
-                          resolveProductionCandidateCoordinates(
-                            selectedProductionPlace,
-                          )
-                        }
-                        type="button"
-                      >
-                        {resolvingProductionPlaceId === selectedProductionPlace.id
-                          ? "Resolving..."
-                          : "Resolve candidate coordinates"}
-                      </button>
-                      <button
-                        onClick={() =>
-                          markSelectedProductionPlaceVerified(selectedProductionPlace)
-                        }
-                        type="button"
-                      >
-                        Mark Verified Today
-                      </button>
-                      <button
-                        className="admin-primary-action"
-                        disabled={
-                          !hasCandidateCoordinates
-                        }
-                        onClick={() =>
-                          acceptProductionCandidateCoordinates(
-                            selectedProductionPlace,
-                          )
-                        }
-                        type="button"
-                      >
-                        Accept candidate coordinates
-                      </button>
-                      <button
-                        disabled={
-                          !hasCandidateCoordinates
-                        }
-                        onClick={() =>
-                          setProductionMessage(
-                            "Candidate rejected for now. No dataset fields were changed.",
-                          )
-                        }
-                        type="button"
-                      >
-                        Reject candidate
-                      </button>
-                      <button
-                        disabled={!hasCanonicalAddressDifference}
-                        onClick={() =>
-                          useProductionCanonicalAddress(selectedProductionPlace)
-                        }
-                        type="button"
-                      >
-                        Use canonical address
-                      </button>
-                      {canOpenGoogleMaps ? (
-                        <a
-                          href={edit.googleMapsUrl}
-                          rel="noreferrer"
-                          target="_blank"
+                      <div className="admin-action-group">
+                        <span>Step 1: find match</span>
+                        <button
+                          className="admin-primary-action"
+                          disabled={!canResolveGoogleMapsUrl}
+                          onClick={() =>
+                            resolveProductionCandidateCoordinates(
+                              selectedProductionPlace,
+                            )
+                          }
+                          type="button"
                         >
-                          Open Google Maps
-                        </a>
-                      ) : (
-                        <span className="admin-disabled-action">
-                          Add a Google Maps URL to open Maps.
-                        </span>
-                      )}
-                      <button
-                        className="admin-save-action"
-                        disabled={savingProductionPlaceId === selectedProductionPlace.id}
-                        onClick={() => saveProductionPlace(selectedProductionPlace)}
-                        type="button"
-                      >
-                        {savingProductionPlaceId === selectedProductionPlace.id
-                          ? "Saving..."
-                          : "Save QA changes"}
-                      </button>
+                          {resolvingProductionPlaceId === selectedProductionPlace.id
+                            ? "Finding..."
+                            : "Find candidate"}
+                        </button>
+                        <p>
+                          Search cache/free sources for a likely match. No saved
+                          fields change yet.
+                        </p>
+                      </div>
+                      <div className="admin-action-group">
+                        <span>Step 2: copy if correct</span>
+                        <button
+                          className="admin-primary-action"
+                          disabled={!hasCandidateCoordinates}
+                          onClick={() =>
+                            acceptProductionCandidateCoordinates(
+                              selectedProductionPlace,
+                            )
+                          }
+                          type="button"
+                        >
+                          Copy candidate pin
+                        </button>
+                        <button
+                          disabled={!hasCanonicalAddressDifference}
+                          onClick={() =>
+                            useProductionCanonicalAddress(selectedProductionPlace)
+                          }
+                          type="button"
+                        >
+                          Copy candidate address
+                        </button>
+                        <button
+                          disabled={!hasCandidateCoordinates}
+                          onClick={() =>
+                            setProductionMessage(
+                              "Candidate ignored. No dataset fields were changed.",
+                            )
+                          }
+                          type="button"
+                        >
+                          Not the right place
+                        </button>
+                        <p>
+                          These stage edits in the form. Copy the pin only when it
+                          should replace the saved coordinates.
+                        </p>
+                      </div>
+                      <div className="admin-action-group">
+                        <span>Step 3: finish</span>
+                        <button
+                          onClick={() =>
+                            markSelectedProductionPlaceVerified(selectedProductionPlace)
+                          }
+                          type="button"
+                        >
+                          Mark saved pin verified
+                        </button>
+                        {canOpenGoogleMaps ? (
+                          <a
+                            href={edit.googleMapsUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Open in Google Maps
+                          </a>
+                        ) : (
+                          <span className="admin-disabled-action">
+                            Add a Maps URL first.
+                          </span>
+                        )}
+                        <p>
+                          Use this when the current saved pin is already correct.
+                          Then save the place record.
+                        </p>
+                      </div>
+                      <div className="admin-action-group is-secondary">
+                        <span>Other actions</span>
+                        <details className="admin-more-actions">
+                          <summary>More actions</summary>
+                          <div className="admin-more-actions-menu">
+                            <button
+                              onClick={() =>
+                                setProductionMessage(
+                                  "Duplicate place uses the Add Place intake flow for now.",
+                                )
+                              }
+                              type="button"
+                            >
+                              Duplicate place
+                            </button>
+                            <button
+                              className="admin-danger-action"
+                              disabled={savingProductionPlaceId === selectedProductionPlace.id}
+                              onClick={() => setDeleteProductionPlace(selectedProductionPlace)}
+                              type="button"
+                            >
+                              Delete place
+                            </button>
+                          </div>
+                        </details>
+                      </div>
                     </div>
-                  </div>
+                  </section>
+                  </>
                 );
               })()
             ) : (
@@ -1728,8 +2867,8 @@ export function AdminWorkflow({
           </div>
         </section>
 
-        <section className="panel admin-form-panel">
-          <h2>Capture input</h2>
+        <details className="panel admin-form-panel admin-secondary-panel" ref={capturePanelRef}>
+          <summary>Capture input</summary>
           <form className="admin-form" onSubmit={handleSubmit}>
             <label>
               Admin password
@@ -1798,9 +2937,10 @@ export function AdminWorkflow({
               {isLoading ? "Resolving places..." : "Resolve places"}
             </button>
           </form>
-        </section>
+        </details>
 
-        <section className="panel admin-results-panel">
+        <details className="panel admin-results-panel admin-secondary-panel">
+          <summary>Structured drafts</summary>
           <div className="admin-section-header">
             <h2>Structured drafts</h2>
           </div>
@@ -2068,9 +3208,10 @@ export function AdminWorkflow({
               place drafts here.
             </p>
           )}
-        </section>
+        </details>
 
-        <section className="panel admin-staged-panel">
+        <details className="panel admin-staged-panel admin-secondary-panel">
+          <summary>Approved staging</summary>
           <div className="admin-staged-header">
             <div>
               <h2>Approved staging</h2>
@@ -2237,9 +3378,10 @@ export function AdminWorkflow({
               live map dataset.
             </p>
           )}
-        </section>
+        </details>
 
-        <section className="panel admin-export-panel">
+        <details className="panel admin-export-panel admin-secondary-panel">
+          <summary>Approved dataset export</summary>
           <div className="admin-staged-header">
             <div>
               <h2>Approved dataset export</h2>
@@ -2267,13 +3409,51 @@ export function AdminWorkflow({
               <code>{datasetExport.filePath}</code>
             </div>
           ) : null}
-        </section>
+        </details>
       </section>
       <datalist id="admin-category-options">
         {categoryOptions.map((category) => (
           <option key={category} value={category} />
         ))}
       </datalist>
+      <datalist id="admin-city-options">
+        {cityOptions.map((city) => (
+          <option key={city} value={city} />
+        ))}
+      </datalist>
+      {deleteProductionPlace ? (
+        <div className="admin-modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="delete-production-place-title"
+            className="admin-confirm-dialog"
+            role="dialog"
+          >
+            <h2 id="delete-production-place-title">Delete this place?</h2>
+            <p>
+              This cannot be undone. {deleteProductionPlace.name} will be
+              removed from the production map dataset.
+            </p>
+            <div className="admin-confirm-actions">
+              <button
+                onClick={() => setDeleteProductionPlace(null)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="admin-danger-action"
+                disabled={savingProductionPlaceId === deleteProductionPlace.id}
+                onClick={() => confirmDeleteProductionPlace(deleteProductionPlace)}
+                type="button"
+              >
+                {savingProductionPlaceId === deleteProductionPlace.id
+                  ? "Deleting..."
+                  : "Delete place"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

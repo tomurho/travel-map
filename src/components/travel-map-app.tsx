@@ -11,7 +11,11 @@ import {
   getCities,
 } from "@/lib/filtering";
 import { formatDistance, getDistanceKm, type GeoPoint } from "@/lib/geo";
-import type { Place, PlaceFilterState } from "@/lib/place";
+import {
+  getPublicNotes,
+  type Place,
+  type PlaceFilterState,
+} from "@/lib/place";
 
 type TravelMapAppProps = {
   places: Place[];
@@ -25,10 +29,28 @@ type RecommendedPlace = {
   recommendationLabel: string;
 };
 
+type NearbyMode =
+  | "off"
+  | "all"
+  | "want_to_go"
+  | "loved"
+  | "unvisited"
+  | "coffee"
+  | "food";
+
 type FilterOption = {
   label: string;
   value: string;
 };
+
+const nearbyModeOptions: Array<{ label: string; mode: Exclude<NearbyMode, "off"> }> = [
+  { label: "Near me", mode: "all" },
+  { label: "Want to go nearby", mode: "want_to_go" },
+  { label: "Loved nearby", mode: "loved" },
+  { label: "Unvisited nearby", mode: "unvisited" },
+  { label: "Coffee nearby", mode: "coffee" },
+  { label: "Food nearby", mode: "food" },
+];
 
 const defaultFilters: PlaceFilterState = {
   city: "all",
@@ -114,24 +136,85 @@ function getRecommendationLabel(place: Place, distanceKm: number) {
   return "Nearby save";
 }
 
-function getRecommendationScore(place: Place, distanceKm: number) {
-  const distanceScore = Math.max(0, 70 - distanceKm * 6);
+function isCoffeePlace(place: Place) {
+  const category = place.category.toLowerCase();
+
+  return category.includes("coffee") || category.includes("cafe");
+}
+
+function isFoodPlace(place: Place) {
+  const category = place.category.toLowerCase();
+
+  return [
+    "restaurant",
+    "food",
+    "ramen",
+    "sushi",
+    "izakaya",
+    "thai",
+    "vietnamese",
+    "spanish",
+    "chinese",
+    "bakery",
+    "pastr",
+    "dessert",
+    "brunch",
+    "dining",
+    "noodle",
+    "pizza",
+    "burger",
+  ].some((keyword) => category.includes(keyword));
+}
+
+function matchesNearbyMode(place: Place, mode: NearbyMode) {
+  if (mode === "off" || mode === "all") {
+    return true;
+  }
+
+  if (mode === "want_to_go") {
+    return place.status === "want_to_go";
+  }
+
+  if (mode === "loved") {
+    return place.loved === true;
+  }
+
+  if (mode === "unvisited") {
+    return place.status !== "been";
+  }
+
+  if (mode === "coffee") {
+    return isCoffeePlace(place);
+  }
+
+  return isFoodPlace(place);
+}
+
+function getRecommendationScore(place: Place, distanceKm: number, mode: NearbyMode) {
+  const distanceScore = Math.max(0, 80 - distanceKm * 7);
   const lovedBoost = place.loved === true ? 90 : 0;
   const statusBoost =
-    place.status === "been" ? 34 : place.status === "want_to_go" ? 28 : 8;
+    place.status === "want_to_go" ? 42 : place.status === "been" ? 28 : 18;
+  const categoryBoost =
+    (mode === "coffee" && isCoffeePlace(place)) ||
+    (mode === "food" && isFoodPlace(place))
+      ? 30
+      : 0;
 
-  return distanceScore + lovedBoost + statusBoost;
+  return distanceScore + lovedBoost + statusBoost + categoryBoost;
 }
 
 function getRecommendedPlaces(
   places: Place[],
   userLocation: GeoPoint | null,
+  mode: NearbyMode,
 ): RecommendedPlace[] {
   if (!userLocation) {
     return [];
   }
 
   return places
+    .filter((place) => matchesNearbyMode(place, mode))
     .map((place) => {
       const distanceKm = getDistanceKm(userLocation, {
         latitude: place.latitude,
@@ -141,7 +224,7 @@ function getRecommendedPlaces(
       return {
         place,
         distanceKm,
-        score: getRecommendationScore(place, distanceKm),
+        score: getRecommendationScore(place, distanceKm, mode),
         recommendationLabel: getRecommendationLabel(place, distanceKm),
       };
     })
@@ -154,6 +237,24 @@ function getRecommendedPlaces(
 
       return firstPlace.distanceKm - secondPlace.distanceKm;
     });
+}
+
+function getStatusPills(place: Place) {
+  const pills: string[] = [];
+
+  if (place.loved === true) {
+    pills.push("Loved");
+  }
+
+  if (place.status === "been") {
+    pills.push("Been");
+  }
+
+  if (place.status === "want_to_go") {
+    pills.push("Want to go");
+  }
+
+  return pills;
 }
 
 function FilterMenu({
@@ -226,7 +327,8 @@ export function TravelMapApp({
   );
   const [openMapPlaceId, setOpenMapPlaceId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
-  const [nearMeMode, setNearMeMode] = useState(false);
+  const [nearbyMode, setNearbyMode] = useState<NearbyMode>("off");
+  const [requestLocationNonce, setRequestLocationNonce] = useState(0);
   const [openFilterMenu, setOpenFilterMenu] = useState<string | null>(null);
 
   useEffect(() => {
@@ -303,15 +405,15 @@ export function TravelMapApp({
     [places, filters],
   );
   const recommendedPlaces = useMemo(
-    () => getRecommendedPlaces(filteredPlaces, userLocation),
-    [filteredPlaces, userLocation],
+    () => getRecommendedPlaces(filteredPlaces, userLocation, nearbyMode),
+    [filteredPlaces, nearbyMode, userLocation],
   );
   const placesInView = useMemo(
     () =>
-      nearMeMode
+      nearbyMode !== "off" && userLocation
         ? recommendedPlaces.map((recommendedPlace) => recommendedPlace.place)
         : filteredPlaces,
-    [filteredPlaces, nearMeMode, recommendedPlaces],
+    [filteredPlaces, nearbyMode, recommendedPlaces, userLocation],
   );
   const recommendationByPlaceId = useMemo(
     () =>
@@ -325,17 +427,17 @@ export function TravelMapApp({
   );
   const closestLovedPlaces = useMemo(
     () =>
-      recommendedPlaces
+      getRecommendedPlaces(filteredPlaces, userLocation, "loved")
         .filter((recommendedPlace) => recommendedPlace.place.loved === true)
         .slice(0, 3),
-    [recommendedPlaces],
+    [filteredPlaces, userLocation],
   );
   const closestWantToGoPlaces = useMemo(
     () =>
-      recommendedPlaces
+      getRecommendedPlaces(filteredPlaces, userLocation, "want_to_go")
         .filter((recommendedPlace) => recommendedPlace.place.status === "want_to_go")
         .slice(0, 3),
-    [recommendedPlaces],
+    [filteredPlaces, userLocation],
   );
 
   useEffect(() => {
@@ -415,6 +517,14 @@ export function TravelMapApp({
     });
   }
 
+  function activateNearbyMode(mode: Exclude<NearbyMode, "off">) {
+    setNearbyMode((currentMode) => (currentMode === mode ? "off" : mode));
+
+    if (!userLocation) {
+      setRequestLocationNonce((current) => current + 1);
+    }
+  }
+
   const selectedPlace =
     placesInView.find((place) => place.id === selectedPlaceId) ?? null;
   const lovedFilterActive = filters.loved === "loved";
@@ -492,7 +602,7 @@ export function TravelMapApp({
           <span className="stat-chip">
             <span className="dot dot-loved" />
             <strong>{scopedPlaces.filter((place) => place.loved === true).length}</strong>{" "}
-            loved it
+            loved
           </span>
         </div>
       </section>
@@ -522,7 +632,7 @@ export function TravelMapApp({
             type="button"
           >
             <span className="loved-filter-mark" aria-hidden="true" />
-            <strong>Loved it</strong>
+            <strong>Loved</strong>
           </button>
 
           <FilterMenu
@@ -583,10 +693,11 @@ export function TravelMapApp({
         <div className="panel map-panel">
           <div className="map-frame">
             <MapView
-              places={filteredPlaces}
+              places={placesInView}
               cityCenters={cityCenters}
               selectedPlaceId={selectedPlaceId}
               openPlaceId={openMapPlaceId}
+              requestLocationNonce={requestLocationNonce}
               onSelectPlace={(placeId) => {
                 setSelectedPlaceId(placeId);
                 setOpenMapPlaceId(placeId);
@@ -606,7 +717,9 @@ export function TravelMapApp({
               }}
               onUserLocationFound={(location) => {
                 setUserLocation(location);
-                setNearMeMode(true);
+                setNearbyMode((currentMode) =>
+                  currentMode === "off" ? "all" : currentMode,
+                );
               }}
             />
           </div>
@@ -618,21 +731,24 @@ export function TravelMapApp({
               <div>
                 <h2>{placesInView.length} places in view</h2>
                 <p>
-                  {nearMeMode && userLocation
+                  {nearbyMode !== "off" && userLocation
                     ? "Sorted by your location, endorsements, and nearby wishlist saves."
                     : "Tap a card to fly the map there. Tap a marker to focus the card here."}
                 </p>
               </div>
-              {userLocation ? (
+            </div>
+            <div className="nearby-chip-row" aria-label="Nearby recommendation filters">
+              {nearbyModeOptions.map((option) => (
                 <button
-                  aria-pressed={nearMeMode}
-                  className={`near-me-button${nearMeMode ? " is-active" : ""}`}
-                  onClick={() => setNearMeMode((current) => !current)}
+                  aria-pressed={nearbyMode === option.mode}
+                  className={`nearby-chip${nearbyMode === option.mode ? " is-active" : ""}`}
+                  key={option.mode}
+                  onClick={() => activateNearbyMode(option.mode)}
                   type="button"
                 >
-                  Near me
+                  {option.label}
                 </button>
-              ) : null}
+              ))}
             </div>
             {userLocation && nearbySections.length > 0 ? (
               <div className="nearby-recommendation-grid">
@@ -677,6 +793,9 @@ export function TravelMapApp({
               <div className="place-list">
                 {placesInView.map((place) => {
                   const recommendation = recommendationByPlaceId.get(place.id) ?? null;
+                  const publicNotes = getPublicNotes(place);
+                  const googleMapsUrl = place.googleMapsUrl?.trim();
+                  const statusPills = getStatusPills(place);
                   const selectPlace = () => {
                     setSelectedPlaceId(place.id);
                     setOpenMapPlaceId(place.id);
@@ -700,26 +819,49 @@ export function TravelMapApp({
                       tabIndex={0}
                     >
                       <div className="place-card-header">
-                        <div>
-                          <h3>{place.name}</h3>
-                          <div className="eyebrow">
-                            <span>{place.category}</span>
-                            {place.loved === true ? (
-                              <span className="loved-badge">Loved it</span>
-                            ) : place.status === "been" || place.status === "want_to_go" ? (
-                              <span className={`badge ${place.status}`}>
-                                {place.status === "been" ? "Been" : "Want to go"}
-                              </span>
-                            ) : null}
-                          </div>
+                        <div className="place-card-main">
+                          <h3>
+                            {googleMapsUrl ? (
+                              <a
+                                className="place-name-link"
+                                href={googleMapsUrl}
+                                onClick={(event) => event.stopPropagation()}
+                                rel="noopener noreferrer"
+                                target="_blank"
+                              >
+                                {place.name}
+                              </a>
+                            ) : (
+                              <span>{place.name}</span>
+                            )}
+                          </h3>
+                          <p className="place-card-meta">
+                            {place.category}
+                            {place.district ? ` · ${place.district}` : ""}
+                          </p>
+                          {statusPills.length > 0 ? (
+                            <div className="status-pill-row">
+                              {statusPills.map((pill, index) => (
+                                <span className="status-pill" key={pill}>
+                                  {index > 0 ? " " : ""}
+                                  {pill}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
-                        {place.district ? <span className="badge">{place.district}</span> : null}
                       </div>
-                      <address>{place.address || "Address to be added"}</address>
+                      {publicNotes.length > 0 ? (
+                        <div className="place-notes">
+                          {publicNotes.map((note) => (
+                            <p key={note}>{note}</p>
+                          ))}
+                        </div>
+                      ) : null}
                       {userLocation && recommendation ? (
                         <div className="place-recommendation-row">
                           <span>
-                            {nearMeMode
+                            {nearbyMode !== "off"
                               ? recommendation.recommendationLabel
                               : "Distance from you"}
                           </span>

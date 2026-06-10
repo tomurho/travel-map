@@ -30,6 +30,25 @@ function readLoved(value: string | undefined): LovedFilter {
     : "all";
 }
 
+function toPublicPlace(place: Place): Place {
+  return {
+    id: place.id,
+    name: place.name,
+    city: place.city,
+    category: place.category,
+    status: place.status,
+    loved: place.loved,
+    district: place.district,
+    address: place.address,
+    latitude: place.latitude,
+    longitude: place.longitude,
+    tabelog: "",
+    subway: "",
+    googleMapsUrl: place.googleMapsUrl,
+    notes: place.notes,
+  };
+}
+
 export default async function Home({ searchParams }: PageProps) {
   const params = await searchParams;
   const status = readStatus(readSearchParam(params.status));
@@ -45,7 +64,7 @@ export default async function Home({ searchParams }: PageProps) {
 
   return (
     <TravelMapApp
-      places={(places as Place[]).filter(isPublicPlace)}
+      places={(places as Place[]).filter(isPublicPlace).map(toPublicPlace)}
       initialFilters={initialFilters}
     />
   );
