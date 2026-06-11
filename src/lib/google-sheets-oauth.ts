@@ -18,6 +18,7 @@ const OAUTH_TOKEN_PATH = path.resolve(
 export type SheetMetadata = {
   sheets?: Array<{
     properties?: {
+      sheetId?: number;
       title?: string;
     };
   }>;
@@ -234,7 +235,7 @@ export async function getSpreadsheetMetadata(
   sheetId: string,
 ) {
   return sheetsFetch<SheetMetadata>(authClient, `spreadsheets/${sheetId}`, {
-    searchParams: { fields: "sheets.properties(title)" },
+    searchParams: { fields: "sheets.properties(sheetId,title)" },
   });
 }
 
@@ -336,4 +337,44 @@ export async function updateValues(
       },
     },
   );
+}
+
+export async function batchUpdateValues(
+  authClient: OAuth2Client,
+  sheetId: string,
+  data: Array<{
+    range: string;
+    values: string[][];
+  }>,
+) {
+  if (data.length === 0) {
+    return;
+  }
+
+  await sheetsFetch(
+    authClient,
+    `spreadsheets/${sheetId}/values:batchUpdate`,
+    {
+      body: {
+        data,
+        valueInputOption: "USER_ENTERED",
+      },
+      method: "POST",
+    },
+  );
+}
+
+export async function batchUpdateSpreadsheet(
+  authClient: OAuth2Client,
+  sheetId: string,
+  requests: Array<Record<string, unknown>>,
+) {
+  if (requests.length === 0) {
+    return;
+  }
+
+  await sheetsFetch(authClient, `spreadsheets/${sheetId}:batchUpdate`, {
+    body: { requests },
+    method: "POST",
+  });
 }

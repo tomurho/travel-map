@@ -7,6 +7,7 @@ import type { OAuth2Client } from "google-auth-library";
 import {
   appendValues,
   assertSheetExists,
+  batchUpdateValues,
   columnName,
   createGoogleSheetsAuthClient,
   ensureSheet,
@@ -24,11 +25,13 @@ const CAPTURE_TAB = "Capture";
 const REVIEW_TAB = "Review";
 const API_USAGE_TAB = "API Usage";
 const PUBLISHED_TAB = "Published";
+const AUDIT_TAB = "Audit";
 const READY_INTAKE_STATUS = "Ready";
 const PLACES_JSON_PATH = path.resolve(process.cwd(), "src/data/places.json");
 
 const PLACES_TEXT_SEARCH_URL =
   "https://places.googleapis.com/v1/places:searchText";
+const PLACES_DETAILS_URL = "https://places.googleapis.com/v1/places";
 const PLACES_FIELD_MASK = [
   "places.id",
   "places.displayName",
@@ -95,6 +98,23 @@ export type SyncPublishedToAppOptions = {
   write?: boolean;
 };
 
+export type ExportPlacesToAuditOptions = {
+  city: string;
+  sheetId: string;
+};
+
+export type LookupAuditCandidatesOptions = {
+  confirmLiveApi: boolean;
+  maxApiCalls: number | null;
+  sheetId: string;
+};
+
+export type ApplyAuditUpdatesOptions = {
+  dryRun?: boolean;
+  sheetId: string;
+  write?: boolean;
+};
+
 const REVIEW_HEADERS = [
   "id",
   "rawName",
@@ -129,6 +149,34 @@ const PUBLISHED_HEADERS = [
   "notes",
   "verifiedStatus",
   "lastChecked",
+];
+
+const AUDIT_HEADERS = [
+  "id",
+  "currentName",
+  "currentCity",
+  "currentCountry",
+  "currentCategory",
+  "currentArea",
+  "currentAddress",
+  "currentLatitude",
+  "currentLongitude",
+  "currentGoogleMapsUrl",
+  "currentGooglePlaceId",
+  "currentStatus",
+  "currentLoved",
+  "currentNotes",
+  "candidateName",
+  "candidateAddress",
+  "candidateLatitude",
+  "candidateLongitude",
+  "candidateGoogleMapsUrl",
+  "candidateGooglePlaceId",
+  "candidateCategory",
+  "candidateDistanceMeters",
+  "auditStatus",
+  "auditNotes",
+  "lastAudited",
 ];
 
 const API_USAGE_HEADERS = [
@@ -397,6 +445,141 @@ function getCollisionSafeId(baseId: string, existingIds: Set<string>) {
   return nextId;
 }
 
+function formatPlaceNotes(notes: Place["notes"]) {
+  if (Array.isArray(notes)) {
+    return notes.join(" | ");
+  }
+
+  return notes ?? "";
+}
+
+function buildAuditRecord(place: Place) {
+  return {
+    id: place.id,
+    currentName: place.name,
+    currentCity: place.city,
+    currentCountry: "",
+    currentCategory: place.category,
+    currentArea: place.district,
+    currentAddress: place.address,
+    currentLatitude: place.latitude,
+    currentLongitude: place.longitude,
+    currentGoogleMapsUrl: place.googleMapsUrl ?? "",
+    currentGooglePlaceId: place.googlePlaceId ?? "",
+    currentStatus: place.status,
+    currentLoved:
+      place.loved === null || place.loved === undefined ? "" : String(place.loved),
+    currentNotes: formatPlaceNotes(place.notes),
+    candidateName: "",
+    candidateAddress: "",
+    candidateLatitude: "",
+    candidateLongitude: "",
+    candidateGoogleMapsUrl: "",
+    candidateGooglePlaceId: "",
+    candidateCategory: "",
+    candidateDistanceMeters: "",
+    auditStatus: "Queued",
+    auditNotes: "",
+    lastAudited: "",
+  };
+}
+
+async function getAuditHeaders(authClient: OAuth2Client, sheetId: string) {
+  const range = `${quoteSheetName(AUDIT_TAB)}!1:1`;
+  const values = await readValues(authClient, sheetId, range);
+  const existingHeaders = (values[0] ?? []).map((value) => String(value ?? ""));
+
+  if (existingHeaders.length === 0) {
+    await updateNonPublishedValues(
+      authClient,
+      sheetId,
+      `${quoteSheetName(AUDIT_TAB)}!A1:${columnName(AUDIT_HEADERS.length - 1)}1`,
+      [AUDIT_HEADERS],
+    );
+    return AUDIT_HEADERS;
+  }
+
+  const normalizedExistingHeaders = existingHeaders
+    .slice(0, AUDIT_HEADERS.length)
+    .map(normalizeSheetHeader);
+  const normalizedAuditHeaders = AUDIT_HEADERS.map(normalizeSheetHeader);
+  const hasExpectedHeaderPrefix = normalizedAuditHeaders.every(
+    (header, index) => normalizedExistingHeaders[index] === header,
+  );
+
+  if (!hasExpectedHeaderPrefix) {
+    throw new Error(
+      `Audit tab header does not match expected v1 schema in columns A:${columnName(
+        AUDIT_HEADERS.length - 1,
+      )}. Expected: ${AUDIT_HEADERS.join(", ")}`,
+    );
+  }
+
+  return AUDIT_HEADERS;
+}
+
+export async function exportPlacesToAudit(options: ExportPlacesToAuditOptions) {
+  if (!options.sheetId?.trim()) {
+    throw new Error("--sheet-id is required.");
+  }
+
+  const city = options.city?.trim();
+
+  if (!city) {
+    throw new Error("--city is required.");
+  }
+
+  const currentPlaces = JSON.parse(
+    await fs.readFile(PLACES_JSON_PATH, "utf8"),
+  ) as Place[];
+  const matchingPlaces = currentPlaces.filter(
+    (place) => place.city.toLowerCase() === city.toLowerCase(),
+  );
+  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+  const metadata = await getSpreadsheetMetadata(sheetsAuthClient, options.sheetId);
+
+  await ensureSheet(sheetsAuthClient, options.sheetId, metadata, AUDIT_TAB);
+
+  const auditHeaders = await getAuditHeaders(sheetsAuthClient, options.sheetId);
+  const auditRows = await readValues(
+    sheetsAuthClient,
+    options.sheetId,
+    `${quoteSheetName(AUDIT_TAB)}!A1:ZZ`,
+  );
+  const existingAuditIds = new Set(readIdsFromSheetValues(auditRows));
+  const rowsToAppend = matchingPlaces
+    .filter((place) => !existingAuditIds.has(place.id))
+    .map((place) => rowFromRecord(auditHeaders, buildAuditRecord(place)));
+  const skippedDuplicateIds = matchingPlaces
+    .filter((place) => existingAuditIds.has(place.id))
+    .map((place) => place.id);
+
+  if (rowsToAppend.length > 0) {
+    await appendNonPublishedValues(
+      sheetsAuthClient,
+      options.sheetId,
+      `${quoteSheetName(AUDIT_TAB)}!A:${columnName(auditHeaders.length - 1)}`,
+      rowsToAppend,
+    );
+  }
+
+  console.log("Audit export summary");
+  console.table({
+    city,
+    rowsMatched: matchingPlaces.length,
+    rowsExported: rowsToAppend.length,
+    duplicatesSkipped: skippedDuplicateIds.length,
+  });
+
+  return {
+    city,
+    duplicatesSkipped: skippedDuplicateIds.length,
+    rowsExported: rowsToAppend.length,
+    rowsMatched: matchingPlaces.length,
+    skippedDuplicateIds,
+  };
+}
+
 function inferCategoryFromTypes(types: string[] = []) {
   const normalizedTypes = new Set(types.map(normalizeText));
 
@@ -486,6 +669,557 @@ async function searchGooglePlaces(input: {
   }
 
   return (await response.json()) as GoogleTextSearchResponse;
+}
+
+async function fetchGooglePlaceDetails(input: {
+  apiKey: string;
+  placeId: string;
+}) {
+  const placeId = input.placeId.replace(/^places\//, "").trim();
+  const response = await fetch(
+    `${PLACES_DETAILS_URL}/${encodeURIComponent(placeId)}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": input.apiKey,
+        "X-Goog-FieldMask": PLACES_FIELD_MASK.replace(/places\./g, ""),
+      },
+      method: "GET",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Google Places API ${response.status}: ${await response.text()}`);
+  }
+
+  return (await response.json()) as GooglePlaceCandidate;
+}
+
+function buildAuditSearchQuery(row: SheetRow) {
+  return [
+    readMappedSheetField(row.fields, ["currentName"]),
+    readMappedSheetField(row.fields, ["currentCity"]),
+    readMappedSheetField(row.fields, ["currentCountry"]),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+function readCoordinateField(row: SheetRow, names: string[]) {
+  const value = Number(readMappedSheetField(row.fields, names));
+
+  return Number.isFinite(value) ? value : null;
+}
+
+function distanceMetersBetween(input: {
+  fromLatitude: number | null;
+  fromLongitude: number | null;
+  toLatitude: number | undefined;
+  toLongitude: number | undefined;
+}) {
+  if (
+    input.fromLatitude === null ||
+    input.fromLongitude === null ||
+    input.toLatitude === undefined ||
+    input.toLongitude === undefined
+  ) {
+    return "";
+  }
+
+  const earthRadiusMeters = 6371000;
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const deltaLatitude = toRadians(input.toLatitude - input.fromLatitude);
+  const deltaLongitude = toRadians(input.toLongitude - input.fromLongitude);
+  const fromLatitudeRadians = toRadians(input.fromLatitude);
+  const toLatitudeRadians = toRadians(input.toLatitude);
+  const a =
+    Math.sin(deltaLatitude / 2) ** 2 +
+    Math.cos(fromLatitudeRadians) *
+      Math.cos(toLatitudeRadians) *
+      Math.sin(deltaLongitude / 2) ** 2;
+  const distance =
+    earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return Math.round(distance);
+}
+
+function getAuditUpdateRow(input: {
+  candidate?: GooglePlaceCandidate;
+  headers: string[];
+  lastAudited: string;
+  row: SheetRow;
+}) {
+  const candidate = input.candidate;
+  const currentLatitude = readCoordinateField(input.row, ["currentLatitude"]);
+  const currentLongitude = readCoordinateField(input.row, ["currentLongitude"]);
+  const record: Record<string, unknown> = {};
+
+  for (const header of input.headers) {
+    record[header] = readMappedSheetField(input.row.fields, [header]);
+  }
+
+  return rowFromRecord(input.headers, {
+    ...record,
+    auditStatus: "Candidate",
+    candidateAddress: candidate?.formattedAddress ?? "",
+    candidateCategory: inferCategoryFromTypes(candidate?.types),
+    candidateDistanceMeters: distanceMetersBetween({
+      fromLatitude: currentLatitude,
+      fromLongitude: currentLongitude,
+      toLatitude: candidate?.location?.latitude,
+      toLongitude: candidate?.location?.longitude,
+    }),
+    candidateGoogleMapsUrl: candidate?.googleMapsUri ?? "",
+    candidateGooglePlaceId: candidate?.id ?? "",
+    candidateLatitude: candidate?.location?.latitude ?? "",
+    candidateLongitude: candidate?.location?.longitude ?? "",
+    candidateName: candidate?.displayName?.text ?? "",
+    lastAudited: input.lastAudited,
+  });
+}
+
+export async function lookupAuditCandidates(options: LookupAuditCandidatesOptions) {
+  if (!options.sheetId?.trim()) {
+    throw new Error("--sheet-id is required.");
+  }
+
+  if (!options.confirmLiveApi) {
+    throw new Error("--confirm-live-api is required for live Google Places calls.");
+  }
+
+  if (options.maxApiCalls === null) {
+    throw new Error("--max-api-calls is required.");
+  }
+
+  if (!process.env.GOOGLE_PLACES_API_KEY?.trim()) {
+    throw new Error("GOOGLE_PLACES_API_KEY is required.");
+  }
+
+  const sheetId = options.sheetId;
+  const maxApiCalls = options.maxApiCalls;
+  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+  const metadata = await getSpreadsheetMetadata(sheetsAuthClient, sheetId);
+  assertSheetExists(metadata, AUDIT_TAB);
+  await ensureSheet(sheetsAuthClient, sheetId, metadata, API_USAGE_TAB);
+
+  const auditHeaders = await getAuditHeaders(sheetsAuthClient, sheetId);
+  const auditRows = await readValues(
+    sheetsAuthClient,
+    sheetId,
+    `${quoteSheetName(AUDIT_TAB)}!A1:ZZ`,
+  );
+  const apiUsageHeaders = await ensureHeaders(
+    sheetsAuthClient,
+    sheetId,
+    API_USAGE_TAB,
+    API_USAGE_HEADERS,
+  );
+  const auditDataRows: SheetRow[] = auditRows.slice(1).map((values, index) => ({
+    fields: mapSheetRowToObject(auditHeaders, values),
+    rowNumber: index + 2,
+    values,
+  }));
+  const queuedRows = auditDataRows.filter(
+    (row) => readMappedSheetField(row.fields, ["auditStatus"]) === "Queued",
+  );
+  const timestamp = new Date().toISOString();
+  let apiCallsMade = 0;
+  let candidatesFound = 0;
+  let rowsUpdated = 0;
+  let skippedRows = 0;
+
+  for (const auditRow of queuedRows) {
+    if (apiCallsMade >= maxApiCalls) {
+      break;
+    }
+
+    const currentGooglePlaceId = readMappedSheetField(auditRow.fields, [
+      "currentGooglePlaceId",
+    ]);
+    const query = currentGooglePlaceId || buildAuditSearchQuery(auditRow);
+    const endpoint = currentGooglePlaceId ? "places.get" : "places:searchText";
+
+    if (!query) {
+      skippedRows += 1;
+      await appendNonPublishedValues(
+        sheetsAuthClient,
+        sheetId,
+        `${quoteSheetName(API_USAGE_TAB)}!A1`,
+        [
+          rowFromRecord(apiUsageHeaders, {
+            timestamp,
+            provider: "Google Places",
+            endpoint,
+            apiCalls: 0,
+            maxApiCalls,
+            sheetId,
+            captureRow: auditRow.rowNumber,
+            query,
+            candidateCount: 0,
+            status: "skipped",
+            error: "Missing audit lookup fields.",
+          }),
+        ],
+      );
+      continue;
+    }
+
+    let candidate: GooglePlaceCandidate | undefined;
+    let candidateCount = 0;
+
+    try {
+      if (currentGooglePlaceId) {
+        candidate = await fetchGooglePlaceDetails({
+          apiKey: process.env.GOOGLE_PLACES_API_KEY as string,
+          placeId: currentGooglePlaceId,
+        });
+        candidateCount = 1;
+      } else {
+        const response = await searchGooglePlaces({
+          apiKey: process.env.GOOGLE_PLACES_API_KEY as string,
+          headers: new Map(),
+          query,
+          row: [],
+        });
+        candidate = response.places?.[0];
+        candidateCount = response.places?.length ?? 0;
+      }
+    } catch (caughtError) {
+      const error =
+        caughtError instanceof Error ? caughtError.message : String(caughtError);
+
+      await appendNonPublishedValues(
+        sheetsAuthClient,
+        sheetId,
+        `${quoteSheetName(API_USAGE_TAB)}!A1`,
+        [
+          rowFromRecord(apiUsageHeaders, {
+            timestamp,
+            provider: "Google Places",
+            endpoint,
+            apiCalls: 0,
+            maxApiCalls,
+            sheetId,
+            captureRow: auditRow.rowNumber,
+            query,
+            candidateCount: 0,
+            status: "error",
+            error,
+          }),
+        ],
+      );
+
+      throw new Error(error);
+    }
+
+    apiCallsMade += 1;
+
+    await appendNonPublishedValues(
+      sheetsAuthClient,
+      sheetId,
+      `${quoteSheetName(API_USAGE_TAB)}!A1`,
+      [
+        rowFromRecord(apiUsageHeaders, {
+          timestamp,
+          provider: "Google Places",
+          endpoint,
+          apiCalls: 1,
+          maxApiCalls,
+          sheetId,
+          captureRow: auditRow.rowNumber,
+          query,
+          candidateCount,
+          status: "ok",
+          error: "",
+        }),
+      ],
+    );
+
+    if (candidate) {
+      candidatesFound += 1;
+    }
+
+    const candidateStartIndex = AUDIT_HEADERS.indexOf("candidateName");
+    const auditUpdateHeaders = auditHeaders.slice(candidateStartIndex);
+
+    await updateNonPublishedValues(
+      sheetsAuthClient,
+      sheetId,
+      `${quoteSheetName(AUDIT_TAB)}!${columnName(candidateStartIndex)}${
+        auditRow.rowNumber
+      }:${columnName(auditHeaders.length - 1)}${auditRow.rowNumber}`,
+      [
+        getAuditUpdateRow({
+          candidate,
+          headers: auditUpdateHeaders,
+          lastAudited: timestamp,
+          row: auditRow,
+        }),
+      ],
+    );
+    rowsUpdated += 1;
+  }
+
+  console.log(
+    `Audited ${rowsUpdated} row(s), skipped ${skippedRows}, made ${apiCallsMade} Google Places call(s), and found ${candidatesFound} candidate(s).`,
+  );
+
+  return {
+    apiCallsMade,
+    candidatesFound,
+    rowsUpdated,
+    skippedRows,
+  };
+}
+
+function getRequiredHeaderIndex(
+  sheetName: string,
+  headers: string[],
+  header: string,
+) {
+  const index = getHeaderIndex(indexHeaders(headers), [header]);
+
+  if (index === undefined) {
+    throw new Error(`${sheetName} is missing required column: ${header}`);
+  }
+
+  return index;
+}
+
+function getAuditAction(row: SheetRow) {
+  const auditStatus = readMappedSheetField(row.fields, ["auditStatus"]);
+
+  return auditStatus === "Update" || auditStatus === "Delete"
+    ? auditStatus
+    : null;
+}
+
+export async function applyAuditUpdates(options: ApplyAuditUpdatesOptions) {
+  const dryRun = options.dryRun ?? !options.write;
+  const write = options.write ?? false;
+
+  if (!options.sheetId?.trim()) {
+    throw new Error("--sheet-id is required.");
+  }
+
+  if (dryRun && write) {
+    throw new Error("Choose only one of --dry-run or --write.");
+  }
+
+  const sheetId = options.sheetId;
+  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+  const metadata = await getSpreadsheetMetadata(sheetsAuthClient, sheetId);
+  assertSheetExists(metadata, AUDIT_TAB);
+
+  const auditHeaders = await getAuditHeaders(sheetsAuthClient, sheetId);
+  const auditValues = await readValues(
+    sheetsAuthClient,
+    sheetId,
+    `${quoteSheetName(AUDIT_TAB)}!A1:ZZ`,
+  );
+  const auditStatusIndex = getRequiredHeaderIndex(
+    AUDIT_TAB,
+    auditHeaders,
+    "auditStatus",
+  );
+  const auditRows: SheetRow[] = auditValues.slice(1).map((values, index) => ({
+    fields: mapSheetRowToObject(auditHeaders, values),
+    rowNumber: index + 2,
+    values,
+  }));
+  const currentPlaces = JSON.parse(
+    await fs.readFile(PLACES_JSON_PATH, "utf8"),
+  ) as Place[];
+  const placesById = new Map(currentPlaces.map((place) => [place.id, place]));
+  const rowsToProcess = auditRows.filter((row) => getAuditAction(row));
+  const timestamp = new Date().toISOString();
+  const auditStatusUpdates: Array<{
+    range: string;
+    values: string[][];
+  }> = [];
+  const changes: Array<{
+    action: "Update" | "Delete";
+    id: string;
+    auditRowNumber: number;
+  }> = [];
+  const sampleUpdates: Array<{
+    id: string;
+    name: string;
+    rowNumber: number;
+  }> = [];
+  const sampleDeletes: Array<{
+    id: string;
+    name: string;
+    rowNumber: number;
+  }> = [];
+  const validationIssues: Array<{
+    id: string;
+    reason: string;
+    rowNumber: number;
+  }> = [];
+  const missingJsonMatches: Array<{
+    id: string;
+    rowNumber: number;
+  }> = [];
+  const updatedPlacesById = new Map(placesById);
+  const deletedPlaceIds = new Set<string>();
+
+  for (const auditRow of rowsToProcess) {
+    const action = getAuditAction(auditRow);
+    const id = readMappedSheetField(auditRow.fields, ["id"]);
+
+    if (!action) {
+      continue;
+    }
+
+    if (!id) {
+      validationIssues.push({
+        id,
+        reason: "Missing id.",
+        rowNumber: auditRow.rowNumber,
+      });
+      continue;
+    }
+
+    const currentPlace = updatedPlacesById.get(id);
+
+    if (!currentPlace) {
+      missingJsonMatches.push({
+        id,
+        rowNumber: auditRow.rowNumber,
+      });
+      continue;
+    }
+
+    if (action === "Delete") {
+      deletedPlaceIds.add(id);
+      auditStatusUpdates.push({
+        range: `${quoteSheetName(AUDIT_TAB)}!${columnName(auditStatusIndex)}${
+          auditRow.rowNumber
+        }`,
+        values: [["Applied"]],
+      });
+      changes.push({
+        action,
+        auditRowNumber: auditRow.rowNumber,
+        id,
+      });
+      sampleDeletes.push({
+        id,
+        name: currentPlace.name,
+        rowNumber: auditRow.rowNumber,
+      });
+      continue;
+    }
+
+    const candidateAddress = readMappedSheetField(auditRow.fields, [
+      "candidateAddress",
+    ]);
+    const candidateLatitude = readMappedSheetField(auditRow.fields, [
+      "candidateLatitude",
+    ]);
+    const candidateLongitude = readMappedSheetField(auditRow.fields, [
+      "candidateLongitude",
+    ]);
+    const candidateGoogleMapsUrl = readMappedSheetField(auditRow.fields, [
+      "candidateGoogleMapsUrl",
+    ]);
+    const candidateGooglePlaceId = readMappedSheetField(auditRow.fields, [
+      "candidateGooglePlaceId",
+    ]);
+    const candidateLatitudeNumber = Number(candidateLatitude);
+    const candidateLongitudeNumber = Number(candidateLongitude);
+    const missingCandidateFields = [
+      candidateAddress ? null : "candidateAddress",
+      candidateLatitude ? null : "candidateLatitude",
+      candidateLongitude ? null : "candidateLongitude",
+      candidateGoogleMapsUrl ? null : "candidateGoogleMapsUrl",
+      candidateGooglePlaceId ? null : "candidateGooglePlaceId",
+    ].filter((field): field is string => field !== null);
+
+    if (missingCandidateFields.length > 0) {
+      validationIssues.push({
+        id,
+        reason: `Missing candidate field(s): ${missingCandidateFields.join(", ")}.`,
+        rowNumber: auditRow.rowNumber,
+      });
+      continue;
+    }
+
+    if (!Number.isFinite(candidateLatitudeNumber) || !Number.isFinite(candidateLongitudeNumber)) {
+      validationIssues.push({
+        id,
+        reason: "Invalid candidate latitude/longitude.",
+        rowNumber: auditRow.rowNumber,
+      });
+      continue;
+    }
+
+    updatedPlacesById.set(id, {
+      ...currentPlace,
+      address: candidateAddress,
+      googleMapsUrl: candidateGoogleMapsUrl,
+      googlePlaceId: candidateGooglePlaceId,
+      lastChecked: timestamp,
+      latitude: candidateLatitudeNumber,
+      longitude: candidateLongitudeNumber,
+      verifiedStatus: "Yes",
+    });
+    auditStatusUpdates.push({
+      range: `${quoteSheetName(AUDIT_TAB)}!${columnName(auditStatusIndex)}${
+        auditRow.rowNumber
+      }`,
+      values: [["Applied"]],
+    });
+    changes.push({
+      action,
+      auditRowNumber: auditRow.rowNumber,
+      id,
+    });
+    sampleUpdates.push({
+      id,
+      name: currentPlace.name,
+      rowNumber: auditRow.rowNumber,
+    });
+  }
+
+  if (write) {
+    const nextPlaces = currentPlaces
+      .filter((place) => !deletedPlaceIds.has(place.id))
+      .map((place) => updatedPlacesById.get(place.id) ?? place);
+
+    await fs.writeFile(
+      PLACES_JSON_PATH,
+      `${JSON.stringify(nextPlaces, null, 2)}\n`,
+    );
+    await batchUpdateValues(sheetsAuthClient, sheetId, auditStatusUpdates);
+  }
+
+  console.log("Audit apply summary");
+  console.table({
+    mode: write ? "write" : "dry-run",
+    rowsRead: auditRows.length,
+    rowsToProcess: rowsToProcess.length,
+    updates: changes.filter((change) => change.action === "Update").length,
+    deletes: changes.filter((change) => change.action === "Delete").length,
+    missingJsonMatches: missingJsonMatches.length,
+    validationIssues: validationIssues.length,
+  });
+
+  return {
+    changes,
+    deletes: changes.filter((change) => change.action === "Delete").length,
+    dryRun: !write,
+    missingJsonMatchRows: missingJsonMatches,
+    missingJsonMatches: missingJsonMatches.length,
+    rowsRead: auditRows.length,
+    rowsToProcess: rowsToProcess.length,
+    sampleDeletes: sampleDeletes.slice(0, 10),
+    sampleUpdates: sampleUpdates.slice(0, 10),
+    updates: changes.filter((change) => change.action === "Update").length,
+    validationIssues,
+    wrote: write,
+  };
 }
 
 function buildReviewRecords(input: {
