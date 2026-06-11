@@ -12,3 +12,5 @@ src/data/admin-staged-places.json
 public/exports/*.xlsx
 .cache/
 outputs/
+.DS_Store
+tsconfig.tsbuildinfo

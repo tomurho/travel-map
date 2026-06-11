@@ -115,6 +115,14 @@ export type ApplyAuditUpdatesOptions = {
   write?: boolean;
 };
 
+export type ScreenshotCaptureRow = {
+  cityHint: string;
+  countryHint: string;
+  rawName: string;
+  rawText: string;
+  sourceScreenshot?: string;
+};
+
 const REVIEW_HEADERS = [
   "id",
   "rawName",
@@ -202,6 +210,14 @@ const CAPTURE_NAME_HEADERS = [
 const CITY_HINT_HEADERS = ["cityHint", "city"];
 const COUNTRY_HINT_HEADERS = ["countryHint", "country"];
 const AREA_HINT_HEADERS = ["areaHint", "districtHint"];
+const REQUIRED_SCREENSHOT_CAPTURE_HEADERS = [
+  "rawName",
+  "rawText",
+  "sourceType",
+  "cityHint",
+  "countryHint",
+  "intakeStatus",
+];
 
 function assertNotPublishedRange(range: string) {
   const trimmedRange = range.trim();
@@ -443,6 +459,77 @@ function getCollisionSafeId(baseId: string, existingIds: Set<string>) {
   }
 
   return nextId;
+}
+
+export async function appendScreenshotRowsToCapture(input: {
+  rows: ScreenshotCaptureRow[];
+  sheetId: string;
+}) {
+  if (!input.sheetId?.trim()) {
+    throw new Error("--sheet-id is required.");
+  }
+
+  const rows = input.rows
+    .map((row) => ({
+      ...row,
+      rawName: row.rawName.trim(),
+      rawText: row.rawText.trim(),
+      cityHint: row.cityHint.trim(),
+      countryHint: row.countryHint.trim(),
+      sourceScreenshot: row.sourceScreenshot?.trim() ?? "",
+    }))
+    .filter((row) => row.rawName);
+
+  if (rows.length === 0) {
+    return { rowsCreated: 0, rowsSkipped: input.rows.length };
+  }
+
+  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+  const metadata = await getSpreadsheetMetadata(sheetsAuthClient, input.sheetId);
+  assertSheetExists(metadata, CAPTURE_TAB);
+
+  const captureValues = await readValues(
+    sheetsAuthClient,
+    input.sheetId,
+    `${quoteSheetName(CAPTURE_TAB)}!A1:ZZ`,
+  );
+  const captureHeaders = (captureValues[0] ?? []).map((value) =>
+    String(value ?? ""),
+  );
+  requireHeaders(
+    CAPTURE_TAB,
+    captureHeaders,
+    REQUIRED_SCREENSHOT_CAPTURE_HEADERS,
+  );
+
+  const timestamp = new Date().toISOString();
+  const values = rows.map((row) =>
+    rowFromRecord(captureHeaders, {
+      rawName: row.rawName,
+      rawText: row.rawText,
+      sourceType: "Screenshot",
+      sourceScreenshot: row.sourceScreenshot,
+      cityHint: row.cityHint,
+      countryHint: row.countryHint,
+      notes: row.sourceScreenshot
+        ? `Source screenshot: ${row.sourceScreenshot}`
+        : "",
+      intakeStatus: "New",
+      createdAt: timestamp,
+    }),
+  );
+
+  await appendNonPublishedValues(
+    sheetsAuthClient,
+    input.sheetId,
+    `${quoteSheetName(CAPTURE_TAB)}!A:${columnName(captureHeaders.length - 1)}`,
+    values,
+  );
+
+  return {
+    rowsCreated: rows.length,
+    rowsSkipped: input.rows.length - rows.length,
+  };
 }
 
 function formatPlaceNotes(notes: Place["notes"]) {
@@ -1247,11 +1334,110 @@ function buildReviewRecords(input: {
     );
   }
 
+  function stripDiacritics(value: string) {
+    return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function deriveAreaFromCandidateAddress(candidate?: GooglePlaceCandidate) {
+    const address = candidate?.formattedAddress ?? "";
+    const normalizedCity = normalizeText(cityHint);
+    const normalizedAddress = normalizeText(address);
+
+    if (!address) {
+      return "";
+    }
+
+    if (
+      normalizedCity.includes("kyoto") ||
+      normalizedAddress.includes("kyoto")
+    ) {
+      return address.match(/\b([A-Za-z][A-Za-z\s'-]+?)\s+Ward\b/i)?.[1]?.trim()
+        ?? "";
+    }
+
+    if (
+      normalizedCity.includes("tokyo") ||
+      normalizedAddress.includes("tokyo")
+    ) {
+      const cityMatch = address.match(
+        /\b([A-Za-z][A-Za-z\s'-]+?)\s+City\b(?=,|\s|$)/i,
+      )?.[1]?.trim();
+
+      if (cityMatch) {
+        return cityMatch;
+      }
+
+      const tokyoWards = [
+        "Adachi",
+        "Arakawa",
+        "Bunkyo",
+        "Chiyoda",
+        "Chuo",
+        "Edogawa",
+        "Itabashi",
+        "Katsushika",
+        "Kita",
+        "Koto",
+        "Meguro",
+        "Minato",
+        "Nakano",
+        "Nerima",
+        "Ota",
+        "Setagaya",
+        "Shibuya",
+        "Shinagawa",
+        "Shinjuku",
+        "Suginami",
+        "Sumida",
+        "Taito",
+        "Toshima",
+      ];
+      const normalizedTokyoAddress = normalizeText(address);
+      const ward = tokyoWards.find((candidateWard) =>
+        new RegExp(`\\b${normalizeText(candidateWard)}\\b`).test(
+          normalizedTokyoAddress,
+        ),
+      );
+
+      return ward ?? "";
+    }
+
+    if (
+      normalizedCity.includes("taipei") ||
+      normalizedAddress.includes("taipei")
+    ) {
+      return address
+        .match(/\b([A-Za-z][A-Za-z\s'’.-]+?)\s+District\b/i)?.[1]
+        ?.trim() ?? "";
+    }
+
+    if (
+      normalizedCity.includes("ho chi minh") ||
+      normalizedAddress.includes("ho chi minh") ||
+      normalizedAddress.includes("hcmc")
+    ) {
+      const numberedDistrict = address.match(/\bDistrict\s+\d+[A-Za-z]?\b/i)?.[0];
+
+      if (numberedDistrict) {
+        return numberedDistrict;
+      }
+
+      const normalizedAddressWithoutDiacritics = stripDiacritics(address);
+
+      if (/\bThao\s+Dien\b/i.test(normalizedAddressWithoutDiacritics)) {
+        return "Thao Dien";
+      }
+    }
+
+    return "";
+  }
+
   function buildRecord(candidate?: GooglePlaceCandidate) {
     const countryMismatch = candidate ? hasCountryMismatch(candidate) : false;
     const duplicateNote = input.duplicateBaseId
       ? `Possible duplicate id: ${input.duplicateBaseId}`
       : "";
+    const reviewArea = area || deriveAreaFromCandidateAddress(candidate);
 
     return {
       id: input.reviewId,
@@ -1263,7 +1449,7 @@ function buildReviewRecords(input: {
       candidateGoogleMapsUrl: candidate?.googleMapsUri ?? "",
       candidateGooglePlaceId: candidate?.id ?? "",
       category: inferCategoryFromTypes(candidate?.types),
-      area,
+      area: reviewArea,
       city: cityHint,
       status,
       loved: "FALSE",

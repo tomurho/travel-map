@@ -33,24 +33,24 @@ type NearbyMode =
   | "off"
   | "all"
   | "want_to_go"
-  | "loved"
-  | "unvisited"
-  | "coffee"
-  | "food";
+  | "loved";
 
 type FilterOption = {
   label: string;
   value: string;
 };
 
-const nearbyModeOptions: Array<{ label: string; mode: Exclude<NearbyMode, "off"> }> = [
-  { label: "Near me", mode: "all" },
-  { label: "Want to go nearby", mode: "want_to_go" },
-  { label: "Loved nearby", mode: "loved" },
-  { label: "Unvisited nearby", mode: "unvisited" },
-  { label: "Coffee nearby", mode: "coffee" },
-  { label: "Food nearby", mode: "food" },
-];
+type StatusBadge =
+  | {
+      icon: "bookmark" | "heart";
+      label: string;
+      modifier: string;
+    }
+  | {
+      icon: null;
+      label: string;
+      modifier: string;
+    };
 
 const defaultFilters: PlaceFilterState = {
   city: "all",
@@ -129,41 +129,7 @@ function getRecommendationLabel(place: Place, distanceKm: number) {
     return "Nearby wishlist";
   }
 
-  if (place.status === "been") {
-    return "Been nearby";
-  }
-
   return "Nearby save";
-}
-
-function isCoffeePlace(place: Place) {
-  const category = place.category.toLowerCase();
-
-  return category.includes("coffee") || category.includes("cafe");
-}
-
-function isFoodPlace(place: Place) {
-  const category = place.category.toLowerCase();
-
-  return [
-    "restaurant",
-    "food",
-    "ramen",
-    "sushi",
-    "izakaya",
-    "thai",
-    "vietnamese",
-    "spanish",
-    "chinese",
-    "bakery",
-    "pastr",
-    "dessert",
-    "brunch",
-    "dining",
-    "noodle",
-    "pizza",
-    "burger",
-  ].some((keyword) => category.includes(keyword));
 }
 
 function matchesNearbyMode(place: Place, mode: NearbyMode) {
@@ -179,29 +145,16 @@ function matchesNearbyMode(place: Place, mode: NearbyMode) {
     return place.loved === true;
   }
 
-  if (mode === "unvisited") {
-    return place.status !== "been";
-  }
-
-  if (mode === "coffee") {
-    return isCoffeePlace(place);
-  }
-
-  return isFoodPlace(place);
+  return false;
 }
 
-function getRecommendationScore(place: Place, distanceKm: number, mode: NearbyMode) {
+function getRecommendationScore(place: Place, distanceKm: number) {
   const distanceScore = Math.max(0, 80 - distanceKm * 7);
   const lovedBoost = place.loved === true ? 90 : 0;
   const statusBoost =
     place.status === "want_to_go" ? 42 : place.status === "been" ? 28 : 18;
-  const categoryBoost =
-    (mode === "coffee" && isCoffeePlace(place)) ||
-    (mode === "food" && isFoodPlace(place))
-      ? 30
-      : 0;
 
-  return distanceScore + lovedBoost + statusBoost + categoryBoost;
+  return distanceScore + lovedBoost + statusBoost;
 }
 
 function getRecommendedPlaces(
@@ -224,7 +177,7 @@ function getRecommendedPlaces(
       return {
         place,
         distanceKm,
-        score: getRecommendationScore(place, distanceKm, mode),
+        score: getRecommendationScore(place, distanceKm),
         recommendationLabel: getRecommendationLabel(place, distanceKm),
       };
     })
@@ -239,22 +192,59 @@ function getRecommendedPlaces(
     });
 }
 
-function getStatusPills(place: Place) {
-  const pills: string[] = [];
-
+function getStatusBadge(place: Place): StatusBadge | null {
   if (place.loved === true) {
-    pills.push("Loved");
-  }
-
-  if (place.status === "been") {
-    pills.push("Been");
+    return {
+      icon: "heart" as const,
+      label: "Loved",
+      modifier: "status-badge--loved",
+    };
   }
 
   if (place.status === "want_to_go") {
-    pills.push("Want to go");
+    return {
+      icon: "bookmark" as const,
+      label: "Want to go",
+      modifier: "status-badge--want-to-go",
+    };
   }
 
-  return pills;
+  if (place.status === "been") {
+    return {
+      icon: null,
+      label: "Been",
+      modifier: "status-badge--been",
+    };
+  }
+
+  return null;
+}
+
+function StatusBadgeIcon({ icon }: { icon: "bookmark" | "heart" }) {
+  if (icon === "heart") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="status-badge__icon"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+          fill="currentColor"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="status-badge__icon"
+      viewBox="0 0 24 24"
+    >
+      <path d="M6 3h12v18l-6-4-6 4V3z" fill="currentColor" />
+    </svg>
+  );
 }
 
 function FilterMenu({
@@ -439,6 +429,20 @@ export function TravelMapApp({
         .slice(0, 3),
     [filteredPlaces, userLocation],
   );
+  const topPicksNearYou = useMemo(() => {
+    const seenPlaceIds = new Set<string>();
+
+    return [...closestLovedPlaces, ...closestWantToGoPlaces]
+      .filter((recommendedPlace) => {
+        if (seenPlaceIds.has(recommendedPlace.place.id)) {
+          return false;
+        }
+
+        seenPlaceIds.add(recommendedPlace.place.id);
+        return true;
+      })
+      .slice(0, 3);
+  }, [closestLovedPlaces, closestWantToGoPlaces]);
 
   useEffect(() => {
     if (
@@ -546,19 +550,6 @@ export function TravelMapApp({
     { label: "All areas", value: "all" },
     ...areas.map((area) => ({ label: area, value: area })),
   ];
-  const nearbySections = [
-    {
-      countLabel: closestLovedPlaces.length,
-      label: "Top loved nearby",
-      places: closestLovedPlaces,
-    },
-    {
-      countLabel: closestWantToGoPlaces.length,
-      label: "Top want to go nearby",
-      places: closestWantToGoPlaces,
-    },
-  ].filter((section) => section.places.length > 0);
-
   return (
     <main className="shell">
       <section className={`hero panel${openFilterMenu === "city" ? " is-menu-open" : ""}`}>
@@ -631,7 +622,7 @@ export function TravelMapApp({
             }
             type="button"
           >
-            <span className="loved-filter-mark" aria-hidden="true" />
+            <StatusBadgeIcon icon="heart" />
             <strong>Loved</strong>
           </button>
 
@@ -727,56 +718,70 @@ export function TravelMapApp({
 
         <aside className="sidebar">
           <section className="panel list-panel">
-            <div className="list-panel-header">
-              <div>
-                <h2>{placesInView.length} places in view</h2>
-                <p>
-                  {nearbyMode !== "off" && userLocation
-                    ? "Sorted by your location, endorsements, and nearby wishlist saves."
-                    : "Tap a card to fly the map there. Tap a marker to focus the card here."}
-                </p>
-              </div>
-            </div>
-            <div className="nearby-chip-row" aria-label="Nearby recommendation filters">
-              {nearbyModeOptions.map((option) => (
+            <div className="list-panel-sticky">
+              <div className="list-panel-header">
+                <div>
+                  <h2>{placesInView.length} places in view</h2>
+                  <p>
+                    {nearbyMode !== "off" && userLocation
+                      ? "Sorted by your location, endorsements, and nearby wishlist saves."
+                      : "Tap a card to fly the map there. Tap a marker to focus the card here."}
+                  </p>
+                </div>
                 <button
-                  aria-pressed={nearbyMode === option.mode}
-                  className={`nearby-chip${nearbyMode === option.mode ? " is-active" : ""}`}
-                  key={option.mode}
-                  onClick={() => activateNearbyMode(option.mode)}
+                  aria-pressed={nearbyMode !== "off"}
+                  className={`nearby-chip nearby-primary-button${
+                    nearbyMode !== "off" ? " is-active" : ""
+                  }`}
+                  onClick={() => activateNearbyMode("all")}
                   type="button"
                 >
-                  {option.label}
+                  Near me
                 </button>
-              ))}
-            </div>
-            {userLocation && nearbySections.length > 0 ? (
-              <div className="nearby-recommendation-grid">
-                {nearbySections.map((section) => (
-                  <div className="nearby-recommendation-panel" key={section.label}>
-                    <div className="nearby-recommendation-header">
-                      <span>{section.label}</span>
-                      <strong>{section.countLabel}</strong>
-                    </div>
-                    <div className="nearby-recommendation-list">
-                      {section.places.map((recommendedPlace) => (
+              </div>
+              {nearbyMode !== "off" && userLocation && topPicksNearYou.length > 0 ? (
+                <div className="top-picks-section">
+                  <div className="section-eyebrow">Top picks near you</div>
+                  <div className="top-picks-row">
+                    {topPicksNearYou.map((recommendedPlace) => {
+                      const place = recommendedPlace.place;
+                      const statusBadge = getStatusBadge(place);
+
+                      return (
                         <button
-                          key={recommendedPlace.place.id}
+                          className="top-pick-card"
+                          key={place.id}
                           onClick={() => {
-                            setSelectedPlaceId(recommendedPlace.place.id);
-                            setOpenMapPlaceId(recommendedPlace.place.id);
+                            setSelectedPlaceId(place.id);
+                            setOpenMapPlaceId(place.id);
                           }}
                           type="button"
                         >
-                          <span>{recommendedPlace.place.name}</span>
-                          <strong>{formatDistance(recommendedPlace.distanceKm)}</strong>
+                          <span className="top-pick-copy">
+                            {statusBadge ? (
+                              <span
+                                className={`status-badge ${statusBadge.modifier}`}
+                              >
+                                {statusBadge.icon ? (
+                                  <StatusBadgeIcon icon={statusBadge.icon} />
+                                ) : null}
+                                {statusBadge.label}
+                              </span>
+                            ) : null}
+                            <strong>{place.name}</strong>
+                            <span>
+                              {place.category}
+                              {place.district ? ` · ${place.district}` : ""}
+                            </span>
+                          </span>
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            ) : null}
+                </div>
+              ) : null}
+              <div className="section-eyebrow all-places-heading">All places</div>
+            </div>
 
             {placesInView.length === 0 ? (
               <div className="empty-state">
@@ -795,7 +800,7 @@ export function TravelMapApp({
                   const recommendation = recommendationByPlaceId.get(place.id) ?? null;
                   const publicNotes = getPublicNotes(place);
                   const googleMapsUrl = place.googleMapsUrl?.trim();
-                  const statusPills = getStatusPills(place);
+                  const statusBadge = getStatusBadge(place);
                   const selectPlace = () => {
                     setSelectedPlaceId(place.id);
                     setOpenMapPlaceId(place.id);
@@ -820,36 +825,41 @@ export function TravelMapApp({
                     >
                       <div className="place-card-header">
                         <div className="place-card-main">
-                          <h3>
-                            {googleMapsUrl ? (
-                              <a
-                                className="place-name-link"
-                                href={googleMapsUrl}
-                                onClick={(event) => event.stopPropagation()}
-                                rel="noopener noreferrer"
-                                target="_blank"
-                              >
-                                {place.name}
-                              </a>
-                            ) : (
-                              <span>{place.name}</span>
-                            )}
-                          </h3>
+                          <div className="place-card-title-row">
+                            {statusBadge ? (
+                              <div className="status-badge-row">
+                                <span
+                                  className={`status-badge ${statusBadge.modifier}`}
+                                >
+                                  {statusBadge.icon ? (
+                                    <StatusBadgeIcon icon={statusBadge.icon} />
+                                  ) : null}
+                                  {statusBadge.label}
+                                </span>
+                              </div>
+                            ) : null}
+                            <h3>
+                              {googleMapsUrl ? (
+                                <a
+                                  className="place-name-link"
+                                  href={googleMapsUrl}
+                                  onClick={(event) => event.stopPropagation()}
+                                  rel="noopener noreferrer"
+                                  target="_blank"
+                                >
+                                  {place.name}
+                                </a>
+                              ) : (
+                                <span>{place.name}</span>
+                              )}
+                            </h3>
+                          </div>
                           <p className="place-card-meta">
                             {place.category}
                             {place.district ? ` · ${place.district}` : ""}
                           </p>
-                          {statusPills.length > 0 ? (
-                            <div className="status-pill-row">
-                              {statusPills.map((pill, index) => (
-                                <span className="status-pill" key={pill}>
-                                  {index > 0 ? " " : ""}
-                                  {pill}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
                         </div>
+                        <span className="place-card-chevron" aria-hidden="true" />
                       </div>
                       {publicNotes.length > 0 ? (
                         <div className="place-notes">

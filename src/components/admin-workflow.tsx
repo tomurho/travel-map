@@ -182,6 +182,25 @@ type PipelineReviewResult = {
   skippedRows?: number;
 };
 
+type ScreenshotExtractionResult = {
+  cityHint: string;
+  countryHint: string;
+  fileName: string;
+  id: string;
+  ignored: boolean;
+  previewUrl: string;
+  rawName: string;
+  rawText: string;
+};
+
+type ScreenshotIntakeSummary = {
+  imagesProcessed?: number;
+  rowsCreated?: number;
+  rowsExtracted?: number;
+  rowsSkipped?: number;
+  rowsSubmitted?: number;
+};
+
 const DEFAULT_PIPELINE_SHEET_ID =
   "1kVnvUBm-jxAR8zIxh8PyhFEDUgC8b1Y0Q3SObITMpJw";
 
@@ -460,6 +479,16 @@ export function AdminWorkflow({
   const [isReviewingNewPlaces, setIsReviewingNewPlaces] = useState(false);
   const [isSyncingPublished, setIsSyncingPublished] = useState(false);
   const [isPublishingApprovedPlaces, setIsPublishingApprovedPlaces] =
+    useState(false);
+  const [screenshotFiles, setScreenshotFiles] = useState<File[]>([]);
+  const [screenshotResults, setScreenshotResults] = useState<
+    ScreenshotExtractionResult[]
+  >([]);
+  const [screenshotMessage, setScreenshotMessage] = useState<string | null>(null);
+  const [screenshotSummary, setScreenshotSummary] =
+    useState<ScreenshotIntakeSummary | null>(null);
+  const [isExtractingScreenshots, setIsExtractingScreenshots] = useState(false);
+  const [isSendingScreenshotsToCapture, setIsSendingScreenshotsToCapture] =
     useState(false);
   const [deletingStagedId, setDeletingStagedId] = useState<string | null>(null);
   const stagedDuplicateCount = stagedPlaces.filter(
@@ -1258,6 +1287,192 @@ export function AdminWorkflow({
     }
   }
 
+  function setScreenshotSelection(nextFiles: File[]) {
+    const limitedFiles = nextFiles.slice(0, 10);
+
+    if (nextFiles.length > 10) {
+      setError("Screenshot Intake supports up to 10 images per run.");
+    } else {
+      setError(null);
+    }
+
+    setScreenshotFiles(limitedFiles);
+    setScreenshotResults([]);
+    setScreenshotSummary(null);
+    setScreenshotMessage(null);
+  }
+
+  function updateScreenshotResult(
+    resultId: string,
+    field: keyof Pick<
+      ScreenshotExtractionResult,
+      "cityHint" | "countryHint" | "rawName" | "rawText"
+    >,
+    value: string,
+  ) {
+    setScreenshotResults((currentResults) =>
+      currentResults.map((result) =>
+        result.id === resultId ? { ...result, [field]: value } : result,
+      ),
+    );
+  }
+
+  function toggleScreenshotResult(resultId: string) {
+    setScreenshotResults((currentResults) =>
+      currentResults.map((result) =>
+        result.id === resultId
+          ? { ...result, ignored: !result.ignored }
+          : result,
+      ),
+    );
+  }
+
+  async function extractScreenshotPlaces() {
+    if (screenshotFiles.length === 0) {
+      setError("Select one or more screenshots before extracting places.");
+      return;
+    }
+
+    setIsExtractingScreenshots(true);
+    setError(null);
+    setScreenshotMessage(null);
+    setScreenshotSummary(null);
+    setScreenshotResults([]);
+
+    const formData = new FormData();
+
+    for (const file of screenshotFiles) {
+      formData.append("images", file);
+    }
+
+    try {
+      const response = await fetch("/api/admin/screenshot-intake/extract", {
+        body: formData,
+        headers: authHeaders(),
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        imagesProcessed?: number;
+        rows?: Array<{
+          cityHint?: string;
+          countryHint?: string;
+          fileName?: string;
+          rawName?: string;
+          rawText?: string;
+        }>;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not extract places.");
+      }
+
+      const previewUrlsByFileName = new Map(
+        screenshotFiles.map((file) => [file.name, URL.createObjectURL(file)]),
+      );
+      const rows = (payload.rows ?? []).map((row) => ({
+        cityHint: row.cityHint ?? "",
+        countryHint: row.countryHint ?? "",
+        fileName: row.fileName ?? "",
+        id: globalThis.crypto.randomUUID(),
+        ignored: false,
+        previewUrl: previewUrlsByFileName.get(row.fileName ?? "") ?? "",
+        rawName: row.rawName ?? "",
+        rawText: row.rawText ?? "",
+      }));
+
+      setScreenshotResults(rows);
+      setScreenshotSummary({
+        imagesProcessed: payload.imagesProcessed ?? screenshotFiles.length,
+        rowsExtracted: rows.length,
+      });
+      setScreenshotMessage(
+        rows.length
+          ? `Extracted ${rows.length} candidate row${rows.length === 1 ? "" : "s"}.`
+          : "No clear place candidates were found.",
+      );
+    } catch (extractError) {
+      setError(
+        extractError instanceof Error
+          ? extractError.message
+          : "Could not extract places from screenshots.",
+      );
+    } finally {
+      setIsExtractingScreenshots(false);
+    }
+  }
+
+  async function sendScreenshotRowsToCapture() {
+    if (!pipelineSheetId.trim()) {
+      setError("Add a Google Sheet ID before sending rows to Capture.");
+      return;
+    }
+
+    const rowsToSend = screenshotResults.filter(
+      (result) => !result.ignored && result.rawName.trim(),
+    );
+
+    if (rowsToSend.length === 0) {
+      setError("No non-ignored screenshot rows are ready for Capture.");
+      return;
+    }
+
+    setIsSendingScreenshotsToCapture(true);
+    setError(null);
+    setScreenshotMessage(null);
+
+    try {
+      const response = await fetch(
+        "/api/admin/screenshot-intake/send-to-capture",
+        {
+          body: JSON.stringify({
+            rows: rowsToSend.map((row) => ({
+              cityHint: row.cityHint,
+              countryHint: row.countryHint,
+              ignored: row.ignored,
+              rawName: row.rawName,
+              rawText: row.rawText,
+              sourceScreenshot: row.fileName,
+            })),
+            sheetId: pipelineSheetId.trim(),
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            ...(authHeaders() ?? {}),
+          },
+          method: "POST",
+        },
+      );
+      const payload = (await response.json()) as ScreenshotIntakeSummary & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not send rows to Capture.");
+      }
+
+      setScreenshotSummary((currentSummary) => ({
+        ...currentSummary,
+        rowsCreated: payload.rowsCreated ?? 0,
+        rowsSkipped: payload.rowsSkipped ?? 0,
+        rowsSubmitted: payload.rowsSubmitted ?? rowsToSend.length,
+      }));
+      setScreenshotMessage(
+        `Created ${payload.rowsCreated ?? 0} Capture row${
+          payload.rowsCreated === 1 ? "" : "s"
+        } with intakeStatus = New.`,
+      );
+    } catch (sendError) {
+      setError(
+        sendError instanceof Error
+          ? sendError.message
+          : "Could not send rows to Capture.",
+      );
+    } finally {
+      setIsSendingScreenshotsToCapture(false);
+    }
+  }
+
   function markSelectedProductionPlaceVerified(place: Place) {
     const currentEdit = getProductionEdit(place);
     const nextEdit = markVerifiedToday({
@@ -1666,10 +1881,226 @@ export function AdminWorkflow({
     }
   }
 
+  const screenshotIntakePanel = (
+    <details
+      className="panel admin-export-panel admin-secondary-panel admin-pipeline-panel admin-screenshot-intake-panel"
+      open
+    >
+      <summary>Screenshot Intake</summary>
+      <div className="admin-pipeline-header">
+        <div>
+          <h2>Screenshot Intake</h2>
+          <p>
+            Extract places from screenshots and create Capture rows for manual
+            review.
+          </p>
+        </div>
+      </div>
+      <div className="admin-screenshot-intake-layout">
+        <section
+          className="admin-pipeline-settings admin-screenshot-upload-card"
+          aria-label="Screenshot upload"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            setScreenshotSelection(Array.from(event.dataTransfer.files));
+          }}
+        >
+          <h3>Upload Screenshots</h3>
+          <p>
+            Google Maps, Instagram, article, and notes screenshots are all fine.
+          </p>
+          <input
+            accept="image/*"
+            className="admin-hidden-file-input"
+            id="screenshot-intake-images"
+            multiple
+            onChange={(event) =>
+              setScreenshotSelection(Array.from(event.target.files ?? []))
+            }
+            type="file"
+          />
+          <label
+            className="admin-pipeline-action admin-screenshot-select-button"
+            htmlFor="screenshot-intake-images"
+          >
+            Select Images
+          </label>
+          {screenshotFiles.length ? (
+            <div className="admin-screenshot-file-list">
+              <strong>
+                Selected {screenshotFiles.length} image
+                {screenshotFiles.length === 1 ? "" : "s"}
+              </strong>
+              <ul>
+                {screenshotFiles.map((file) => (
+                  <li key={`${file.name}-${file.lastModified}`}>{file.name}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="admin-empty">Drag images here or select up to 10.</p>
+          )}
+          <button
+            className="admin-pipeline-action"
+            disabled={isExtractingScreenshots || screenshotFiles.length === 0}
+            onClick={extractScreenshotPlaces}
+            type="button"
+          >
+            {isExtractingScreenshots ? "Extracting..." : "Extract Places"}
+          </button>
+        </section>
+
+        <section
+          className="admin-pipeline-results admin-screenshot-results"
+          aria-label="Screenshot extraction results"
+        >
+          <div className="admin-screenshot-results-header">
+            <h3>Extraction Results</h3>
+            <button
+              className="admin-pipeline-action"
+              disabled={
+                isSendingScreenshotsToCapture ||
+                screenshotResults.filter((result) => !result.ignored).length === 0
+              }
+              onClick={sendScreenshotRowsToCapture}
+              type="button"
+            >
+              {isSendingScreenshotsToCapture
+                ? "Sending..."
+                : `Send ${
+                    screenshotResults.filter((result) => !result.ignored).length
+                  } Rows To Capture`}
+            </button>
+          </div>
+          {screenshotMessage ? (
+            <p className="admin-success">{screenshotMessage}</p>
+          ) : null}
+          {screenshotResults.length ? (
+            <div className="admin-screenshot-result-list">
+              {screenshotResults.map((result) => (
+                <article
+                  className={`admin-screenshot-result-card${
+                    result.ignored ? " is-ignored" : ""
+                  }`}
+                  key={result.id}
+                >
+                  {result.previewUrl ? (
+                    <img alt="" src={result.previewUrl} />
+                  ) : (
+                    <div className="admin-screenshot-thumbnail-placeholder">
+                      Image
+                    </div>
+                  )}
+                  <div className="admin-screenshot-result-fields">
+                    <label>
+                      <span>Place Name</span>
+                      <input
+                        className="admin-draft-input"
+                        onChange={(event) =>
+                          updateScreenshotResult(
+                            result.id,
+                            "rawName",
+                            event.target.value,
+                          )
+                        }
+                        value={result.rawName}
+                      />
+                    </label>
+                    <label>
+                      <span>City</span>
+                      <input
+                        className="admin-draft-input"
+                        onChange={(event) =>
+                          updateScreenshotResult(
+                            result.id,
+                            "cityHint",
+                            event.target.value,
+                          )
+                        }
+                        value={result.cityHint}
+                      />
+                    </label>
+                    <label>
+                      <span>Country</span>
+                      <input
+                        className="admin-draft-input"
+                        onChange={(event) =>
+                          updateScreenshotResult(
+                            result.id,
+                            "countryHint",
+                            event.target.value,
+                          )
+                        }
+                        value={result.countryHint}
+                      />
+                    </label>
+                    <label className="admin-screenshot-raw-text">
+                      <span>Raw Extracted Text</span>
+                      <textarea
+                        className="admin-draft-input admin-draft-textarea"
+                        onChange={(event) =>
+                          updateScreenshotResult(
+                            result.id,
+                            "rawText",
+                            event.target.value,
+                          )
+                        }
+                        rows={3}
+                        value={result.rawText}
+                      />
+                    </label>
+                    <label className="admin-screenshot-ignore-toggle">
+                      <input
+                        checked={result.ignored}
+                        onChange={() => toggleScreenshotResult(result.id)}
+                        type="checkbox"
+                      />
+                      Ignore this row
+                    </label>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="admin-empty">
+              Extracted candidates will appear here before anything is written
+              to Capture.
+            </p>
+          )}
+          {screenshotSummary ? (
+            <div className="admin-export-result">
+              <strong>Screenshot Intake summary</strong>
+              <div className="admin-preview-chips">
+                <span>
+                  <strong>{screenshotSummary.imagesProcessed ?? 0}</strong>{" "}
+                  images processed
+                </span>
+                <span>
+                  <strong>{screenshotSummary.rowsExtracted ?? 0}</strong>{" "}
+                  extracted
+                </span>
+                <span>
+                  <strong>{screenshotSummary.rowsCreated ?? 0}</strong> created
+                </span>
+                <span>
+                  <strong>{screenshotSummary.rowsSkipped ?? 0}</strong> skipped
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      </div>
+    </details>
+  );
+
   const googleSheetsPipelinePanel = (
-    <details className="panel admin-export-panel admin-secondary-panel" open>
+    <details
+      className="panel admin-export-panel admin-secondary-panel admin-pipeline-panel"
+      open
+    >
       <summary>Google Sheets Pipeline</summary>
-      <div className="admin-staged-header">
+      <div className="admin-pipeline-header">
         <div>
           <h2>Google Sheets Pipeline</h2>
           <p>
@@ -1678,70 +2109,105 @@ export function AdminWorkflow({
           </p>
         </div>
       </div>
-      <label className="admin-search-field">
-        <span>Google Sheet ID</span>
-        <input
-          className="admin-draft-input"
-          onChange={(event) => setPipelineSheetId(event.target.value)}
-          value={pipelineSheetId}
-        />
-      </label>
-      <div className="admin-staged-actions">
-        <div>
-          <label className="admin-field-helper">
-            Max API calls
-            <input
-              className="admin-draft-input"
-              max="10"
-              min="1"
-              onChange={(event) => setPipelineMaxApiCalls(event.target.value)}
-              type="number"
-              value={pipelineMaxApiCalls}
-            />
-          </label>
-          <button
-            disabled={isReviewingNewPlaces}
-            onClick={reviewNewPlaces}
-            type="button"
-          >
-            {isReviewingNewPlaces ? "Reviewing..." : "Review New Places"}
-          </button>
-          <p className="admin-field-helper">
-            Looks up rows marked Ready and sends candidates to Review.
-          </p>
-        </div>
-        <div>
-          <button
-            disabled={isPublishingApprovedPlaces}
-            onClick={publishApprovedPlaces}
-            type="button"
-          >
-            {isPublishingApprovedPlaces
-              ? "Publishing..."
-              : "Publish Approved Places"}
-          </button>
-          <p className="admin-field-helper">
-            Moves Verified Review rows to Published.
-          </p>
-        </div>
-        <div>
-          <button
-            disabled={isSyncingPublished}
-            onClick={() => syncPublishedToApp(true)}
-            type="button"
-          >
-            {isSyncingPublished ? "Updating..." : "Update Travel Map"}
-          </button>
-          <p className="admin-field-helper">
-            Writes Published rows into the app data.
-          </p>
-        </div>
+      <div className="admin-pipeline-body">
+        <section className="admin-pipeline-settings" aria-label="Pipeline settings">
+          <h3>Settings</h3>
+          <div className="admin-pipeline-settings-grid">
+            <label>
+              <span>Sheet ID</span>
+              <input
+                className="admin-draft-input"
+                onChange={(event) => setPipelineSheetId(event.target.value)}
+                value={pipelineSheetId}
+              />
+            </label>
+            <label className="admin-pipeline-max-calls">
+              <span>Max API calls per run</span>
+              <small>Used by Review New Places.</small>
+              <input
+                className="admin-draft-input"
+                max="10"
+                min="1"
+                onChange={(event) => setPipelineMaxApiCalls(event.target.value)}
+                type="number"
+                value={pipelineMaxApiCalls}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="admin-pipeline-workflow" aria-label="Pipeline workflow">
+          <article className="admin-pipeline-step">
+            <span className="admin-pipeline-step-number">1</span>
+            <div>
+              <h3>Review New Places</h3>
+              <p>
+                Looks up rows marked Ready and sends candidates to Review using
+                the max API call setting.
+              </p>
+            </div>
+            <button
+              className="admin-pipeline-action"
+              disabled={isReviewingNewPlaces}
+              onClick={reviewNewPlaces}
+              type="button"
+            >
+              {isReviewingNewPlaces ? "Reviewing..." : "Review New Places"}
+            </button>
+          </article>
+
+          <article className="admin-pipeline-step">
+            <span className="admin-pipeline-step-number">2</span>
+            <div>
+              <h3>Publish Approved Places</h3>
+              <p>Moves Verified Review rows to Published.</p>
+            </div>
+            <button
+              className="admin-pipeline-action"
+              disabled={isPublishingApprovedPlaces}
+              onClick={publishApprovedPlaces}
+              type="button"
+            >
+              {isPublishingApprovedPlaces
+                ? "Publishing..."
+                : "Publish Approved Places"}
+            </button>
+          </article>
+
+          <article className="admin-pipeline-step">
+            <span className="admin-pipeline-step-number">3</span>
+            <div>
+              <h3>Update Travel Map</h3>
+              <p>Writes Published rows into the app data.</p>
+            </div>
+            <button
+              className="admin-pipeline-action"
+              disabled={isSyncingPublished}
+              onClick={() => syncPublishedToApp(true)}
+              type="button"
+            >
+              {isSyncingPublished ? "Updating..." : "Update Travel Map"}
+            </button>
+          </article>
+        </section>
       </div>
-      {pipelineReviewMessage ? (
-        <p className="admin-success">{pipelineReviewMessage}</p>
-      ) : null}
-      {pipelineReviewResult ? (
-        <div className="admin-export-result">
+      <section className="admin-pipeline-results" aria-label="Pipeline results">
+        <h3>Result summary</h3>
+        {pipelineReviewMessage ||
+        pipelineMessage ||
+        pipelinePublishMessage ||
+        pipelineReviewResult ||
+        pipelinePublishResult ||
+        pipelineResult ? null : (
+          <p className="admin-empty">
+            Run a pipeline step to see the latest summary here.
+          </p>
+        )}
+        {pipelineReviewMessage ? (
+          <p className="admin-success">{pipelineReviewMessage}</p>
+        ) : null}
+        {pipelineReviewResult ? (
+          <div className="admin-export-result">
           <strong>Review New Places summary</strong>
           <div className="admin-preview-chips">
             <span>
@@ -1792,19 +2258,19 @@ export function AdminWorkflow({
                   <li key={`review-skip-${row.rowNumber}-${row.reason}`}>
                     Row {row.rowNumber}: {row.reason}
                   </li>
-                ))}
+              ))}
             </ul>
           ) : null}
         </div>
-      ) : null}
-      {pipelineMessage ? (
-        <p className="admin-success">{pipelineMessage}</p>
-      ) : null}
-      {pipelinePublishMessage ? (
-        <p className="admin-success">{pipelinePublishMessage}</p>
-      ) : null}
-      {pipelinePublishResult ? (
-        <div className="admin-export-result">
+        ) : null}
+        {pipelineMessage ? (
+          <p className="admin-success">{pipelineMessage}</p>
+        ) : null}
+        {pipelinePublishMessage ? (
+          <p className="admin-success">{pipelinePublishMessage}</p>
+        ) : null}
+        {pipelinePublishResult ? (
+          <div className="admin-export-result">
           <strong>
             {pipelinePublishResult.wrote
               ? "Publish complete"
@@ -1858,9 +2324,9 @@ export function AdminWorkflow({
             </ul>
           ) : null}
         </div>
-      ) : null}
-      {pipelineResult ? (
-        <div className="admin-export-result">
+        ) : null}
+        {pipelineResult ? (
+          <div className="admin-export-result">
           <strong>
             {pipelineResult.wrote ? "Write complete" : "Dry run summary"}
           </strong>
@@ -1892,11 +2358,12 @@ export function AdminWorkflow({
                 <li key={`${change.action}-${change.id}-${change.rowNumber}`}>
                   {change.action}: {change.name} ({change.id})
                 </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
+            ))}
+          </ul>
+        ) : null}
+      </div>
+        ) : null}
+      </section>
     </details>
   );
 
@@ -1928,6 +2395,8 @@ export function AdminWorkflow({
           </span>
         </div>
       </section>
+
+      {screenshotIntakePanel}
 
       {googleSheetsPipelinePanel}
 

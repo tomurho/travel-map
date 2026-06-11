@@ -39,22 +39,71 @@ export type CityCenter = {
   longitude: number;
 };
 
-function getStatusPills(place: Place) {
-  const pills: string[] = [];
+type StatusBadge =
+  | {
+      icon: "bookmark" | "heart";
+      label: string;
+      modifier: string;
+    }
+  | {
+      icon: null;
+      label: string;
+      modifier: string;
+    };
 
+function getStatusBadge(place: Place): StatusBadge | null {
   if (place.loved === true) {
-    pills.push("Loved");
-  }
-
-  if (place.status === "been") {
-    pills.push("Been");
+    return {
+      icon: "heart" as const,
+      label: "Loved",
+      modifier: "status-badge--loved",
+    };
   }
 
   if (place.status === "want_to_go") {
-    pills.push("Want to go");
+    return {
+      icon: "bookmark" as const,
+      label: "Want to go",
+      modifier: "status-badge--want-to-go",
+    };
   }
 
-  return pills;
+  if (place.status === "been") {
+    return {
+      icon: null,
+      label: "Been",
+      modifier: "status-badge--been",
+    };
+  }
+
+  return null;
+}
+
+function StatusBadgeIcon({ icon }: { icon: "bookmark" | "heart" }) {
+  if (icon === "heart") {
+    return (
+      <svg
+        aria-hidden="true"
+        className="status-badge__icon"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+          fill="currentColor"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      aria-hidden="true"
+      className="status-badge__icon"
+      viewBox="0 0 24 24"
+    >
+      <path d="M6 3h12v18l-6-4-6 4V3z" fill="currentColor" />
+    </svg>
+  );
 }
 
 export function MapView({
@@ -255,6 +304,7 @@ export function MapView({
   }
 
   const openPlaceGoogleMapsUrl = openPlace?.googleMapsUrl?.trim();
+  const openPlaceStatusBadge = openPlace ? getStatusBadge(openPlace) : null;
   const placeDetailsContent = openPlace ? (
     <>
       {openPlaceGoogleMapsUrl ? (
@@ -274,14 +324,16 @@ export function MapView({
         {openPlace.category}
         {openPlace.district ? ` · ${openPlace.district}` : ""}
       </p>
-      {getStatusPills(openPlace).length > 0 ? (
-        <div className="status-pill-row">
-          {getStatusPills(openPlace).map((pill, index) => (
-            <span className="status-pill" key={pill}>
-              {index > 0 ? " " : ""}
-              {pill}
-            </span>
-          ))}
+      {openPlaceStatusBadge ? (
+        <div className="status-badge-row">
+          <span
+            className={`status-badge status-badge--popup ${openPlaceStatusBadge.modifier}`}
+          >
+            {openPlaceStatusBadge.icon ? (
+              <StatusBadgeIcon icon={openPlaceStatusBadge.icon} />
+            ) : null}
+            {openPlaceStatusBadge.label}
+          </span>
         </div>
       ) : null}
     </>
