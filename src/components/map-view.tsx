@@ -79,6 +79,22 @@ function getStatusBadge(place: Place): StatusBadge | null {
   return null;
 }
 
+function getMarkerColor(place: Place) {
+  if (place.loved === true) {
+    return "#ef2b68";
+  }
+
+  if (place.status === "want_to_go") {
+    return "#f59e0b";
+  }
+
+  if (place.status === "been") {
+    return "#9ca3af";
+  }
+
+  return "#8e8e93";
+}
+
 function StatusBadgeIcon({ icon }: { icon: "bookmark" | "heart" }) {
   if (icon === "heart") {
     return (
@@ -412,13 +428,7 @@ export function MapView({
                     ? 10
                     : 7.5,
               fillColor:
-                place.loved === true
-                  ? "#30d158"
-                  : place.status === "been"
-                    ? "#0a84ff"
-                    : place.status === "want_to_go"
-                      ? "#af52de"
-                      : "#8e8e93",
+                getMarkerColor(place),
               fillOpacity: 1,
               strokeColor: "#ffffff",
               strokeWeight: 2,

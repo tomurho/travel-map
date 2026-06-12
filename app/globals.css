@@ -1054,22 +1054,22 @@ select {
 }
 
 .status-badge--popup.status-badge--loved {
-  height: 48px;
+  height: 28px;
   border: 0;
-  gap: 10px;
-  padding: 0 24px;
+  gap: 6px;
+  padding: 0 12px;
   border-radius: 999px;
   background: #ef2b68;
   color: #ffffff;
-  box-shadow: 0 10px 22px rgba(239, 43, 104, 0.28);
-  font-size: 22px;
+  box-shadow: none;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .status-badge--popup.status-badge--loved .status-badge__icon {
-  width: 24px;
-  height: 24px;
-  color: #ffffff;
+  width: 13px;
+  height: 13px;
+  color: currentColor;
 }
 
 .map-popup-content::-webkit-scrollbar {

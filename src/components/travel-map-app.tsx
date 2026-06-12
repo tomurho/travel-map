@@ -192,6 +192,33 @@ function getRecommendedPlaces(
     });
 }
 
+function getPlacesByDistance(
+  places: Place[],
+  userLocation: GeoPoint | null,
+): RecommendedPlace[] {
+  if (!userLocation) {
+    return [];
+  }
+
+  return places
+    .map((place) => {
+      const distanceKm = getDistanceKm(userLocation, {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      });
+
+      return {
+        place,
+        distanceKm,
+        score: getRecommendationScore(place, distanceKm),
+        recommendationLabel: getRecommendationLabel(place, distanceKm),
+      };
+    })
+    .sort(
+      (firstPlace, secondPlace) => firstPlace.distanceKm - secondPlace.distanceKm,
+    );
+}
+
 function getStatusBadge(place: Place): StatusBadge | null {
   if (place.loved === true) {
     return {
@@ -398,22 +425,29 @@ export function TravelMapApp({
     () => getRecommendedPlaces(filteredPlaces, userLocation, nearbyMode),
     [filteredPlaces, nearbyMode, userLocation],
   );
+  const placesByDistance = useMemo(
+    () => getPlacesByDistance(filteredPlaces, userLocation),
+    [filteredPlaces, userLocation],
+  );
   const placesInView = useMemo(
     () =>
       nearbyMode !== "off" && userLocation
-        ? recommendedPlaces.map((recommendedPlace) => recommendedPlace.place)
+        ? placesByDistance.map((recommendedPlace) => recommendedPlace.place)
         : filteredPlaces,
-    [filteredPlaces, nearbyMode, recommendedPlaces, userLocation],
+    [filteredPlaces, nearbyMode, placesByDistance, userLocation],
   );
   const recommendationByPlaceId = useMemo(
     () =>
       new Map(
-        recommendedPlaces.map((recommendedPlace) => [
+        (nearbyMode !== "off" && userLocation
+          ? placesByDistance
+          : recommendedPlaces
+        ).map((recommendedPlace) => [
           recommendedPlace.place.id,
           recommendedPlace,
         ]),
       ),
-    [recommendedPlaces],
+    [nearbyMode, placesByDistance, recommendedPlaces, userLocation],
   );
   const closestLovedPlaces = useMemo(
     () =>
