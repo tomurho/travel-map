@@ -86,6 +86,11 @@ export function FieldGuideFiltersPanel({
         >
           Want to go
         </button>
+        {hasRefinements ? (
+          <button className={styles.clearButton} onClick={onClear} type="button">
+            Clear
+          </button>
+        ) : null}
       </div>
 
       <div className={styles.secondaryFilters}>
@@ -121,11 +126,6 @@ export function FieldGuideFiltersPanel({
             ))}
           </select>
         </label>
-        {hasRefinements ? (
-          <button className={styles.clearButton} onClick={onClear} type="button">
-            Clear
-          </button>
-        ) : null}
       </div>
 
       {locationMessage ? (

@@ -40,6 +40,20 @@ const places: Place[] = [
     subway: "",
   },
   {
+    id: "saved-market",
+    name: "Saved Market",
+    city: "Test City",
+    category: "Market",
+    status: "location",
+    loved: null,
+    district: "West",
+    address: "",
+    latitude: 3,
+    longitude: 3,
+    tabelog: "",
+    subway: "",
+  },
+  {
     id: "other-city",
     name: "Other City Place",
     city: "Elsewhere",
@@ -70,7 +84,23 @@ test("field guide defaults to loved-first stable ordering", () => {
     userLocation: null,
   });
 
-  assert.deepEqual(result.map((place) => place.id), ["loved-cafe", "nearby-noodle"]);
+  assert.deepEqual(result.map((place) => place.id), [
+    "loved-cafe",
+    "nearby-noodle",
+    "saved-market",
+  ]);
+});
+
+test("field guide includes every status when no status filter is active", () => {
+  const result = filterAndSortFieldGuidePlaces(places, baseFilters, {
+    nearbyActive: false,
+    userLocation: null,
+  });
+
+  assert.deepEqual(
+    Array.from(new Set(result.map((place) => place.status))).sort(),
+    ["been", "location", "want_to_go"],
+  );
 });
 
 test("field guide sorts by straight-line distance only when Nearby is active", () => {
@@ -79,7 +109,11 @@ test("field guide sorts by straight-line distance only when Nearby is active", (
     userLocation: { latitude: 0, longitude: 0 },
   });
 
-  assert.deepEqual(result.map((place) => place.id), ["nearby-noodle", "loved-cafe"]);
+  assert.deepEqual(result.map((place) => place.id), [
+    "nearby-noodle",
+    "loved-cafe",
+    "saved-market",
+  ]);
 });
 
 test("field guide composes search, status, category, and area filters", () => {

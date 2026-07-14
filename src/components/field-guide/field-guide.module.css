@@ -7,7 +7,7 @@
   --fg-maple: #ddc5a5;
   --fg-maple-soft: #f3e9dc;
   --fg-coral: #a33b52;
-  --fg-coral-soft: #fff3f4;
+  --fg-coral-soft: #fffbfc;
   --fg-line: rgba(36, 35, 33, 0.16);
   min-height: 100vh;
   padding: 10px;
@@ -254,7 +254,7 @@
 }
 
 .lovedPill {
-  border-color: rgba(168, 50, 74, 0.2);
+  border-color: rgba(163, 59, 82, 0.18);
   background: var(--fg-coral-soft);
   color: #7d2338;
 }
@@ -309,6 +309,12 @@
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+}
+
+.primaryFilters .clearButton {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding-inline: 6px;
 }
 
 .locationNotice {
@@ -501,34 +507,6 @@
   min-height: 0;
   overflow: hidden;
   background: #ece7df;
-}
-
-.mapMeta {
-  position: absolute;
-  z-index: 8;
-  top: 13px;
-  left: 50%;
-  display: flex;
-  transform: translateX(-50%);
-  overflow: hidden;
-  border: 1px solid var(--fg-line);
-  border-radius: 999px;
-  background: rgba(255, 254, 251, 0.94);
-  box-shadow: 0 8px 24px rgba(36, 35, 33, 0.11);
-  color: var(--fg-muted);
-  font-size: 11px;
-  backdrop-filter: blur(12px);
-}
-
-.mapMeta span {
-  padding: 8px 11px;
-  white-space: nowrap;
-}
-
-.mapMeta span:first-child {
-  border-right: 1px solid var(--fg-line);
-  color: var(--fg-charcoal);
-  font-weight: 700;
 }
 
 .mapPanel .mapFrame {
@@ -805,7 +783,7 @@
 
   .secondaryFilters {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
 
@@ -820,12 +798,6 @@
     white-space: nowrap;
   }
 
-  .secondaryFilters .clearButton {
-    min-height: 44px;
-    justify-self: end;
-    padding-inline: 6px;
-  }
-
   .mapPanel {
     margin-top: 8px;
     border: 1px solid var(--fg-line);
@@ -834,14 +806,6 @@
 
   .mapPanel .mapFrame {
     border-radius: 14px 14px 0 0;
-  }
-
-  .mapMeta {
-    top: 8px;
-  }
-
-  .mapMeta span {
-    padding: 7px 9px;
   }
 
   .resultsPanel {
@@ -918,14 +882,6 @@
 
   .workspace {
     grid-template-rows: auto 360px auto;
-  }
-
-  .mapMeta span:last-child {
-    display: none;
-  }
-
-  .mapMeta span:first-child {
-    border-right: 0;
   }
 
 }

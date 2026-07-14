@@ -99,7 +99,32 @@ function getMarkerColor(place: Place) {
     return "#9ca3af";
   }
 
-  return "#8e8e93";
+  return "#d1d5db";
+}
+
+function getMarkerAppearance(place: Place, isActive: boolean) {
+  const isSavedPlace = place.status === "location";
+  const isPriorityPlace = place.loved === true || place.status === "want_to_go";
+
+  return {
+    scale: isActive ? 10 : isPriorityPlace ? 6.5 : 5.25,
+    fillColor: getMarkerColor(place),
+    fillOpacity: 1,
+    strokeColor: isActive ? "#242321" : "#ffffff",
+    strokeWeight: isActive ? 3 : isSavedPlace ? 1.25 : 2,
+  };
+}
+
+function getMarkerZIndex(place: Place, isActive: boolean) {
+  if (isActive) {
+    return 30;
+  }
+
+  if (place.loved === true || place.status === "want_to_go") {
+    return 20;
+  }
+
+  return 1;
 }
 
 function StatusBadgeIcon({ icon }: { icon: "bookmark" | "heart" }) {
@@ -428,28 +453,17 @@ export function MapView({
       ) : null}
       {places.map((place) => {
         const isActive = place.id === openPlaceId;
+        const markerAppearance = getMarkerAppearance(place, isActive);
 
         return (
           <MarkerF
             key={place.id}
             onClick={() => onSelectPlace(place.id)}
             position={{ lat: place.latitude, lng: place.longitude }}
-            zIndex={isActive ? 10 : 1}
+            zIndex={getMarkerZIndex(place, isActive)}
             icon={{
               path: google.maps.SymbolPath.CIRCLE,
-              scale:
-                place.status === "location"
-                  ? isActive
-                    ? 7
-                    : 5.25
-                  : isActive
-                    ? 10
-                    : 7.5,
-              fillColor:
-                getMarkerColor(place),
-              fillOpacity: 1,
-              strokeColor: "#ffffff",
-              strokeWeight: 2,
+              ...markerAppearance,
             }}
           />
         );

@@ -199,9 +199,9 @@ export function FieldGuideApp({
       }),
     [filters, nearbyActive, places, userLocation],
   );
-  const visiblePlaces = filteredPlaces.slice(0, visibleCount);
+  const visibleListPlaces = filteredPlaces.slice(0, visibleCount);
   const selectedPlace =
-    visiblePlaces.find((place) => place.id === selectedPlaceId) ?? null;
+    filteredPlaces.find((place) => place.id === selectedPlaceId) ?? null;
   const selectedDistance = selectedPlace && userLocation
     ? getDistanceKm(userLocation, selectedPlace)
     : null;
@@ -239,10 +239,10 @@ export function FieldGuideApp({
   }, [areas, filters.area]);
 
   useEffect(() => {
-    if (selectedPlaceId && !visiblePlaces.some((place) => place.id === selectedPlaceId)) {
+    if (selectedPlaceId && !filteredPlaces.some((place) => place.id === selectedPlaceId)) {
       setSelectedPlaceId(null);
     }
-  }, [selectedPlaceId, visiblePlaces]);
+  }, [filteredPlaces, selectedPlaceId]);
 
   function changeCity(city: string) {
     setFilters((current) => ({
@@ -319,14 +319,6 @@ export function FieldGuideApp({
         />
 
         <section className={styles.mapPanel} aria-label={`Map of ${filters.city}`}>
-          <div className={styles.mapMeta}>
-            <span>{visiblePlaces.length} mapped</span>
-            <span>
-              {visiblePlaces.length < filteredPlaces.length
-                ? `${filteredPlaces.length - visiblePlaces.length} more in results`
-                : "Map and list in sync"}
-            </span>
-          </div>
           <div className={`map-frame ${styles.mapFrame}`}>
             <MapView
               cityCenters={cityCenters}
@@ -354,7 +346,7 @@ export function FieldGuideApp({
                 setNearbyActive(true);
               }}
               openPlaceId={selectedPlaceId}
-              places={visiblePlaces}
+              places={filteredPlaces}
               requestLocationNonce={requestLocationNonce}
               selectedPlaceId={selectedPlaceId}
               showLocationMessage={false}
@@ -389,7 +381,7 @@ export function FieldGuideApp({
             </div>
           ) : (
             <div className={styles.placeList}>
-              {visiblePlaces.map((place) => (
+              {visibleListPlaces.map((place) => (
                 <FieldGuidePlaceCard
                   distanceKm={
                     userLocation ? getDistanceKm(userLocation, place) : null
@@ -399,13 +391,13 @@ export function FieldGuideApp({
                   place={place}
                 />
               ))}
-              {visiblePlaces.length < filteredPlaces.length ? (
+              {visibleListPlaces.length < filteredPlaces.length ? (
                 <button
                   className={styles.showMore}
                   onClick={() => setVisibleCount((current) => current + resultBatchSize)}
                   type="button"
                 >
-                  Show {Math.min(resultBatchSize, filteredPlaces.length - visiblePlaces.length)} more
+                  Show {Math.min(resultBatchSize, filteredPlaces.length - visibleListPlaces.length)} more
                 </button>
               ) : null}
             </div>
