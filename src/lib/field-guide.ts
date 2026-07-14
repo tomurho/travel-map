@@ -1,9 +1,9 @@
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
-import type { Place, PlaceStatus } from "@/lib/place";
+import type { Place } from "@/lib/place";
 
 export type FieldGuideFilters = {
   city: string;
-  status: PlaceStatus | "all";
+  status: "want_to_go" | "all";
   category: string;
   area: string;
   lovedOnly: boolean;
@@ -30,9 +30,9 @@ export function normalizeFieldGuideFilters(
     ...filters,
     city: cities.has(filters.city) ? filters.city : getDefaultFieldGuideCity(places),
     status:
-      filters.lovedOnly && filters.status === "want_to_go"
-        ? "all"
-        : filters.status,
+      filters.status === "want_to_go" && !filters.lovedOnly
+        ? "want_to_go"
+        : "all",
   };
 }
 
@@ -58,17 +58,6 @@ export function toggleFieldGuideWantToGo(
     ...filters,
     lovedOnly: false,
     status: wantToGo ? "want_to_go" : "all",
-  };
-}
-
-export function setFieldGuideStatus(
-  filters: FieldGuideFilters,
-  status: FieldGuideFilters["status"],
-): FieldGuideFilters {
-  return {
-    ...filters,
-    lovedOnly: status === "want_to_go" ? false : filters.lovedOnly,
-    status,
   };
 }
 

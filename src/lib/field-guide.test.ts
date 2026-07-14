@@ -4,7 +4,6 @@ import {
   buildFieldGuideQuery,
   filterAndSortFieldGuidePlaces,
   normalizeFieldGuideFilters,
-  setFieldGuideStatus,
   toggleFieldGuideLoved,
   toggleFieldGuideWantToGo,
   type FieldGuideFilters,
@@ -83,21 +82,20 @@ test("field guide sorts by straight-line distance only when Nearby is active", (
   assert.deepEqual(result.map((place) => place.id), ["nearby-noodle", "loved-cafe"]);
 });
 
-test("field guide composes search, status, loved, category, and area filters", () => {
+test("field guide composes search, status, category, and area filters", () => {
   const result = filterAndSortFieldGuidePlaces(
     places,
     {
       ...baseFilters,
-      status: "been",
-      category: "Cafe",
-      area: "North",
-      lovedOnly: true,
-      query: "loved",
+      status: "want_to_go",
+      category: "Noodles",
+      area: "South",
+      query: "nearby",
     },
     { nearbyActive: false, userLocation: null },
   );
 
-  assert.deepEqual(result.map((place) => place.id), ["loved-cafe"]);
+  assert.deepEqual(result.map((place) => place.id), ["nearby-noodle"]);
 });
 
 test("field guide normalizes invalid cities and persists non-location filters", () => {
@@ -140,14 +138,7 @@ test("Loved and Want to go toggle as a mutually exclusive pair", () => {
   assert.equal(clearedLoved.status, "all");
 });
 
-test("status selection and URL normalization preserve the exclusive filter rule", () => {
-  const fromStatusMenu = setFieldGuideStatus(
-    { ...baseFilters, lovedOnly: true },
-    "want_to_go",
-  );
-  assert.equal(fromStatusMenu.lovedOnly, false);
-  assert.equal(fromStatusMenu.status, "want_to_go");
-
+test("URL normalization preserves the exclusive filter rule", () => {
   const normalized = normalizeFieldGuideFilters(places, {
     ...baseFilters,
     lovedOnly: true,

@@ -790,6 +790,10 @@
     min-height: 48px;
   }
 
+  .searchField input {
+    font-size: 16px;
+  }
+
   .primaryFilters {
     margin-right: -8px;
     padding-right: 8px;
@@ -800,25 +804,26 @@
   }
 
   .secondaryFilters {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    margin-right: -8px;
-    padding-right: 8px;
-    scrollbar-width: none;
-  }
-
-  .secondaryFilters::-webkit-scrollbar {
-    display: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    width: 100%;
   }
 
   .secondaryFilters label {
-    flex: 0 0 auto;
-    width: 122px;
+    width: auto;
   }
 
-  .secondaryFilters select,
-  .clearButton {
+  .secondaryFilters select {
     min-height: 44px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .secondaryFilters .clearButton {
+    min-height: 44px;
+    justify-self: end;
+    padding-inline: 6px;
   }
 
   .mapPanel {

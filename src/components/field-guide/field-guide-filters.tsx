@@ -1,10 +1,8 @@
 import {
-  setFieldGuideStatus,
   toggleFieldGuideLoved,
   toggleFieldGuideWantToGo,
   type FieldGuideFilters,
 } from "@/lib/field-guide";
-import type { PlaceStatus } from "@/lib/place";
 import styles from "./field-guide.module.css";
 
 type LocationStatus = "idle" | "locating" | "found" | "error";
@@ -20,13 +18,6 @@ type FieldGuideFiltersProps = {
   onClear: () => void;
   onToggleNearby: () => void;
 };
-
-const statusOptions: Array<{ label: string; value: PlaceStatus | "all" }> = [
-  { label: "All statuses", value: "all" },
-  { label: "Been", value: "been" },
-  { label: "Want to go", value: "want_to_go" },
-  { label: "Saved", value: "location" },
-];
 
 export function FieldGuideFiltersPanel({
   areas,
@@ -126,27 +117,6 @@ export function FieldGuideFiltersPanel({
             {areas.map((area) => (
               <option key={area} value={area}>
                 {area}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className={styles.srOnly}>Status</span>
-          <select
-            aria-label="Status"
-            onChange={(event) =>
-              onChange(
-                setFieldGuideStatus(
-                  filters,
-                  event.target.value as FieldGuideFilters["status"],
-                ),
-              )
-            }
-            value={filters.status}
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
               </option>
             ))}
           </select>

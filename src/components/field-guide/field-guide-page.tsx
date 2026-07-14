@@ -5,7 +5,7 @@ import {
   getDefaultFieldGuideCity,
   type FieldGuideFilters,
 } from "@/lib/field-guide";
-import type { Place, PlaceStatus } from "@/lib/place";
+import type { Place } from "@/lib/place";
 
 type FieldGuidePageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -15,10 +15,8 @@ function readParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function readStatus(value: string | undefined): PlaceStatus | "all" {
-  return value === "been" || value === "want_to_go" || value === "location"
-    ? value
-    : "all";
+function readStatus(value: string | undefined): FieldGuideFilters["status"] {
+  return value === "want_to_go" ? value : "all";
 }
 
 function toPublicPlace(place: Place): Place {
