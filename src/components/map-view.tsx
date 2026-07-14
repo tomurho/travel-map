@@ -14,6 +14,7 @@ import type { Place } from "@/lib/place";
 type MapViewProps = {
   places: Place[];
   cityCenters: CityCenter[];
+  mapStyles?: google.maps.MapTypeStyle[];
   selectedPlaceId: string | null;
   openPlaceId: string | null;
   requestLocationNonce: number;
@@ -21,6 +22,12 @@ type MapViewProps = {
   onClosePlace: () => void;
   onNearbyCityDetected: (city: string) => void;
   onUserLocationFound: (location: GeoPoint) => void;
+  onLocationStatusChange?: (
+    status: "idle" | "locating" | "found" | "error",
+    message: string,
+  ) => void;
+  showLocationMessage?: boolean;
+  showPlaceDetails?: boolean;
 };
 
 const defaultCenter = { lat: 1.3521, lng: 103.8198 };
@@ -125,6 +132,7 @@ function StatusBadgeIcon({ icon }: { icon: "bookmark" | "heart" }) {
 export function MapView({
   places,
   cityCenters,
+  mapStyles,
   selectedPlaceId,
   openPlaceId,
   requestLocationNonce,
@@ -132,6 +140,9 @@ export function MapView({
   onClosePlace,
   onNearbyCityDetected,
   onUserLocationFound,
+  onLocationStatusChange,
+  showLocationMessage = true,
+  showPlaceDetails = true,
 }: MapViewProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isCompactPopup, setIsCompactPopup] = useState(false);
@@ -242,11 +253,16 @@ export function MapView({
     if (!navigator.geolocation) {
       setLocationStatus("error");
       setLocationMessage("Location is not available in this browser.");
+      onLocationStatusChange?.(
+        "error",
+        "Location is not available in this browser.",
+      );
       return;
     }
 
     setLocationStatus("locating");
     setLocationMessage("Finding your location...");
+    onLocationStatusChange?.("locating", "Finding your location...");
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -258,11 +274,11 @@ export function MapView({
 
         setUserLocation(nextLocation);
         setLocationStatus("found");
-        setLocationMessage(
-          nearbyCity
-            ? `Centered near ${nearbyCity}.`
-            : "Centered on your location.",
-        );
+        const nextLocationMessage = nearbyCity
+          ? `Centered near ${nearbyCity}.`
+          : "Centered on your location.";
+        setLocationMessage(nextLocationMessage);
+        onLocationStatusChange?.("found", nextLocationMessage);
         onUserLocationFound({
           latitude: nextLocation.lat,
           longitude: nextLocation.lng,
@@ -277,12 +293,13 @@ export function MapView({
         }
       },
       (error) => {
-        setLocationStatus("error");
-        setLocationMessage(
+        const nextLocationMessage =
           error.code === error.PERMISSION_DENIED
             ? "Location permission was denied."
-            : "Could not find your location.",
-        );
+            : "Could not find your location.";
+        setLocationStatus("error");
+        setLocationMessage(nextLocationMessage);
+        onLocationStatusChange?.("error", nextLocationMessage);
       },
       {
         enableHighAccuracy: true,
@@ -367,6 +384,7 @@ export function MapView({
         clickableIcons: false,
         fullscreenControl: false,
         mapTypeControl: false,
+        styles: mapStyles,
         streetViewControl: false,
         zoomControl: true,
       }}
@@ -388,7 +406,7 @@ export function MapView({
         >
           {locationStatus === "locating" ? "Finding..." : "Use my location"}
         </button>
-        {locationMessage ? (
+        {showLocationMessage && locationMessage ? (
           <p className={`map-location-message is-${locationStatus}`}>
             {locationMessage}
           </p>
@@ -437,7 +455,7 @@ export function MapView({
         );
       })}
 
-      {openPlace && !isCompactPopup ? (
+      {showPlaceDetails && openPlace && !isCompactPopup ? (
         <OverlayViewF
           getPixelPositionOffset={(width, height) => ({
             x: Math.round(-width / 2),
@@ -476,7 +494,7 @@ export function MapView({
           </div>
         </OverlayViewF>
       ) : null}
-      {openPlace && isCompactPopup ? (
+      {showPlaceDetails && openPlace && isCompactPopup ? (
         <div
           className="map-mobile-sheet"
           onClick={(event) => event.stopPropagation()}

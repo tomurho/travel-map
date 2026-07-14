@@ -14,6 +14,7 @@
     "import:places": "tsx scripts/import-places.ts",
     "publish:places": "tsx scripts/publish-places-from-sheet.ts",
     "sync:published:places": "tsx scripts/sync-published-places-to-json.ts",
+    "test:ingest": "node --import tsx --test src/lib/ingest-hardening.test.ts",
     "verify:places": "tsx scripts/verify-places-google.ts",
     "repair:hcmc:places": "pnpm verify:places -- --city \"Ho Chi Minh City\" --cache-only --write-candidates --apply-auto-decisions --output src/data/places.json",
     "test": "node --import tsx --test src/lib/import.test.ts"

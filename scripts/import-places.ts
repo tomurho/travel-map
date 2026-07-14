@@ -1,9 +1,13 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import xlsx from "xlsx";
 import { normalizePlaces } from "@/lib/import";
+import { assessImportSafety } from "@/lib/import-safety";
 import type { Place } from "@/lib/place";
+import {
+  readPlacesJsonSnapshot,
+  writePlacesJsonAtomic,
+} from "@/lib/places-json-store";
 
 function readRowsFromStructuredSheet(
   worksheet: xlsx.WorkSheet,
@@ -99,12 +103,36 @@ async function main() {
   const positionalArgs: string[] = [];
   let sheetName: string | undefined;
   let importAllSheets = false;
+  let allowAmbiguousIds = false;
+  let allowLargeDrop = false;
+  let allowSkippedRows = false;
+  let write = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
 
     if (argument === "--all-sheets") {
       importAllSheets = true;
+      continue;
+    }
+
+    if (argument === "--allow-ambiguous-ids") {
+      allowAmbiguousIds = true;
+      continue;
+    }
+
+    if (argument === "--allow-large-drop") {
+      allowLargeDrop = true;
+      continue;
+    }
+
+    if (argument === "--allow-skipped-rows") {
+      allowSkippedRows = true;
+      continue;
+    }
+
+    if (argument === "--write") {
+      write = true;
       continue;
     }
 
@@ -123,7 +151,7 @@ async function main() {
 
   if (!inputPath) {
     console.error(
-      "Usage: pnpm import:places <input.xlsx|input.csv> [output.json] [--sheet SHEET_NAME|--all-sheets]",
+      "Usage: pnpm import:places <input.xlsx|input.csv> [output.json] [--sheet SHEET_NAME|--all-sheets] [--write] [--allow-skipped-rows] [--allow-ambiguous-ids] [--allow-large-drop]",
     );
     process.exitCode = 1;
     return;
@@ -195,23 +223,55 @@ async function main() {
   let existingPlaces: Place[] = [];
 
   try {
-    existingPlaces = JSON.parse(
-      await fs.readFile(productionPlacesPath, "utf8"),
-    ) as Place[];
+    existingPlaces = readPlacesJsonSnapshot(productionPlacesPath).places;
   } catch {
     existingPlaces = [];
   }
 
   const result = normalizePlaces(rows, { existingPlaces });
+  const outputSnapshot = readPlacesJsonSnapshot(outputPath, {
+    allowMissing: true,
+  });
+  const safety = assessImportSafety({
+    allowAmbiguousIds,
+    allowLargeDrop,
+    allowSkippedRows,
+    ambiguousIdMatches: result.migrationReport.ambiguousIdMatches.length,
+    currentCount: outputSnapshot.places.length,
+    nextCount: result.places.length,
+    skippedRows: result.errors.length,
+  });
 
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await fs.writeFile(`${outputPath}`, `${JSON.stringify(result.places, null, 2)}\n`);
+  if (write && safety.issues.length > 0) {
+    throw new Error(`Import write blocked:\n- ${safety.issues.join("\n- ")}`);
+  }
+
+  let writeResult: ReturnType<typeof writePlacesJsonAtomic> | null = null;
+  if (write) {
+    writeResult = writePlacesJsonAtomic(result.places, {
+      expectedFileHash: outputSnapshot.fileHash,
+      filePath: outputPath,
+    });
+  }
 
   console.log(
-    `Imported ${result.places.length} places from ${selectedSheetNames
+    `${write ? "Imported" : "Would import"} ${result.places.length} places from ${selectedSheetNames
       .map((selectedSheetName) => `"${selectedSheetName}"`)
       .join(", ")} into ${outputPath}.`,
   );
+
+  if (!write) {
+    console.log("Preview only: pass --write to update the output file.");
+  } else if (writeResult?.backupPath) {
+    console.log(`Backup created at ${writeResult.backupPath}.`);
+  }
+
+  if (safety.issues.length > 0) {
+    console.log("\nWrite safety issues:");
+    for (const issue of safety.issues) {
+      console.log(`- ${issue}`);
+    }
+  }
 
   console.log("\nID migration:");
   console.log(`- IDs preserved: ${result.migrationReport.idsPreserved}`);
@@ -238,4 +298,7 @@ async function main() {
   }
 }
 
-void main();
+void main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

@@ -9,6 +9,7 @@ import { syncPublishedToApp } from "@/lib/place-sheet-pipeline";
 dotenv.config({ path: ".env.local", quiet: true });
 
 type CliOptions = {
+  allowPartial: boolean;
   dryRun: boolean;
   help: boolean;
   sheetId: string | null;
@@ -18,6 +19,7 @@ type CliOptions = {
 function parseArgs(rawArgv: string[]): CliOptions {
   const argv = rawArgv[0] === "--" ? rawArgv.slice(1) : rawArgv;
   const options: CliOptions = {
+    allowPartial: false,
     dryRun: false,
     help: false,
     sheetId: null,
@@ -36,6 +38,8 @@ function parseArgs(rawArgv: string[]): CliOptions {
       options.dryRun = true;
     } else if (arg === "--write") {
       options.write = true;
+    } else if (arg === "--allow-partial") {
+      options.allowPartial = true;
     }
   }
 
@@ -52,10 +56,12 @@ function printHelp() {
 Usage:
   pnpm sync:published:places -- --sheet-id <SHEET_ID> --dry-run
   pnpm sync:published:places -- --sheet-id <SHEET_ID> --write
+  pnpm sync:published:places -- --sheet-id <SHEET_ID> --write --allow-partial
 
 Behavior:
   Reads Published, validates rows, merges by id into src/data/places.json,
-  and writes only when --write is passed. Defaults to --dry-run.`);
+  and writes only when --write is passed. Write mode fails closed if any row is
+  invalid. --allow-partial is an explicit recovery override. Defaults to --dry-run.`);
 }
 
 async function main() {
@@ -67,6 +73,7 @@ async function main() {
   }
 
   await syncPublishedToApp({
+    allowPartial: options.allowPartial,
     dryRun: options.dryRun,
     sheetId: options.sheetId ?? "",
     write: options.write,

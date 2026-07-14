@@ -4,16 +4,7 @@ import { FreeGeocodingAccess } from "@/lib/free-geocoding";
 import { resolveGoogleMapsUrlForProductionPlace } from "@/lib/google-place-admin-resolver";
 import { GooglePlacesAccess } from "@/lib/google-places-access";
 import type { Place } from "@/lib/place";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 type RouteContext = {
   params: Promise<{
@@ -22,7 +13,7 @@ type RouteContext = {
 };
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 

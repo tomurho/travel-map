@@ -7,19 +7,10 @@ import {
   stagePlace,
   type AdminStagedPlaceInput,
 } from "@/lib/admin-staging";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
@@ -27,7 +18,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
@@ -57,7 +48,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 

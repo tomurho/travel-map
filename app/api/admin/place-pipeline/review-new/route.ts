@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { enrichReadyRows } from "@/lib/place-sheet-pipeline";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
@@ -26,7 +17,7 @@ export async function POST(request: NextRequest) {
 
   if (input.confirmLiveApi !== true) {
     return NextResponse.json(
-      { error: "Review New Places requires explicit live API confirmation." },
+      { error: "Process Ready Rows requires explicit live API confirmation." },
       { status: 400 },
     );
   }

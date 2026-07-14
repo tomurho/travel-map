@@ -2,18 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   deleteProductionPlace,
+  type AdminFloatingPlaceEditInput,
   type AdminProductionPlaceVerificationInput,
+  updateProductionPlaceFloatingEdit,
   updateProductionPlaceVerification,
 } from "@/lib/admin-staging";
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
+function isLocalhostRequest(request: NextRequest) {
+  return ["localhost", "127.0.0.1", "::1"].includes(request.nextUrl.hostname);
+}
 
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
+function isFloatingPlaceEditInput(
+  input: unknown,
+): input is AdminFloatingPlaceEditInput {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    "editMode" in input &&
+    input.editMode === "floating-inspector"
+  );
 }
 
 type RouteContext = {
@@ -23,12 +31,32 @@ type RouteContext = {
 };
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
   const { id } = await context.params;
-  const input = (await request.json()) as AdminProductionPlaceVerificationInput;
+  const input = (await request.json()) as
+    | AdminFloatingPlaceEditInput
+    | AdminProductionPlaceVerificationInput;
+
+  if (isFloatingPlaceEditInput(input)) {
+    if (!isLocalhostRequest(request)) {
+      return NextResponse.json(
+        { error: "Floating inspector edits are only available on localhost." },
+        { status: 403 },
+      );
+    }
+
+    const result = updateProductionPlaceFloatingEdit(decodeURIComponent(id), input);
+
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    return NextResponse.json(result);
+  }
+
   const result = updateProductionPlaceVerification(decodeURIComponent(id), input);
 
   if ("error" in result) {
@@ -39,7 +67,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 

@@ -28,6 +28,10 @@ import {
 import { formatDateForInput } from "@/lib/place-verification";
 import type { Place } from "@/lib/place";
 import type { VerificationSource } from "@/lib/place";
+import {
+  readPlacesJsonSnapshot,
+  writePlacesJsonAtomic,
+} from "@/lib/places-json-store";
 
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places";
@@ -1302,8 +1306,8 @@ async function main() {
   const apiKey =
     process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY ?? "";
 
-  const rawPlaces = await fs.readFile(options.inputPath, "utf8");
-  const places = JSON.parse(rawPlaces) as Place[];
+  const inputSnapshot = readPlacesJsonSnapshot(options.inputPath);
+  const places = inputSnapshot.places;
   const selectedNames = await readSelectedNames(options);
   const placesToProcess = selectPlacesForAudit(places, options, selectedNames);
   const liveCallsRequested =
@@ -1538,11 +1542,13 @@ async function main() {
     assertCoordinateAuditFields(originalPlacesById, processedNextPlaces);
     printRowsThatWillChange(originalPlacesById, processedNextPlaces);
 
-    await fs.mkdir(path.dirname(options.outputPath), { recursive: true });
-    await fs.writeFile(
-      options.outputPath,
-      `${JSON.stringify(nextPlaces, null, 2)}\n`,
-    );
+    const outputSnapshot = readPlacesJsonSnapshot(options.outputPath, {
+      allowMissing: true,
+    });
+    writePlacesJsonAtomic(nextPlaces, {
+      expectedFileHash: outputSnapshot.fileHash,
+      filePath: options.outputPath,
+    });
     console.log(`Candidate output written to ${options.outputPath}`);
   } else {
     console.log(

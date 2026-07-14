@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { publishApprovedRows } from "@/lib/place-sheet-pipeline";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
@@ -31,11 +22,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await publishApprovedRows({
-    dryRun: !write,
-    sheetId: input.sheetId ?? "",
-    write,
-  });
+  try {
+    const result = await publishApprovedRows({
+      dryRun: !write,
+      sheetId: input.sheetId ?? "",
+      write,
+    });
 
-  return NextResponse.json(result);
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not publish approved places.",
+      },
+      { status: 500 },
+    );
+  }
 }

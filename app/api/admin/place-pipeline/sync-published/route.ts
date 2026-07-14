@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { syncPublishedToApp } from "@/lib/place-sheet-pipeline";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
   const input = (await request.json()) as {
+    allowPartial?: boolean;
+    confirmPartial?: boolean;
     confirmWrite?: boolean;
     sheetId?: string;
     write?: boolean;
@@ -31,11 +24,26 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await syncPublishedToApp({
-    dryRun: !write,
-    sheetId: input.sheetId ?? "",
-    write,
-  });
+  if (input.allowPartial === true && input.confirmPartial !== true) {
+    return NextResponse.json(
+      { error: "Partial sync requires explicit confirmation." },
+      { status: 400 },
+    );
+  }
 
-  return NextResponse.json(result);
+  try {
+    const result = await syncPublishedToApp({
+      allowPartial: input.allowPartial === true,
+      dryRun: !write,
+      sheetId: input.sheetId ?? "",
+      write,
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not sync Published rows." },
+      { status: 400 },
+    );
+  }
 }

@@ -2290,36 +2290,40 @@ test("admin provider attempts are summarized for the main QA view", () => {
   );
 });
 
-test("admin place management renders three-pane controls", () => {
+test("admin place pipeline renders the active ingest controls", () => {
   const source = readFileSync(
     join(process.cwd(), "src/components/admin-workflow.tsx"),
     "utf8",
   );
 
-  assert.match(source, /Admin \/ Place Management/);
-  assert.match(source, /admin-places-pane/);
-  assert.match(source, /admin-editor-pane/);
-  assert.match(source, /admin-verification-flow/);
-  assert.match(source, /type="search"/);
-  assert.match(source, /Add Place/);
-  assert.match(source, /Basic info/);
-  assert.match(source, /Location source/);
-  assert.match(source, /Current saved pin/);
-  assert.match(source, /Candidate match/);
-  assert.match(source, /Copy candidate pin/);
-  assert.match(source, /Mark saved pin verified/);
+  assert.match(source, /Admin \/ Place Pipeline/);
+  assert.match(source, /screenshotIntakePanel/);
+  assert.match(source, /googleSheetsPipelinePanel/);
+  assert.match(source, /Extract Places/);
+  assert.match(source, /Coming back after a break/);
+  assert.match(source, /intakeStatus = New/);
+  assert.match(source, /intakeStatus = Ready/);
+  assert.match(source, /intakeStatus = Enriched/);
+  assert.match(source, /reviewStatus = Candidate/);
+  assert.match(source, /reviewStatus = Verified/);
+  assert.match(source, /verifiedStatus = Verified/);
+  assert.match(source, /Process Ready Rows/);
+  assert.match(source, /Publish Verified Reviews/);
+  assert.match(source, /Update Travel Map/);
 });
 
-test("admin verification debug details stay collapsed and candidates stay selectable", () => {
+test("admin pipeline requires confirmations for paid and mutating actions", () => {
   const source = readFileSync(
     join(process.cwd(), "src/components/admin-workflow.tsx"),
     "utf8",
   );
 
-  assert.match(source, /<details className="admin-technical-details">/);
-  assert.doesNotMatch(source, /<details className="admin-technical-details" open/);
-  assert.match(source, /admin-candidate-option/);
-  assert.match(source, /Use this candidate/);
-  assert.match(source, /useProductionCandidate/);
-  assert.match(source, /acceptProductionCandidateCoordinates/);
+  assert.match(source, /This will call Google Places for up to/);
+  assert.match(source, /Apply the previewed changes to the travel map/);
+  assert.match(source, /Preview Publish/);
+  assert.match(source, /Apply Publish/);
+  assert.match(source, /Preview Update/);
+  assert.match(source, /Apply Update/);
+  assert.match(source, /confirmLiveApi: true/);
+  assert.match(source, /confirmWrite: write/);
 });

@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { formatProviderAttemptSummary } from "@/lib/admin-ui";
 import { formatDistance } from "@/lib/geo";
+import type { PlacePipelineStatus } from "@/lib/place-sheet-pipeline";
 import {
   hasMaterialCanonicalAddressDifference,
   type Place,
@@ -155,6 +156,7 @@ type PipelinePublishResult = {
   publishedRows?: number;
   rowsSkipped?: number;
   rowsToPublish?: number;
+  rowsToUpdate?: number;
   validationIssues?: number;
   verifiedRowsFound?: number;
   wouldPublishRows?: Array<{
@@ -174,6 +176,7 @@ type PipelineReviewResult = {
     rowNumber: number;
   }>;
   enrichedRows?: number;
+  reconciledRows?: number;
   error?: string;
   skippedRowDetails?: Array<{
     reason: string;
@@ -181,6 +184,8 @@ type PipelineReviewResult = {
   }>;
   skippedRows?: number;
 };
+
+type PipelineStatusResponse = PlacePipelineStatus & { error?: string };
 
 type ScreenshotExtractionResult = {
   cityHint: string;
@@ -199,10 +204,28 @@ type ScreenshotIntakeSummary = {
   rowsExtracted?: number;
   rowsSkipped?: number;
   rowsSubmitted?: number;
+  results?: Array<{
+    rawName: string;
+    sourceScreenshot: string;
+    status: "created" | "duplicate";
+  }>;
 };
 
 const DEFAULT_PIPELINE_SHEET_ID =
   "1kVnvUBm-jxAR8zIxh8PyhFEDUgC8b1Y0Q3SObITMpJw";
+
+const PIPELINE_ACTION_LABELS: Record<
+  PlacePipelineStatus["recommendedAction"],
+  string
+> = {
+  fix_errors: "Fix the invalid Published rows before updating the app.",
+  mark_ready: "Choose the New captures you want to process and mark them Ready.",
+  process_ready: "Process the Ready Capture rows next.",
+  publish_verified: "Preview and apply Publish for the verified changes.",
+  up_to_date: "Nothing is waiting. The Sheet and travel map are up to date.",
+  update_app: "Preview and apply the travel-map update next.",
+  verify_candidates: "Review the Candidate rows and verify the correct places.",
+};
 
 function formatOptionalValue(value: string | number | undefined | null) {
   if (value === undefined || value === null || value === "") {
@@ -475,6 +498,12 @@ export function AdminWorkflow({
   const [pipelineReviewMessage, setPipelineReviewMessage] = useState<string | null>(
     null,
   );
+  const [pipelineStatus, setPipelineStatus] =
+    useState<PlacePipelineStatus | null>(null);
+  const [pipelineStatusError, setPipelineStatusError] = useState<string | null>(
+    null,
+  );
+  const [isLoadingPipelineStatus, setIsLoadingPipelineStatus] = useState(false);
   const [pipelineMaxApiCalls, setPipelineMaxApiCalls] = useState("1");
   const [isReviewingNewPlaces, setIsReviewingNewPlaces] = useState(false);
   const [isSyncingPublished, setIsSyncingPublished] = useState(false);
@@ -500,6 +529,13 @@ export function AdminWorkflow({
   const stagedVerifiedMissingUrlCount = stagedPlaces.filter(
     (place) => place.verifiedStatus === "Yes" && !place.googleMapsUrl?.trim(),
   ).length;
+
+  useEffect(() => {
+    void refreshPipelineStatus(DEFAULT_PIPELINE_SHEET_ID);
+    // The initial status is intentionally loaded once for the default Sheet.
+    // A changed Sheet ID is refreshed explicitly to avoid requests on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const stagedCityNames = Array.from(
     new Set(stagedPlaces.map((place) => place.city).filter(Boolean)),
   ).sort((firstCity, secondCity) => firstCity.localeCompare(secondCity));
@@ -1095,6 +1131,42 @@ export function AdminWorkflow({
     }
   }
 
+  async function refreshPipelineStatus(
+    sheetId = pipelineSheetId.trim(),
+  ) {
+    if (!sheetId) {
+      setPipelineStatus(null);
+      setPipelineStatusError("Add a Google Sheet ID to check pipeline status.");
+      return;
+    }
+
+    setIsLoadingPipelineStatus(true);
+    setPipelineStatusError(null);
+
+    try {
+      const response = await fetch(
+        `/api/admin/place-pipeline/status?sheetId=${encodeURIComponent(sheetId)}`,
+        { headers: authHeaders() },
+      );
+      const payload = (await response.json()) as PipelineStatusResponse;
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not read pipeline status.");
+      }
+
+      setPipelineStatus(payload);
+    } catch (statusError) {
+      setPipelineStatus(null);
+      setPipelineStatusError(
+        statusError instanceof Error
+          ? statusError.message
+          : "Could not read pipeline status.",
+      );
+    } finally {
+      setIsLoadingPipelineStatus(false);
+    }
+  }
+
   async function syncPublishedToApp(write: boolean) {
     if (!pipelineSheetId.trim()) {
       setPipelineMessage(null);
@@ -1103,19 +1175,26 @@ export function AdminWorkflow({
       return;
     }
 
-    if (
-      write &&
-      !window.confirm(
-        "Write Published Google Sheet rows into src/data/places.json?",
-      )
-    ) {
+    if (write && pipelineResult?.wrote !== false) {
+      setError("Preview the app update before applying it.");
+      return;
+    }
+
+    if (write && pipelineResult?.validationErrors?.length) {
+      setError("Resolve every validation error before updating the app.");
+      return;
+    }
+
+    if (write && !window.confirm("Apply the previewed changes to the travel map?")) {
       return;
     }
 
     setIsSyncingPublished(true);
     setError(null);
     setPipelineMessage(null);
-    setPipelineResult(null);
+    if (!write) {
+      setPipelineResult(null);
+    }
 
     try {
       const response = await fetch("/api/admin/place-pipeline/sync-published", {
@@ -1142,6 +1221,9 @@ export function AdminWorkflow({
           ? "Published rows were written to the app dataset."
           : "Dry run complete. No app data was changed.",
       );
+      if (write) {
+        void refreshPipelineStatus();
+      }
     } catch (syncError) {
       setError(
         syncError instanceof Error
@@ -1157,7 +1239,7 @@ export function AdminWorkflow({
     if (!pipelineSheetId.trim()) {
       setPipelineReviewMessage(null);
       setPipelineReviewResult(null);
-      setError("Add a Google Sheet ID before reviewing new places.");
+      setError("Add a Google Sheet ID before processing Ready rows.");
       return;
     }
 
@@ -1203,19 +1285,24 @@ export function AdminWorkflow({
       }
 
       setPipelineReviewResult(payload);
-      setPipelineReviewMessage("New place review complete.");
+      setPipelineReviewMessage(
+        "Ready Capture rows were enriched. Review the new Candidate rows in the Review sheet.",
+      );
+      setPipelinePublishResult(null);
+      setPipelineResult(null);
+      void refreshPipelineStatus();
     } catch (reviewError) {
       setError(
         reviewError instanceof Error
           ? reviewError.message
-          : "Could not review new places.",
+          : "Could not process Ready rows.",
       );
     } finally {
       setIsReviewingNewPlaces(false);
     }
   }
 
-  async function publishApprovedPlaces() {
+  async function publishApprovedPlaces(write: boolean) {
     if (!pipelineSheetId.trim()) {
       setPipelinePublishMessage(null);
       setPipelinePublishResult(null);
@@ -1223,44 +1310,31 @@ export function AdminWorkflow({
       return;
     }
 
-    if (!window.confirm("Move verified Review rows into the Published sheet?")) {
+    if (write && pipelinePublishResult?.mode !== "preview") {
+      setError("Preview the Published changes before applying them.");
+      return;
+    }
+
+    if (
+      write &&
+      !window.confirm("Apply the previewed changes to the Published sheet?")
+    ) {
       return;
     }
 
     setIsPublishingApprovedPlaces(true);
     setError(null);
     setPipelinePublishMessage(null);
-    setPipelinePublishResult(null);
+    if (!write) {
+      setPipelinePublishResult(null);
+    }
 
     try {
-      const previewResponse = await fetch(
-        "/api/admin/place-pipeline/publish-approved",
-        {
-          body: JSON.stringify({
-            sheetId: pipelineSheetId.trim(),
-            write: false,
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            ...(authHeaders() ?? {}),
-          },
-          method: "POST",
-        },
-      );
-      const previewPayload =
-        (await previewResponse.json()) as PipelinePublishResult;
-
-      if (!previewResponse.ok) {
-        throw new Error(
-          previewPayload.error ?? "Could not preview verified Review rows.",
-        );
-      }
-
       const response = await fetch("/api/admin/place-pipeline/publish-approved", {
         body: JSON.stringify({
-          confirmWrite: true,
+          confirmWrite: write,
           sheetId: pipelineSheetId.trim(),
-          write: true,
+          write,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -1275,7 +1349,17 @@ export function AdminWorkflow({
       }
 
       setPipelinePublishResult(payload);
-      setPipelinePublishMessage("Verified Review rows were moved to Published.");
+      if (write) {
+        setPipelineResult(null);
+      }
+      setPipelinePublishMessage(
+        write
+          ? "Previewed changes were applied to Published."
+          : "Publish preview ready. Review the summary before applying changes.",
+      );
+      if (write) {
+        void refreshPipelineStatus();
+      }
     } catch (publishError) {
       setError(
         publishError instanceof Error
@@ -1453,6 +1537,7 @@ export function AdminWorkflow({
 
       setScreenshotSummary((currentSummary) => ({
         ...currentSummary,
+        results: payload.results,
         rowsCreated: payload.rowsCreated ?? 0,
         rowsSkipped: payload.rowsSkipped ?? 0,
         rowsSubmitted: payload.rowsSubmitted ?? rowsToSend.length,
@@ -1460,8 +1545,11 @@ export function AdminWorkflow({
       setScreenshotMessage(
         `Created ${payload.rowsCreated ?? 0} Capture row${
           payload.rowsCreated === 1 ? "" : "s"
-        } with intakeStatus = New.`,
+        } with intakeStatus = New; skipped ${payload.rowsSkipped ?? 0} duplicate or invalid row${
+          payload.rowsSkipped === 1 ? "" : "s"
+        }.`,
       );
+      void refreshPipelineStatus();
     } catch (sendError) {
       setError(
         sendError instanceof Error
@@ -1888,13 +1976,10 @@ export function AdminWorkflow({
     >
       <summary>Screenshot Intake</summary>
       <div className="admin-pipeline-header">
-        <div>
-          <h2>Screenshot Intake</h2>
-          <p>
-            Extract places from screenshots and create Capture rows for manual
-            review.
-          </p>
-        </div>
+        <p>
+          Extract places from screenshots and create Capture rows for manual
+          review.
+        </p>
       </div>
       <div className="admin-screenshot-intake-layout">
         <section
@@ -2087,6 +2172,15 @@ export function AdminWorkflow({
                   <strong>{screenshotSummary.rowsSkipped ?? 0}</strong> skipped
                 </span>
               </div>
+              {screenshotSummary.results?.length ? (
+                <ul className="admin-note-list">
+                  {screenshotSummary.results.map((result, index) => (
+                    <li key={`${result.sourceScreenshot}-${result.rawName}-${index}`}>
+                      {result.sourceScreenshot || "Unknown screenshot"}: {result.rawName} — {result.status}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -2101,29 +2195,154 @@ export function AdminWorkflow({
     >
       <summary>Google Sheets Pipeline</summary>
       <div className="admin-pipeline-header">
-        <div>
-          <h2>Google Sheets Pipeline</h2>
-          <p>
-            Move place data through the Google Sheet workflow, ending with the
-            local app dataset.
-          </p>
-        </div>
+        <p>
+          Move each place from Capture to Review, then Published, then the local
+          travel map.
+        </p>
       </div>
       <div className="admin-pipeline-body">
-        <section className="admin-pipeline-settings" aria-label="Pipeline settings">
-          <h3>Settings</h3>
+        <section
+          aria-labelledby="admin-resume-guide-title"
+          className="admin-pipeline-guide"
+        >
+          <div className="admin-pipeline-guide-header">
+            <div>
+              <h3 id="admin-resume-guide-title">Coming back after a break?</h3>
+              <p>
+                Find the first row below that matches your Google Sheet, then
+                continue from there. Use column headers; column letters may move.
+              </p>
+            </div>
+            <div className="admin-pipeline-guide-actions">
+              <button
+                disabled={isLoadingPipelineStatus}
+                onClick={() => refreshPipelineStatus()}
+                type="button"
+              >
+                {isLoadingPipelineStatus ? "Checking…" : "Refresh status"}
+              </button>
+              <a
+                href={`https://docs.google.com/spreadsheets/d/${pipelineSheetId.trim()}/edit`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Open Google Sheet ↗
+              </a>
+            </div>
+          </div>
+          {pipelineStatus ? (
+            <div
+              aria-live="polite"
+              className={`admin-pipeline-next-action${
+                pipelineStatus.recommendedAction === "fix_errors"
+                  ? " is-warning"
+                  : ""
+              }`}
+            >
+              <span>Do this next</span>
+              <strong>
+                {PIPELINE_ACTION_LABELS[pipelineStatus.recommendedAction]}
+              </strong>
+              <small>
+                Checked{" "}
+                {new Date(pipelineStatus.fetchedAt).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </small>
+            </div>
+          ) : pipelineStatusError ? (
+            <p className="admin-pipeline-status-error" role="alert">
+              Status unavailable: {pipelineStatusError}
+            </p>
+          ) : (
+            <p className="admin-pipeline-status-loading" aria-live="polite">
+              Checking the Google Sheet…
+            </p>
+          )}
+          <ol className="admin-pipeline-resume-list">
+            <li>
+              <div className="admin-pipeline-resume-heading">
+                <span>Capture</span>
+                <strong>{pipelineStatus?.capture.new ?? "–"}</strong>
+              </div>
+              <code>intakeStatus = New</code>
+              <p>Change it to <code>Ready</code> when you want Google lookup to run.</p>
+            </li>
+            <li>
+              <div className="admin-pipeline-resume-heading">
+                <span>Capture</span>
+                <strong>{pipelineStatus?.capture.ready ?? "–"}</strong>
+              </div>
+              <code>intakeStatus = Ready</code>
+              <p>Click <strong>Process Ready Rows</strong> below.</p>
+            </li>
+            <li>
+              <div className="admin-pipeline-resume-heading">
+                <span>Capture → Review</span>
+                <strong>{pipelineStatus?.review.candidate ?? "–"}</strong>
+              </div>
+              <code>intakeStatus = Enriched</code>
+              <code>reviewStatus = Candidate</code>
+              <p>
+                Lookup is complete, but the place is not verified. Check its
+                Review row and Maps link, then change it to <code>Verified</code>
+                only when correct.
+              </p>
+            </li>
+            <li>
+              <div className="admin-pipeline-resume-heading">
+                <span>Review</span>
+                <strong>{pipelineStatus?.readyToPublish ?? "–"}</strong>
+              </div>
+              <code>reviewStatus = Verified</code>
+              <p>
+                {pipelineStatus
+                  ? `${pipelineStatus.readyToPublish} change${pipelineStatus.readyToPublish === 1 ? "" : "s"} waiting to publish.`
+                  : "Preview, then apply Publish."}
+              </p>
+            </li>
+            <li>
+              <div className="admin-pipeline-resume-heading">
+                <span>Published</span>
+                <strong
+                  className={
+                    pipelineStatus?.validationErrors ? "is-warning" : undefined
+                  }
+                >
+                  {pipelineStatus?.appChanges ?? "–"}
+                </strong>
+              </div>
+              <code>verifiedStatus = Verified</code>
+              <p>
+                {pipelineStatus?.validationErrors
+                  ? `${pipelineStatus.validationErrors} invalid row${pipelineStatus.validationErrors === 1 ? "" : "s"} must be fixed first.`
+                  : "No status edit is needed; preview and apply the travel-map update."}
+              </p>
+            </li>
+          </ol>
+        </section>
+
+        <details className="admin-pipeline-settings">
+          <summary>Advanced settings</summary>
           <div className="admin-pipeline-settings-grid">
             <label>
               <span>Sheet ID</span>
               <input
                 className="admin-draft-input"
-                onChange={(event) => setPipelineSheetId(event.target.value)}
+                onChange={(event) => {
+                  setPipelineSheetId(event.target.value);
+                  setPipelineStatus(null);
+                  setPipelineStatusError(null);
+                  setPipelinePublishResult(null);
+                  setPipelineResult(null);
+                }}
                 value={pipelineSheetId}
               />
             </label>
             <label className="admin-pipeline-max-calls">
               <span>Max API calls per run</span>
-              <small>Used by Review New Places.</small>
+              <small>Used by Process Ready Rows.</small>
               <input
                 className="admin-draft-input"
                 max="10"
@@ -2134,60 +2353,130 @@ export function AdminWorkflow({
               />
             </label>
           </div>
-        </section>
+        </details>
 
         <section className="admin-pipeline-workflow" aria-label="Pipeline workflow">
           <article className="admin-pipeline-step">
             <span className="admin-pipeline-step-number">1</span>
             <div>
-              <h3>Review New Places</h3>
-              <p>
-                Looks up rows marked Ready and sends candidates to Review using
-                the max API call setting.
-              </p>
+              <h3>Enrich Ready Captures</h3>
+              <dl className="admin-pipeline-step-guide">
+                <div>
+                  <dt>Before</dt>
+                  <dd>In Capture, change each row you want processed from <code>New</code> to <code>Ready</code>.</dd>
+                </div>
+                <div>
+                  <dt>What happens</dt>
+                  <dd>
+                    Google Places is called, a <code>Candidate</code> row is added
+                    to Review, and Capture becomes <code>Enriched</code>. Enriched
+                    means lookup complete—not verified.
+                  </dd>
+                </div>
+                <div>
+                  <dt>Your next action</dt>
+                  <dd>Inspect the candidate in Review and change <code>reviewStatus</code> to <code>Verified</code> only if it is correct.</dd>
+                </div>
+              </dl>
             </div>
             <button
-              className="admin-pipeline-action"
+              className="admin-pipeline-action is-secondary"
               disabled={isReviewingNewPlaces}
               onClick={reviewNewPlaces}
               type="button"
             >
-              {isReviewingNewPlaces ? "Reviewing..." : "Review New Places"}
+              {isReviewingNewPlaces ? "Processing..." : "Process Ready Rows"}
             </button>
           </article>
 
           <article className="admin-pipeline-step">
             <span className="admin-pipeline-step-number">2</span>
             <div>
-              <h3>Publish Approved Places</h3>
-              <p>Moves Verified Review rows to Published.</p>
+              <h3>Publish Verified Reviews</h3>
+              <dl className="admin-pipeline-step-guide">
+                <div>
+                  <dt>Before</dt>
+                  <dd>Confirm the correct Review rows say <code>reviewStatus = Verified</code>.</dd>
+                </div>
+                <div>
+                  <dt>What happens</dt>
+                  <dd>Preview shows what will be added or corrected. Apply writes those rows to Published.</dd>
+                </div>
+                <div>
+                  <dt>Your next action</dt>
+                  <dd>Review the preview summary, then apply Publish. You do not need to edit Published status.</dd>
+                </div>
+              </dl>
             </div>
+            <div className="admin-pipeline-step-actions">
             <button
-              className="admin-pipeline-action"
+              className="admin-pipeline-action is-secondary"
               disabled={isPublishingApprovedPlaces}
-              onClick={publishApprovedPlaces}
+              onClick={() => publishApprovedPlaces(false)}
               type="button"
             >
               {isPublishingApprovedPlaces
-                ? "Publishing..."
-                : "Publish Approved Places"}
+                ? "Working..."
+                : "Preview Publish"}
             </button>
+            <button
+              className="admin-pipeline-action is-primary"
+              disabled={
+                isPublishingApprovedPlaces ||
+                pipelinePublishResult?.mode !== "preview" ||
+                (pipelinePublishResult.rowsToPublish ?? 0) === 0 ||
+                Boolean(pipelinePublishResult.validationIssues)
+              }
+              onClick={() => publishApprovedPlaces(true)}
+              type="button"
+            >
+              Apply Publish
+            </button>
+            </div>
           </article>
 
           <article className="admin-pipeline-step">
             <span className="admin-pipeline-step-number">3</span>
             <div>
               <h3>Update Travel Map</h3>
-              <p>Writes Published rows into the app data.</p>
+              <dl className="admin-pipeline-step-guide">
+                <div>
+                  <dt>Before</dt>
+                  <dd>Published rows should already say <code>verifiedStatus = Verified</code>. That is the correct final Sheet state.</dd>
+                </div>
+                <div>
+                  <dt>What happens</dt>
+                  <dd>Preview validates Published and lists app changes. Apply updates the local travel-map data.</dd>
+                </div>
+                <div>
+                  <dt>Your next action</dt>
+                  <dd>Open the Field Guide and confirm the new places look correct.</dd>
+                </div>
+              </dl>
             </div>
+            <div className="admin-pipeline-step-actions">
             <button
-              className="admin-pipeline-action"
+              className="admin-pipeline-action is-secondary"
               disabled={isSyncingPublished}
+              onClick={() => syncPublishedToApp(false)}
+              type="button"
+            >
+              {isSyncingPublished ? "Working..." : "Preview Update"}
+            </button>
+            <button
+              className="admin-pipeline-action is-primary"
+              disabled={
+                isSyncingPublished ||
+                pipelineResult?.wrote !== false ||
+                Boolean(pipelineResult.validationErrors?.length) ||
+                (pipelineResult.changes?.length ?? 0) === 0
+              }
               onClick={() => syncPublishedToApp(true)}
               type="button"
             >
-              {isSyncingPublished ? "Updating..." : "Update Travel Map"}
+              Apply Update
             </button>
+            </div>
           </article>
         </section>
       </div>
@@ -2210,10 +2499,14 @@ export function AdminWorkflow({
           <div className="admin-export-result">
           <strong>Review New Places summary</strong>
           <div className="admin-preview-chips">
-            <span>
-              <strong>{pipelineReviewResult.enrichedRows ?? 0}</strong>{" "}
-              enriched
-            </span>
+                <span>
+                  <strong>{pipelineReviewResult.enrichedRows ?? 0}</strong>{" "}
+                  enriched
+                </span>
+                <span>
+                  <strong>{pipelineReviewResult.reconciledRows ?? 0}</strong>{" "}
+                  retries reconciled
+                </span>
             <span>
               <strong>{pipelineReviewResult.skippedRows ?? 0}</strong> skipped
             </span>
@@ -2285,10 +2578,14 @@ export function AdminWorkflow({
               </strong>{" "}
               verified
             </span>
-            <span>
-              <strong>{pipelinePublishResult.rowsToPublish ?? 0}</strong>{" "}
-              publishable
-            </span>
+                <span>
+                  <strong>{pipelinePublishResult.rowsToPublish ?? 0}</strong>{" "}
+                  publishable
+                </span>
+                <span>
+                  <strong>{pipelinePublishResult.rowsToUpdate ?? 0}</strong>{" "}
+                  corrections
+                </span>
             <span>
               <strong>{pipelinePublishResult.rowsSkipped ?? 0}</strong> skipped
             </span>
@@ -2370,1559 +2667,17 @@ export function AdminWorkflow({
   return (
     <main className="shell admin-shell">
       <section className="hero panel admin-hero">
-        <h1>Admin / Place Management</h1>
+        <h1>Admin / Place Pipeline</h1>
         <p>
-          Add, edit, verify, and manage places with high-quality coordinates.
+          Capture screenshot finds, enrich ready rows, publish approved places,
+          and update the travel map dataset.
         </p>
-        <div className="admin-preview-chips admin-header-counts">
-          <span>
-            <strong>{productionPlaces.length}</strong> places
-          </span>
-          <span className="is-verified">
-            <strong>{productionVerificationSummary.verified ?? 0}</strong>{" "}
-            verified
-          </span>
-          <span className="is-warning">
-            <strong>{productionVerificationSummary.review ?? 0}</strong> review
-          </span>
-          <span>
-            <strong>{productionVerificationSummary.unverified ?? 0}</strong>{" "}
-            unverified
-          </span>
-          <span className="is-blocked">
-            <strong>{productionVerificationSummary.closed_moved ?? 0}</strong>{" "}
-            closed/moved
-          </span>
-        </div>
       </section>
 
-      {screenshotIntakePanel}
-
-      {googleSheetsPipelinePanel}
-
-      <section className="admin-grid">
-        <section className="panel admin-verification-panel">
-          <div className="admin-staged-header">
-            <div>
-              <h2>Production places</h2>
-              <p>
-                Find a place, edit its curated record, then verify the saved map
-                pin in a separate workflow.
-              </p>
-            </div>
-            <button
-              className="admin-add-place-button"
-              onClick={startAddPlaceFlow}
-              type="button"
-            >
-              Add Place
-            </button>
-          </div>
-
-          {productionMessage ? (
-            <p className="admin-success">{productionMessage}</p>
-          ) : null}
-
-          <div className="admin-management-board">
-            <section className="admin-pane admin-places-pane">
-              <div className="admin-pane-header">
-                <h3>Places list</h3>
-                <span>{visibleProductionPlaces.length} shown</span>
-              </div>
-              <div className="admin-production-toolbar">
-                <label className="admin-search-field">
-                  <span>Search</span>
-                  <input
-                    onChange={(event) => setProductionSearch(event.target.value)}
-                    placeholder="Name, area, address, notes"
-                    type="search"
-                    value={productionSearch}
-                  />
-                </label>
-                <label>
-                  <span>City</span>
-                  <select
-                    onChange={(event) => setProductionCityFilter(event.target.value)}
-                    value={productionCityFilter}
-                  >
-                    <option value="all">All cities</option>
-                    {productionCityOptions.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Status</span>
-                  <select
-                    onChange={(event) =>
-                      setProductionStatusFilter(
-                        event.target.value as PlaceStatus | "all",
-                      )
-                    }
-                    value={productionStatusFilter}
-                  >
-                    <option value="all">All statuses</option>
-                    {PLACE_STATUS_OPTIONS.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Verified?</span>
-                  <select
-                    onChange={(event) =>
-                      setProductionFilter(
-                        event.target.value as AdminVerificationFilter,
-                      )
-                    }
-                    value={productionFilter}
-                  >
-                    {VERIFICATION_FILTER_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Category</span>
-                  <select
-                    onChange={(event) =>
-                      setProductionCategoryFilter(event.target.value)
-                    }
-                    value={productionCategoryFilter}
-                  >
-                    <option value="all">All categories</option>
-                    {productionCategoryOptions.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Sort</span>
-                  <select
-                    onChange={(event) =>
-                      setProductionSort(event.target.value as ProductionSortMode)
-                    }
-                    value={productionSort}
-                  >
-                    {PRODUCTION_SORT_OPTIONS.map((sortOption) => (
-                      <option key={sortOption.value} value={sortOption.value}>
-                        {sortOption.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="admin-verification-list">
-              {visibleProductionPlaces.map((place) => (
-                <button
-                  className={`admin-verification-row${
-                    selectedProductionPlace?.id === place.id ? " is-active" : ""
-                  }`}
-                  key={place.id}
-                  onClick={() => selectProductionPlace(place.id)}
-                  type="button"
-                >
-                  <span>
-                    <strong>{place.name}</strong>
-                    <small>
-                      {[place.category || "Uncategorized", place.district || "No area"]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </small>
-                    <small>
-                      {place.city} · {getProductionStatusLabel(place)}
-                    </small>
-                  </span>
-                  <span
-                    className={`admin-verification-badge${getVerificationClass(
-                      place.verifiedStatus,
-                    )}`}
-                  >
-                    {getCompactVerificationLabel(place.verifiedStatus)}
-                  </span>
-                </button>
-              ))}
-              {visibleProductionPlaces.length === 0 ? (
-                <p className="admin-empty">No places match this QA filter.</p>
-              ) : null}
-              </div>
-            </section>
-
-            {selectedProductionPlace ? (
-              (() => {
-                const edit = getProductionEdit(selectedProductionPlace);
-                const canOpenGoogleMaps = edit.googleMapsUrl.trim().length > 0;
-                const canResolveGoogleMapsUrl =
-                  resolvingProductionPlaceId !== selectedProductionPlace.id;
-                const hasCandidateMetadata =
-                  selectedProductionPlace.googlePlaceId !== undefined ||
-                  selectedProductionPlace.canonicalName !== undefined ||
-                  selectedProductionPlace.canonicalAddress !== undefined ||
-                  selectedProductionPlace.verifiedLatitude !== undefined ||
-                  selectedProductionPlace.verifiedLongitude !== undefined;
-                const candidateOptions =
-                  candidateOptionsByPlaceId[selectedProductionPlace.id] ?? [];
-                const providerAttempts =
-                  providerAttemptsByPlaceId[selectedProductionPlace.id] ?? [];
-                const hasUnsavedProductionChanges =
-                  productionEdits[selectedProductionPlace.id] !== undefined &&
-                  hasProductionEditChanges(selectedProductionPlace);
-                const hasCandidateCoordinates =
-                  selectedProductionPlace.verifiedLatitude !== undefined &&
-                  selectedProductionPlace.verifiedLongitude !== undefined;
-                const hasCanonicalAddressDifference =
-                  hasMaterialCanonicalAddressDifference(selectedProductionPlace);
-                const needsLocationVerification =
-                  locationNeedsVerification(selectedProductionPlace);
-                const hasSavedPin =
-                  Number.isFinite(selectedProductionPlace.latitude) &&
-                  Number.isFinite(selectedProductionPlace.longitude);
-
-                return (
-                  <>
-                    <section className="admin-pane admin-editor-pane">
-                      <div className="admin-pane-header">
-                        <div>
-                          <h3>Place editor</h3>
-                          <p>
-                            {[edit.city, edit.category, edit.district]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </p>
-                        </div>
-                        <span
-                          className={`admin-verification-badge${getVerificationClass(
-                            edit.verifiedStatus,
-                          )}`}
-                        >
-                          {getCompactVerificationLabel(edit.verifiedStatus)}
-                        </span>
-                      </div>
-
-                      {hasUnsavedProductionChanges ? (
-                        <div className="admin-unsaved-banner">
-                          Unsaved changes.
-                        </div>
-                      ) : null}
-                      {!hasSavedPin ? (
-                        <div className="admin-unsaved-banner is-warning">
-                          No saved pin yet.
-                        </div>
-                      ) : null}
-                      {needsLocationVerification ? (
-                        <div className="admin-unsaved-banner is-warning">
-                          Location changed. Verification recommended.
-                        </div>
-                      ) : null}
-
-                      <div className="admin-editor-section">
-                        <div className="admin-qa-card-header">
-                          <h4>Basic info</h4>
-                          <span>
-                            {getProductionStatusLabel({
-                              loved: parseLovedForPayload(edit.loved),
-                              status: edit.status,
-                            })}
-                          </span>
-                        </div>
-                        <div className="admin-draft-fields admin-qa-fields">
-                          <label>
-                            <span>Name</span>
-                            <input
-                              className="admin-draft-input"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "name",
-                                  event.target.value,
-                                )
-                              }
-                              value={edit.name}
-                            />
-                          </label>
-                          <label>
-                            <span>City</span>
-                            <input
-                              className="admin-draft-input"
-                              list="admin-city-options"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "city",
-                                  event.target.value,
-                                )
-                              }
-                              value={edit.city}
-                            />
-                          </label>
-                          <label>
-                            <span>Area/District</span>
-                            <input
-                              className="admin-draft-input"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "district",
-                                  event.target.value,
-                                )
-                              }
-                              value={edit.district}
-                            />
-                          </label>
-                          <label>
-                            <span>Category</span>
-                            <input
-                              className="admin-draft-input"
-                              list="admin-category-options"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "category",
-                                  event.target.value,
-                                )
-                              }
-                              value={edit.category}
-                            />
-                          </label>
-                          <label>
-                            <span>Status</span>
-                            <select
-                              className="admin-draft-input"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "status",
-                                  event.target.value as PlaceStatus,
-                                )
-                              }
-                              value={edit.status}
-                            >
-                              {PLACE_STATUS_OPTIONS.map((status) => (
-                                <option key={status.value} value={status.value}>
-                                  {status.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            <span>Loved</span>
-                            <select
-                              className="admin-draft-input"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "loved",
-                                  event.target
-                                    .value as ProductionPlaceEdit["loved"],
-                                )
-                              }
-                              value={edit.loved}
-                            >
-                              <option value="null">Not set</option>
-                              <option value="true">Loved</option>
-                              <option value="false">Not loved</option>
-                            </select>
-                          </label>
-                          <label className="admin-field-full">
-                            <span>Notes</span>
-                            <textarea
-                              className="admin-draft-input admin-draft-textarea"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "notes",
-                                  event.target.value,
-                                )
-                              }
-                              rows={3}
-                              value={edit.notes}
-                            />
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="admin-editor-section">
-                        <div className="admin-qa-card-header">
-                          <h4>Location source</h4>
-                        </div>
-                        <div className="admin-draft-fields admin-qa-fields">
-                          <label className="admin-field-full">
-                            <span>Address</span>
-                            <textarea
-                              className="admin-draft-input admin-draft-textarea"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "address",
-                                  event.target.value,
-                                )
-                              }
-                              rows={2}
-                              value={edit.address}
-                            />
-                          </label>
-                          <label>
-                            <span>Latitude</span>
-                            <input
-                              className="admin-draft-input"
-                              inputMode="decimal"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "latitude",
-                                  event.target.value,
-                                )
-                              }
-                              value={edit.latitude}
-                            />
-                          </label>
-                          <label>
-                            <span>Longitude</span>
-                            <input
-                              className="admin-draft-input"
-                              inputMode="decimal"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "longitude",
-                                  event.target.value,
-                                )
-                              }
-                              value={edit.longitude}
-                            />
-                          </label>
-                          <label className="admin-field-full">
-                            <span>Google Maps URL</span>
-                            <input
-                              className="admin-draft-input"
-                              onChange={(event) =>
-                                setProductionEditField(
-                                  selectedProductionPlace,
-                                  "googleMapsUrl",
-                                  event.target.value,
-                                )
-                              }
-                              placeholder="https://maps.google.com/..."
-                              type="url"
-                              value={edit.googleMapsUrl}
-                            />
-                            <small className="admin-field-helper">
-                              Uses cache/free sources first. Google Places is only
-                              used if live Google lookups are enabled.
-                            </small>
-                          </label>
-                        </div>
-                      </div>
-                      <div className="admin-editor-actions">
-                        <button
-                          disabled={!hasUnsavedProductionChanges}
-                          onClick={() => cancelProductionEdit(selectedProductionPlace)}
-                          type="button"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          className={`admin-save-action${
-                            hasUnsavedProductionChanges ? " is-active" : ""
-                          }`}
-                          disabled={
-                            savingProductionPlaceId === selectedProductionPlace.id
-                          }
-                          onClick={() => saveProductionPlace(selectedProductionPlace)}
-                          type="button"
-                        >
-                          {savingProductionPlaceId === selectedProductionPlace.id
-                            ? "Saving..."
-                            : "Save place record"}
-                        </button>
-                      </div>
-                    </section>
-
-                    <section className="admin-pane admin-verification-flow">
-                        <div className="admin-qa-card-header">
-                          <h3>Verification workflow</h3>
-                          <span>
-                            {formatOptionalValue(
-                              selectedProductionPlace.coordinateConfidence,
-                            )}
-                          </span>
-                        </div>
-                        <ol className="admin-workflow-steps">
-                          <li>
-                            <strong>Find a candidate</strong>
-                            <span>Load a likely listing for comparison. This does not move the saved pin.</span>
-                          </li>
-                          <li>
-                            <strong>Copy only what you trust</strong>
-                            <span>Copy the candidate pin only if it is better. Copy the address only if it is cleaner.</span>
-                          </li>
-                          <li>
-                            <strong>Save the record</strong>
-                            <span>Verification buttons stage edits. Saving commits them.</span>
-                          </li>
-                        </ol>
-                        <section className="admin-verification-block">
-                          <h4>Current saved pin</h4>
-                          <div className="admin-current-pin">
-                            <p>
-                              {hasSavedPin
-                                ? `${selectedProductionPlace.latitude}, ${selectedProductionPlace.longitude}`
-                                : "No saved pin yet"}
-                            </p>
-                            <p>{selectedProductionPlace.address || "No address saved"}</p>
-                            <p>
-                              Status:{" "}
-                              {getCompactVerificationLabel(edit.verifiedStatus)}
-                              {edit.lastChecked ? ` · ${edit.lastChecked}` : ""}
-                            </p>
-                            {canOpenGoogleMaps ? (
-                              <a
-                                href={edit.googleMapsUrl}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                Open Google Maps
-                              </a>
-                            ) : null}
-                          </div>
-                          <div className="admin-draft-fields admin-qa-fields">
-                            <label>
-                              <span>Verification status</span>
-                              <select
-                                className="admin-draft-input"
-                                onChange={(event) =>
-                                  setProductionEditField(
-                                    selectedProductionPlace,
-                                    "verifiedStatus",
-                                    event.target.value as PlaceVerifiedStatus,
-                                  )
-                                }
-                                value={edit.verifiedStatus}
-                              >
-                                {VERIFIED_STATUS_OPTIONS.map((status) => (
-                                  <option key={status || "blank"} value={status}>
-                                    {status || "No"}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label>
-                              <span>Last checked</span>
-                              <input
-                                className="admin-draft-input"
-                                onChange={(event) =>
-                                  setProductionEditField(
-                                    selectedProductionPlace,
-                                    "lastChecked",
-                                    event.target.value,
-                                  )
-                                }
-                                type="date"
-                                value={edit.lastChecked}
-                              />
-                            </label>
-                            <label className="admin-field-full">
-                              <span>Verification notes</span>
-                              <textarea
-                                className="admin-draft-input admin-draft-textarea"
-                                onChange={(event) =>
-                                  setProductionEditField(
-                                    selectedProductionPlace,
-                                    "verificationNotes",
-                                    event.target.value,
-                                  )
-                                }
-                                rows={2}
-                                value={edit.verificationNotes}
-                              />
-                            </label>
-                          </div>
-                        </section>
-
-                        <section className="admin-verification-block">
-                          <h4>Candidate match</h4>
-                          <p className="admin-field-helper">
-                            A candidate is an external listing used for comparison.
-                            Finding one does not move the saved pin.
-                          </p>
-                        {hasCandidateMetadata ? (
-                          <div className="admin-candidate-summary">
-                            <strong>
-                              {formatOptionalValue(
-                                selectedProductionPlace.canonicalName,
-                              )}
-                            </strong>
-                            <p>
-                              {formatOptionalValue(
-                                selectedProductionPlace.canonicalAddress,
-                              )}
-                            </p>
-                            <dl>
-                              <div>
-                                <dt>Candidate lat/lng</dt>
-                                <dd>
-                                  {formatOptionalValue(
-                                    selectedProductionPlace.verifiedLatitude,
-                                  )}
-                                  ,{" "}
-                                  {formatOptionalValue(
-                                    selectedProductionPlace.verifiedLongitude,
-                                  )}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt>Distance from current pin</dt>
-                                <dd>
-                                  {selectedProductionPlace.distanceDeltaMeters ===
-                                  undefined
-                                    ? "Not populated"
-                                    : `${Math.round(
-                                        selectedProductionPlace.distanceDeltaMeters,
-                                      )}m`}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt>Source</dt>
-                                <dd>
-                                  {formatOptionalValue(
-                                    selectedProductionPlace.candidateCoordinateSource,
-                                  )}
-                                </dd>
-                              </div>
-                              <div>
-                                <dt>Business status</dt>
-                                <dd>
-                                  {formatOptionalValue(
-                                    selectedProductionPlace.businessStatus,
-                                  )}
-                                </dd>
-                              </div>
-                            </dl>
-                            {selectedProductionPlace.googleMapsUrl ? (
-                              <a
-                                href={selectedProductionPlace.googleMapsUrl}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                Open Google Maps
-                              </a>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <p className="admin-empty-state">
-                            No candidate loaded yet. Start with Find candidate.
-                          </p>
-                        )}
-                        </section>
-
-                    {candidateOptions.length > 1 ? (
-                      <div className="admin-candidate-options">
-                        <h4>Multiple candidates found</h4>
-                        <p className="admin-source">
-                          Choose the correct listing below. This only loads
-                          candidate metadata; it will not move the map pin.
-                        </p>
-                        {candidateOptions.map((candidate) => {
-                          const isSelectedCandidate =
-                            selectedProductionPlace.googlePlaceId ===
-                            candidate.googlePlaceId;
-
-                          return (
-                            <article
-                              className={`admin-candidate-option${
-                                isSelectedCandidate ? " is-selected" : ""
-                              }`}
-                              key={`${candidate.provider}-${candidate.googlePlaceId}`}
-                            >
-                              <div>
-                                {isSelectedCandidate ? (
-                                  <span className="admin-selected-chip">
-                                    Selected candidate
-                                  </span>
-                                ) : null}
-                                <strong>
-                                  {candidate.canonicalName || "Unnamed candidate"}
-                                </strong>
-                                <p>
-                                  {candidate.canonicalAddress || "No address"}
-                                </p>
-                                {candidate.googleMapsUrl ? (
-                                  <a
-                                    href={candidate.googleMapsUrl}
-                                    rel="noreferrer"
-                                    target="_blank"
-                                  >
-                                    Open Google Maps
-                                  </a>
-                                ) : null}
-                              </div>
-                              <dl className="admin-candidate-metrics">
-                                <div>
-                                  <dt>Lat/Lng</dt>
-                                  <dd>
-                                    {candidate.latitude ?? "Not populated"},{" "}
-                                    {candidate.longitude ?? "Not populated"}
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt>Status</dt>
-                                  <dd>
-                                    {formatOptionalValue(
-                                      candidate.businessStatus,
-                                    )}
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt>Confidence</dt>
-                                  <dd>{candidate.matchConfidence}</dd>
-                                </div>
-                                <div>
-                                  <dt>Name score</dt>
-                                  <dd>{candidate.nameScore}</dd>
-                                </div>
-                                <div>
-                                  <dt>Address score</dt>
-                                  <dd>{candidate.addressScore}</dd>
-                                </div>
-                                <div>
-                                  <dt>Distance</dt>
-                                  <dd>
-                                    {candidate.distanceDeltaMeters === null
-                                      ? "Unknown"
-                                      : `${Math.round(
-                                          candidate.distanceDeltaMeters,
-                                        )}m`}
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt>Source</dt>
-                                  <dd>{candidate.provider}</dd>
-                                </div>
-                              </dl>
-                              <button
-                                disabled={
-                                  candidate.latitude === null ||
-                                  candidate.longitude === null
-                                }
-                                onClick={() =>
-                                  useProductionCandidate(
-                                    selectedProductionPlace,
-                                    candidate,
-                                  )
-                                }
-                                type="button"
-                              >
-                                Use this candidate
-                              </button>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-
-                    <details className="admin-technical-details">
-                      <summary>Details & verification</summary>
-                      <p className="admin-provider-summary">
-                        {formatProviderAttemptSummary(providerAttempts)}
-                      </p>
-                      {providerAttempts.length > 0 ? (
-                        <details className="admin-provider-details">
-                          <summary>Show provider details</summary>
-                          <ul>
-                            {providerAttempts.map((attempt, index) => (
-                              <li key={`${attempt.provider}-${index}`}>
-                                <strong>{attempt.provider}</strong>:{" "}
-                                {attempt.status} - {attempt.detail}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      ) : null}
-                      <dl className="admin-candidate-grid">
-                        <div>
-                          <dt>googlePlaceId</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.googlePlaceId)}</dd>
-                        </div>
-                        <div>
-                          <dt>verificationDecision</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.verificationDecision)}</dd>
-                        </div>
-                        <div>
-                          <dt>verificationSource</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.verificationSource)}</dd>
-                        </div>
-                        <div>
-                          <dt>samePlaceDecision</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.samePlaceDecision)}</dd>
-                        </div>
-                        <div>
-                          <dt>samePlaceReason</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.samePlaceReason)}</dd>
-                        </div>
-                        <div>
-                          <dt>matchConfidence</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.matchConfidence)}</dd>
-                        </div>
-                        <div>
-                          <dt>nameScore</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.nameScore)}</dd>
-                        </div>
-                        <div>
-                          <dt>addressScore</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.addressScore)}</dd>
-                        </div>
-                        <div>
-                          <dt>cityScore</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.cityScore)}</dd>
-                        </div>
-                        <div>
-                          <dt>countryScore</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.countryScore)}</dd>
-                        </div>
-                        <div>
-                          <dt>districtScore</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.districtScore)}</dd>
-                        </div>
-                        <div>
-                          <dt>ambiguityScore</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.ambiguityScore)}</dd>
-                        </div>
-                        <div>
-                          <dt>coordinatePrecision</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.coordinatePrecision)}</dd>
-                        </div>
-                        <div>
-                          <dt>coordinateConfidence</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.coordinateConfidence)}</dd>
-                        </div>
-                        <div>
-                          <dt>candidateCoordinateSource</dt>
-                          <dd>{formatOptionalValue(selectedProductionPlace.candidateCoordinateSource)}</dd>
-                        </div>
-                      </dl>
-                    </details>
-
-                    <div className="admin-verification-actions">
-                      <div className="admin-action-group">
-                        <span>Step 1: find match</span>
-                        <button
-                          className="admin-primary-action"
-                          disabled={!canResolveGoogleMapsUrl}
-                          onClick={() =>
-                            resolveProductionCandidateCoordinates(
-                              selectedProductionPlace,
-                            )
-                          }
-                          type="button"
-                        >
-                          {resolvingProductionPlaceId === selectedProductionPlace.id
-                            ? "Finding..."
-                            : "Find candidate"}
-                        </button>
-                        <p>
-                          Search cache/free sources for a likely match. No saved
-                          fields change yet.
-                        </p>
-                      </div>
-                      <div className="admin-action-group">
-                        <span>Step 2: copy if correct</span>
-                        <button
-                          className="admin-primary-action"
-                          disabled={!hasCandidateCoordinates}
-                          onClick={() =>
-                            acceptProductionCandidateCoordinates(
-                              selectedProductionPlace,
-                            )
-                          }
-                          type="button"
-                        >
-                          Copy candidate pin
-                        </button>
-                        <button
-                          disabled={!hasCanonicalAddressDifference}
-                          onClick={() =>
-                            useProductionCanonicalAddress(selectedProductionPlace)
-                          }
-                          type="button"
-                        >
-                          Copy candidate address
-                        </button>
-                        <button
-                          disabled={!hasCandidateCoordinates}
-                          onClick={() =>
-                            setProductionMessage(
-                              "Candidate ignored. No dataset fields were changed.",
-                            )
-                          }
-                          type="button"
-                        >
-                          Not the right place
-                        </button>
-                        <p>
-                          These stage edits in the form. Copy the pin only when it
-                          should replace the saved coordinates.
-                        </p>
-                      </div>
-                      <div className="admin-action-group">
-                        <span>Step 3: finish</span>
-                        <button
-                          onClick={() =>
-                            markSelectedProductionPlaceVerified(selectedProductionPlace)
-                          }
-                          type="button"
-                        >
-                          Mark saved pin verified
-                        </button>
-                        {canOpenGoogleMaps ? (
-                          <a
-                            href={edit.googleMapsUrl}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            Open in Google Maps
-                          </a>
-                        ) : (
-                          <span className="admin-disabled-action">
-                            Add a Maps URL first.
-                          </span>
-                        )}
-                        <p>
-                          Use this when the current saved pin is already correct.
-                          Then save the place record.
-                        </p>
-                      </div>
-                      <div className="admin-action-group is-secondary">
-                        <span>Other actions</span>
-                        <details className="admin-more-actions">
-                          <summary>More actions</summary>
-                          <div className="admin-more-actions-menu">
-                            <button
-                              onClick={() =>
-                                setProductionMessage(
-                                  "Duplicate place uses the Add Place intake flow for now.",
-                                )
-                              }
-                              type="button"
-                            >
-                              Duplicate place
-                            </button>
-                            <button
-                              className="admin-danger-action"
-                              disabled={savingProductionPlaceId === selectedProductionPlace.id}
-                              onClick={() => setDeleteProductionPlace(selectedProductionPlace)}
-                              type="button"
-                            >
-                              Delete place
-                            </button>
-                          </div>
-                        </details>
-                      </div>
-                    </div>
-                  </section>
-                  </>
-                );
-              })()
-            ) : (
-              <p className="admin-empty">Choose a place to verify.</p>
-            )}
-          </div>
-        </section>
-
-        <details className="panel admin-form-panel admin-secondary-panel" ref={capturePanelRef}>
-          <summary>Capture input</summary>
-          <form className="admin-form" onSubmit={handleSubmit}>
-            <label>
-              Admin password
-              <input
-                autoComplete="current-password"
-                onChange={(event) => setAdminPassword(event.target.value)}
-                placeholder="Required after deploy"
-                type="password"
-                value={adminPassword}
-              />
-            </label>
-
-            <label>
-              Place names
-              <textarea
-                onChange={(event) => setPlainText(event.target.value)}
-                placeholder="One place per line, or paste a short list here."
-                rows={8}
-                value={plainText}
-              />
-            </label>
-
-            <label>
-              Place URL
-              <input
-                onChange={(event) => setPlaceUrl(event.target.value)}
-                placeholder="Instagram place/profile URL, Google Maps URL, website URL"
-                type="url"
-                value={placeUrl}
-              />
-            </label>
-
-            <label>
-              Screenshots or images
-              <input
-                accept="image/*"
-                multiple
-                onChange={(event) =>
-                  setFiles(Array.from(event.target.files ?? []))
-                }
-                type="file"
-              />
-              {files.length ? (
-                <span className="admin-file-count">
-                  {files.length} image{files.length === 1 ? "" : "s"} selected
-                </span>
-              ) : null}
-            </label>
-
-            <label>
-              City hint
-              <select
-                value={cityHint}
-                onChange={(event) => setCityHint(event.target.value)}
-              >
-                <option value="all">Auto-detect / all cities</option>
-                {cityOptions.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button className="admin-submit" disabled={isLoading} type="submit">
-              {isLoading ? "Resolving places..." : "Resolve places"}
-            </button>
-          </form>
-        </details>
-
-        <details className="panel admin-results-panel admin-secondary-panel">
-          <summary>Structured drafts</summary>
-          <div className="admin-section-header">
-            <h2>Structured drafts</h2>
-          </div>
-          {error ? <p className="admin-error">{error}</p> : null}
-          {stagedMessage ? <p className="admin-success">{stagedMessage}</p> : null}
-          {result?.warnings.length ? (
-            <div className="admin-warning-list">
-              {result.warnings.map((warning) => (
-                <p key={warning}>{warning}</p>
-              ))}
-            </div>
-          ) : null}
-          {result?.drafts.length ? (
-            <div className="admin-draft-list">
-              {result.drafts.map((draft) => {
-                const draftKey = getDraftKey(draft);
-                const draftStatus = draftStatuses[draftKey] ?? "location";
-                const draftCategory =
-                  draftCategories[draftKey] ?? draft.category ?? draft.googleCategory ?? "";
-                const isApproved = approvedDraftKeys[draftKey] ?? false;
-                const verificationEdit = getDraftVerificationEdit(draftKey, draft);
-
-                return (
-                  <article
-                    className={`admin-draft-card${
-                      isApproved ? " is-approved" : ""
-                    }`}
-                    key={draftKey}
-                  >
-                    <div className="admin-draft-header">
-                      <div>
-                        <h3>{draft.name || "Unresolved place"}</h3>
-                        <p className="admin-source">{draft.sourceLabel}</p>
-                      </div>
-                      <div className="admin-draft-badges">
-                        <span className="badge admin-city-badge">{draft.city}</span>
-                        <span
-                          className={`admin-verification-badge${getVerificationClass(
-                            verificationEdit.verifiedStatus,
-                          )}`}
-                        >
-                          {getCompactVerificationLabel(
-                            verificationEdit.verifiedStatus,
-                          )}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div
-                      className="admin-status-group"
-                      aria-label={`Status for ${draft.name}`}
-                    >
-                      <button
-                        className={`admin-status-pill${
-                          draftStatus === "location" ? " is-active" : ""
-                        }`}
-                        onClick={() => setDraftStatus(draftKey, "location")}
-                        type="button"
-                      >
-                        Location
-                      </button>
-                      <button
-                        className={`admin-status-pill${
-                          draftStatus === "been" ? " is-active" : ""
-                        }`}
-                        onClick={() => setDraftStatus(draftKey, "been")}
-                        type="button"
-                      >
-                        Been
-                      </button>
-                      <button
-                        className={`admin-status-pill loved${
-                          draftStatus === "loved" ? " is-active" : ""
-                        }`}
-                        onClick={() => setDraftStatus(draftKey, "loved")}
-                        type="button"
-                      >
-                        Loved it
-                      </button>
-                      <button
-                        className={`admin-status-pill${
-                          draftStatus === "want_to_go" ? " is-active" : ""
-                        }`}
-                        onClick={() => setDraftStatus(draftKey, "want_to_go")}
-                        type="button"
-                      >
-                        Want to go
-                      </button>
-                    </div>
-
-                    <dl className="admin-draft-fields">
-                      <div>
-                        <dt>Address</dt>
-                        <dd>{draft.address || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Category</dt>
-                        <dd>
-                          <input
-                            aria-label={`Category for ${draft.name}`}
-                            className="admin-draft-input"
-                            list="admin-category-options"
-                            onChange={(event) =>
-                              setDraftCategory(draftKey, event.target.value)
-                            }
-                            onBlur={(event) =>
-                              setDraftCategory(
-                                draftKey,
-                                normalizeCategoryInput(
-                                  event.target.value,
-                                  categoryOptions,
-                                ),
-                              )
-                            }
-                            placeholder="Category"
-                            type="text"
-                            value={draftCategory}
-                          />
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Area</dt>
-                        <dd>{draft.area || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Latitude</dt>
-                        <dd>{draft.latitude ?? "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Longitude</dt>
-                        <dd>{draft.longitude ?? "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Nearest subway</dt>
-                        <dd>{draft.subway || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Tabelog score</dt>
-                        <dd>{draft.tabelog || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt>Google Maps URL</dt>
-                        <dd>
-                          <input
-                            aria-label={`Google Maps URL for ${draft.name}`}
-                            className="admin-draft-input"
-                            onChange={(event) =>
-                              setDraftVerificationField(
-                                draftKey,
-                                draft,
-                                "googleMapsUrl",
-                                event.target.value,
-                              )
-                            }
-                            placeholder="https://maps.google.com/..."
-                            type="url"
-                            value={verificationEdit.googleMapsUrl}
-                          />
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Verified?</dt>
-                        <dd>
-                          <select
-                            aria-label={`Verified status for ${draft.name}`}
-                            className="admin-draft-input"
-                            onChange={(event) =>
-                              setDraftVerificationField(
-                                draftKey,
-                                draft,
-                                "verifiedStatus",
-                                event.target.value as PlaceVerifiedStatus,
-                              )
-                            }
-                            value={verificationEdit.verifiedStatus}
-                          >
-                            {VERIFIED_STATUS_OPTIONS.map((status) => (
-                              <option key={status || "blank"} value={status}>
-                                {status || "Not checked"}
-                              </option>
-                            ))}
-                          </select>
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Last checked</dt>
-                        <dd>
-                          <input
-                            aria-label={`Last checked for ${draft.name}`}
-                            className="admin-draft-input"
-                            onChange={(event) =>
-                              setDraftVerificationField(
-                                draftKey,
-                                draft,
-                                "lastChecked",
-                                event.target.value,
-                              )
-                            }
-                            type="date"
-                            value={verificationEdit.lastChecked}
-                          />
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Verification notes</dt>
-                        <dd>
-                          <textarea
-                            aria-label={`Verification notes for ${draft.name}`}
-                            className="admin-draft-input admin-draft-textarea"
-                            onChange={(event) =>
-                              setDraftVerificationField(
-                                draftKey,
-                                draft,
-                                "verificationNotes",
-                                event.target.value,
-                              )
-                            }
-                            placeholder="Optional QA notes"
-                            rows={2}
-                            value={verificationEdit.verificationNotes}
-                          />
-                        </dd>
-                      </div>
-                    </dl>
-
-                    {draft.latitude === null || draft.longitude === null ? (
-                      <div className="admin-duplicate-warning is-blocked">
-                        <strong>Needs review: missing map coordinates</strong>
-                        <small>
-                          Latitude and longitude are required before this can be
-                          approved into staging.
-                        </small>
-                      </div>
-                    ) : null}
-
-                    {draft.notes.length ? (
-                      <ul className="admin-note-list">
-                        {draft.notes.map((note) => (
-                          <li key={note}>{note}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-
-                    <button
-                      className={`admin-approve${
-                        isApproved ? " is-approved" : ""
-                      }`}
-                      disabled={stagingDraftKey === draftKey}
-                      onClick={() => approveDraft(draft)}
-                      type="button"
-                    >
-                      {stagingDraftKey === draftKey
-                        ? "Approving..."
-                        : isApproved
-                          ? "Approved"
-                          : "Approve draft"}
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="admin-empty">
-              Submit a text list, a URL, or an image to generate structured
-              place drafts here.
-            </p>
-          )}
-        </details>
-
-        <details className="panel admin-staged-panel admin-secondary-panel">
-          <summary>Approved staging</summary>
-          <div className="admin-staged-header">
-            <div>
-              <h2>Approved staging</h2>
-              <p>
-                {stagedDuplicateCount > 0
-                  ? `${stagedDuplicateCount} staged place${
-                      stagedDuplicateCount === 1 ? " has" : "s have"
-                    } possible duplicate matches.`
-                  : "Review or publish approved drafts before they join the map."}
-              </p>
-            </div>
-            <div className="admin-staged-actions">
-              <button onClick={refreshStagedPlaces} type="button">
-                Refresh
-              </button>
-              <button
-                disabled={deletingStagedId === "all" || stagedPlaces.length === 0}
-                onClick={clearAllStagedPlaces}
-                type="button"
-              >
-                {deletingStagedId === "all" ? "Clearing..." : "Clear all"}
-              </button>
-              <button
-                disabled={isPublishing || stagedPlaces.length === 0}
-                onClick={publishStagedPlaces}
-                type="button"
-              >
-                {isPublishing
-                  ? "Publishing..."
-                  : duplicatePublishPending
-                    ? "Publish anyway"
-                    : "Publish staged places"}
-              </button>
-            </div>
-          </div>
-          {stagedPlaces.length ? (
-            <>
-              <div className="admin-publish-preview">
-                <div>
-                  <span>Ready to publish</span>
-                  <strong>
-                    {stagedPlaces.length} staged place
-                    {stagedPlaces.length === 1 ? "" : "s"}
-                  </strong>
-                  <p>
-                    {stagedCityNames.length
-                      ? stagedCityNames.join(", ")
-                      : "No city assigned"}
-                  </p>
-                </div>
-                <div className="admin-preview-chips">
-                  {Object.entries(stagedStatusSummary).map(([status, count]) => (
-                    <span key={status}>
-                      <strong>{count}</strong> {status}
-                    </span>
-                  ))}
-                  {stagedDuplicateCount > 0 ? (
-                    <span className="is-warning">
-                      <strong>{stagedDuplicateCount}</strong> possible duplicate
-                      {stagedDuplicateCount === 1 ? "" : "s"}
-                    </span>
-                  ) : null}
-                  {stagedMissingCoordinateCount > 0 ? (
-                    <span className="is-blocked">
-                      <strong>{stagedMissingCoordinateCount}</strong> missing coords
-                    </span>
-                  ) : null}
-                  {stagedVerifiedMissingUrlCount > 0 ? (
-                    <span className="is-blocked">
-                      <strong>{stagedVerifiedMissingUrlCount}</strong> verified missing URL
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="admin-staged-filter">
-                <label>
-                  Verified?
-                  <select
-                    onChange={(event) =>
-                      setVerifiedFilter(
-                        event.target.value as AdminVerificationFilter,
-                      )
-                    }
-                    value={verifiedFilter}
-                  >
-                    {VERIFICATION_FILTER_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="admin-staged-list">
-                {visibleStagedPlaces.map((place) => (
-                  <article className="admin-staged-row" key={place.id}>
-                    <div>
-                      <strong>{place.name}</strong>
-                      <span>
-                        {place.city} - {place.category || "Uncategorized"} -{" "}
-                        {getAdminStatusLabel(place)}
-                      </span>
-                      <span
-                        className={`admin-verification-badge${getVerificationClass(
-                          place.verifiedStatus,
-                        )}`}
-                      >
-                        {getCompactVerificationLabel(place.verifiedStatus)}
-                      </span>
-                      {place.verifiedStatus === "Yes" && !place.googleMapsUrl ? (
-                        <div className="admin-duplicate-warning is-blocked">
-                          <strong>Verified place needs a Google Maps URL</strong>
-                          <small>
-                            Add or re-approve with a Google Maps URL before this is
-                            treated as fully verified.
-                          </small>
-                        </div>
-                      ) : null}
-                      {place.duplicateMatches?.length ? (
-                        <div className="admin-duplicate-warning">
-                          <strong>Possible duplicate in approved dataset</strong>
-                          {place.duplicateMatches.map((match) => (
-                            <p key={match.id}>
-                              <span>
-                                {match.name} - {match.category || "Uncategorized"}
-                                {match.distanceKm !== null
-                                  ? ` - ${formatDistance(match.distanceKm)} away`
-                                  : ""}
-                              </span>
-                              <small>{match.reason}</small>
-                            </p>
-                          ))}
-                        </div>
-                      ) : null}
-                      {place.latitude === null || place.longitude === null ? (
-                        <div className="admin-duplicate-warning is-blocked">
-                          <strong>Cannot publish without coordinates</strong>
-                          <small>
-                            Remove this staged place or resolve it again with latitude and
-                            longitude.
-                          </small>
-                        </div>
-                      ) : null}
-                    </div>
-                    <button
-                      disabled={deletingStagedId === place.id}
-                      onClick={() => deleteStagedPlace(place)}
-                      type="button"
-                    >
-                      {deletingStagedId === place.id ? "Removing..." : "Remove"}
-                    </button>
-                  </article>
-                ))}
-              </div>
-              {visibleStagedPlaces.length === 0 ? (
-                <p className="admin-empty">
-                  No staged places match that verification filter.
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="admin-empty">
-              Approved drafts will appear here before they are merged into the
-              live map dataset.
-            </p>
-          )}
-        </details>
-
-        <details className="panel admin-export-panel admin-secondary-panel">
-          <summary>Approved dataset export</summary>
-          <div className="admin-staged-header">
-            <div>
-              <h2>Approved dataset export</h2>
-              <p>
-                Download the full production map dataset as an Excel workbook,
-                with each city split into its own worksheet.
-              </p>
-            </div>
-            <div className="admin-staged-actions">
-              <button
-                disabled={isGeneratingDatasetExport}
-                onClick={generateLocalDatasetExport}
-                type="button"
-              >
-                {isGeneratingDatasetExport ? "Generating..." : "Download Excel"}
-              </button>
-            </div>
-          </div>
-          {datasetExport ? (
-            <div className="admin-export-result">
-              <strong>Excel file generated.</strong>
-              <a download="travel-map-approved-places.xlsx" href={datasetExport.downloadUrl}>
-                Open generated file
-              </a>
-              <code>{datasetExport.filePath}</code>
-            </div>
-          ) : null}
-        </details>
+      <section className="admin-workflow-grid" aria-label="Current admin workflows">
+        {screenshotIntakePanel}
+        {googleSheetsPipelinePanel}
       </section>
-      <datalist id="admin-category-options">
-        {categoryOptions.map((category) => (
-          <option key={category} value={category} />
-        ))}
-      </datalist>
-      <datalist id="admin-city-options">
-        {cityOptions.map((city) => (
-          <option key={city} value={city} />
-        ))}
-      </datalist>
-      {deleteProductionPlace ? (
-        <div className="admin-modal-backdrop" role="presentation">
-          <section
-            aria-labelledby="delete-production-place-title"
-            className="admin-confirm-dialog"
-            role="dialog"
-          >
-            <h2 id="delete-production-place-title">Delete this place?</h2>
-            <p>
-              This cannot be undone. {deleteProductionPlace.name} will be
-              removed from the production map dataset.
-            </p>
-            <div className="admin-confirm-actions">
-              <button
-                onClick={() => setDeleteProductionPlace(null)}
-                type="button"
-              >
-                Cancel
-              </button>
-              <button
-                className="admin-danger-action"
-                disabled={savingProductionPlaceId === deleteProductionPlace.id}
-                onClick={() => confirmDeleteProductionPlace(deleteProductionPlace)}
-                type="button"
-              >
-                {savingProductionPlaceId === deleteProductionPlace.id
-                  ? "Deleting..."
-                  : "Delete place"}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
     </main>
   );
 }

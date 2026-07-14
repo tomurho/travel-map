@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 const MAX_SCREENSHOT_FILES = 10;
 const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
@@ -36,16 +37,6 @@ class ScreenshotIntakeError extends Error {
     this.stage = options.stage;
     this.status = options.status ?? 500;
   }
-}
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
 }
 
 function logScreenshotIntakeError(error: unknown, context: Record<string, unknown>) {
@@ -243,7 +234,7 @@ Rules:
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 

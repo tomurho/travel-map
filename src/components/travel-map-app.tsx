@@ -15,6 +15,7 @@ import {
   getPublicNotes,
   type Place,
   type PlaceFilterState,
+  type PlaceStatus,
 } from "@/lib/place";
 
 type TravelMapAppProps = {
@@ -40,6 +41,14 @@ type FilterOption = {
   value: string;
 };
 
+type InspectorDraft = {
+  name: string;
+  category: string;
+  district: string;
+  status: PlaceStatus;
+  loved: boolean;
+};
+
 type StatusBadge =
   | {
       icon: "bookmark" | "heart";
@@ -59,6 +68,36 @@ const defaultFilters: PlaceFilterState = {
   area: "all",
   loved: "all",
 };
+
+const inspectorStatusOptions: Array<{ label: string; value: PlaceStatus }> = [
+  { label: "Neutral", value: "location" },
+  { label: "Want to go", value: "want_to_go" },
+  { label: "Been", value: "been" },
+];
+
+function isLocalhostHostname(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function getInspectorDraft(place: Place): InspectorDraft {
+  return {
+    name: place.name,
+    category: place.category,
+    district: place.district,
+    status: place.status,
+    loved: place.loved === true,
+  };
+}
+
+function draftsAreEqual(firstDraft: InspectorDraft, secondDraft: InspectorDraft) {
+  return (
+    firstDraft.name === secondDraft.name &&
+    firstDraft.category === secondDraft.category &&
+    firstDraft.district === secondDraft.district &&
+    firstDraft.status === secondDraft.status &&
+    firstDraft.loved === secondDraft.loved
+  );
+}
 
 function buildQuery(filters: PlaceFilterState) {
   const params = new URLSearchParams();
@@ -331,26 +370,42 @@ function FilterMenu({
 }
 
 export function TravelMapApp({
-  places,
+  places: initialPlaces,
   initialFilters,
 }: TravelMapAppProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const [editablePlaces, setEditablePlaces] = useState<Place[]>(initialPlaces);
   const [filters, setFilters] = useState<PlaceFilterState>(initialFilters);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(
-    places[0]?.id ?? null,
+    initialPlaces[0]?.id ?? null,
   );
   const [openMapPlaceId, setOpenMapPlaceId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
   const [nearbyMode, setNearbyMode] = useState<NearbyMode>("off");
   const [requestLocationNonce, setRequestLocationNonce] = useState(0);
   const [openFilterMenu, setOpenFilterMenu] = useState<string | null>(null);
+  const [isLocalhost, setIsLocalhost] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [inspectorDraft, setInspectorDraft] = useState<InspectorDraft | null>(null);
+  const [inspectorMessage, setInspectorMessage] = useState<string | null>(null);
+  const [inspectorError, setInspectorError] = useState<string | null>(null);
+  const [isSavingInspector, setIsSavingInspector] = useState(false);
 
   useEffect(() => {
     setFilters(initialFilters);
   }, [initialFilters]);
+
+  useEffect(() => {
+    setEditablePlaces(initialPlaces);
+  }, [initialPlaces]);
+
+  useEffect(() => {
+    setIsLocalhost(isLocalhostHostname(window.location.hostname));
+  }, []);
 
   useEffect(() => {
     if (!openFilterMenu) {
@@ -389,37 +444,37 @@ export function TravelMapApp({
 
   const categories = useMemo(
     () =>
-      getAvailableCategories(places, {
+      getAvailableCategories(editablePlaces, {
         city: filters.city,
         status: filters.status,
         area: filters.area,
         loved: filters.loved,
       }),
-    [places, filters.area, filters.city, filters.loved, filters.status],
+    [editablePlaces, filters.area, filters.city, filters.loved, filters.status],
   );
-  const cities = useMemo(() => getCities(places), [places]);
-  const cityCenters = useMemo(() => getCityCenters(places), [places]);
+  const cities = useMemo(() => getCities(editablePlaces), [editablePlaces]);
+  const cityCenters = useMemo(() => getCityCenters(editablePlaces), [editablePlaces]);
   const areas = useMemo(
     () =>
-      getAvailableAreas(places, {
+      getAvailableAreas(editablePlaces, {
         city: filters.city,
         status: filters.status,
         category: filters.category,
         loved: filters.loved,
       }),
-    [places, filters.category, filters.city, filters.loved, filters.status],
+    [editablePlaces, filters.category, filters.city, filters.loved, filters.status],
   );
   const scopedPlaces = useMemo(
     () =>
       filters.city === "all"
-        ? places
-        : places.filter((place) => place.city === filters.city),
-    [filters.city, places],
+        ? editablePlaces
+        : editablePlaces.filter((place) => place.city === filters.city),
+    [editablePlaces, filters.city],
   );
   const scopedCounts = useMemo(() => countByStatus(scopedPlaces), [scopedPlaces]);
   const filteredPlaces = useMemo(
-    () => filterPlaces(places, filters),
-    [places, filters],
+    () => filterPlaces(editablePlaces, filters),
+    [editablePlaces, filters],
   );
   const recommendedPlaces = useMemo(
     () => getRecommendedPlaces(filteredPlaces, userLocation, nearbyMode),
@@ -477,6 +532,8 @@ export function TravelMapApp({
       })
       .slice(0, 3);
   }, [closestLovedPlaces, closestWantToGoPlaces]);
+  const selectedPlace =
+    placesInView.find((place) => place.id === selectedPlaceId) ?? null;
 
   useEffect(() => {
     if (
@@ -510,6 +567,24 @@ export function TravelMapApp({
       setOpenMapPlaceId(null);
     }
   }, [placesInView, openMapPlaceId]);
+
+  useEffect(() => {
+    if (!isAdminMode) {
+      setInspectorDraft(null);
+      setInspectorError(null);
+      setInspectorMessage(null);
+      return;
+    }
+
+    if (!selectedPlace) {
+      setInspectorDraft(null);
+      return;
+    }
+
+    setInspectorDraft(getInspectorDraft(selectedPlace));
+    setInspectorError(null);
+    setInspectorMessage(null);
+  }, [isAdminMode, selectedPlace]);
 
   useEffect(() => {
     if (!selectedPlaceId) {
@@ -563,8 +638,118 @@ export function TravelMapApp({
     }
   }
 
-  const selectedPlace =
-    placesInView.find((place) => place.id === selectedPlaceId) ?? null;
+  function updateInspectorDraft(nextDraft: Partial<InspectorDraft>) {
+    setInspectorDraft((currentDraft) =>
+      currentDraft ? { ...currentDraft, ...nextDraft } : currentDraft,
+    );
+    setInspectorError(null);
+    setInspectorMessage(null);
+  }
+
+  function updateInspectorStatus(status: PlaceStatus) {
+    updateInspectorDraft({
+      status,
+      loved:
+        status === "been"
+          ? inspectorDraft?.loved ?? false
+          : false,
+    });
+  }
+
+  function updateInspectorLoved(loved: boolean) {
+    updateInspectorDraft({
+      loved,
+      status: loved ? "been" : inspectorDraft?.status ?? "location",
+    });
+  }
+
+  function cancelInspectorEdit() {
+    if (!selectedPlace) {
+      setInspectorDraft(null);
+      return;
+    }
+
+    setInspectorDraft(getInspectorDraft(selectedPlace));
+    setInspectorError(null);
+    setInspectorMessage(null);
+  }
+
+  async function saveInspectorEdit() {
+    if (!selectedPlace || !inspectorDraft) {
+      return;
+    }
+
+    const name = inspectorDraft.name.trim();
+    const category = inspectorDraft.category.trim();
+    const district = inspectorDraft.district.trim();
+
+    if (!name) {
+      setInspectorError("Name is required.");
+      return;
+    }
+
+    if (!category) {
+      setInspectorError("Category is required.");
+      return;
+    }
+
+    setIsSavingInspector(true);
+    setInspectorError(null);
+    setInspectorMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/admin/places/${encodeURIComponent(selectedPlace.id)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(adminPassword ? { "x-admin-password": adminPassword } : {}),
+          },
+          body: JSON.stringify({
+            editMode: "floating-inspector",
+            name,
+            category,
+            district,
+            status: inspectorDraft.status,
+            loved: inspectorDraft.loved,
+          }),
+        },
+      );
+      const responsePayload = (await response.json()) as {
+        error?: string;
+        place?: Place;
+      };
+
+      if (!response.ok || !responsePayload.place) {
+        throw new Error(responsePayload.error ?? "Could not save place.");
+      }
+
+      const savedPlace = responsePayload.place;
+
+      setEditablePlaces((currentPlaces) =>
+        currentPlaces.map((place) =>
+          place.id === savedPlace.id ? savedPlace : place,
+        ),
+      );
+      setInspectorDraft(getInspectorDraft(savedPlace));
+      setInspectorMessage(`Saved ${savedPlace.name}.`);
+    } catch (saveError) {
+      setInspectorError(
+        saveError instanceof Error ? saveError.message : "Could not save place.",
+      );
+    } finally {
+      setIsSavingInspector(false);
+    }
+  }
+
+  const baselineInspectorDraft = selectedPlace
+    ? getInspectorDraft(selectedPlace)
+    : null;
+  const inspectorHasChanges =
+    inspectorDraft !== null &&
+    baselineInspectorDraft !== null &&
+    !draftsAreEqual(inspectorDraft, baselineInspectorDraft);
   const lovedFilterActive = filters.loved === "loved";
   const cityOptions = [
     { label: "All cities", value: "all" },
@@ -586,6 +771,20 @@ export function TravelMapApp({
   ];
   return (
     <main className="shell">
+      {isLocalhost ? (
+        <div className="floating-admin-toggle" aria-label="Local admin controls">
+          <span>Admin Mode</span>
+          <button
+            aria-pressed={isAdminMode}
+            className={isAdminMode ? "is-active" : ""}
+            onClick={() => setIsAdminMode((currentValue) => !currentValue)}
+            type="button"
+          >
+            {isAdminMode ? "On" : "Off"}
+          </button>
+        </div>
+      ) : null}
+
       <section className={`hero panel${openFilterMenu === "city" ? " is-menu-open" : ""}`}>
         <h1>Places that stayed with me.</h1>
         <p>
@@ -920,6 +1119,176 @@ export function TravelMapApp({
           </section>
         </aside>
       </section>
+
+      {isLocalhost && isAdminMode ? (
+        <aside className="floating-inspector" aria-label="Edit selected place">
+          <div className="floating-inspector-header">
+            <div>
+              <p>Localhost Admin</p>
+              <h2>Edit Place</h2>
+            </div>
+            <button
+              aria-label="Close inspector"
+              onClick={() => setIsAdminMode(false)}
+              type="button"
+            >
+              x
+            </button>
+          </div>
+
+          {!selectedPlace || !inspectorDraft ? (
+            <div className="floating-inspector-empty">
+              Select a place to edit.
+            </div>
+          ) : (
+            <div className="floating-inspector-body">
+              <div className="floating-inspector-selected">
+                <span>Selected</span>
+                <strong>{selectedPlace.name}</strong>
+              </div>
+
+              <label>
+                <span>Name</span>
+                <input
+                  onChange={(event) =>
+                    updateInspectorDraft({ name: event.target.value })
+                  }
+                  type="text"
+                  value={inspectorDraft.name}
+                />
+              </label>
+
+              <label>
+                <span>Category</span>
+                <input
+                  onChange={(event) =>
+                    updateInspectorDraft({ category: event.target.value })
+                  }
+                  type="text"
+                  value={inspectorDraft.category}
+                />
+              </label>
+
+              <label>
+                <span>Area</span>
+                <input
+                  onChange={(event) =>
+                    updateInspectorDraft({ district: event.target.value })
+                  }
+                  type="text"
+                  value={inspectorDraft.district}
+                />
+              </label>
+
+              <fieldset className="floating-inspector-status">
+                <legend>Status</legend>
+                {inspectorStatusOptions.map((option) => (
+                  <label key={option.value}>
+                    <input
+                      checked={inspectorDraft.status === option.value}
+                      name="floating-inspector-status"
+                      onChange={() =>
+                        updateInspectorStatus(option.value)
+                      }
+                      type="radio"
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </fieldset>
+
+              <label className="floating-inspector-toggle">
+                <input
+                  checked={inspectorDraft.loved}
+                  onChange={(event) =>
+                    updateInspectorLoved(event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                <span>Loved</span>
+              </label>
+
+              <label>
+                <span>Admin password</span>
+                <input
+                  autoComplete="current-password"
+                  onChange={(event) => setAdminPassword(event.target.value)}
+                  placeholder="Only needed when configured"
+                  type="password"
+                  value={adminPassword}
+                />
+              </label>
+
+              <dl className="floating-inspector-readonly">
+                <div>
+                  <dt>ID</dt>
+                  <dd>{selectedPlace.id}</dd>
+                </div>
+                <div>
+                  <dt>City</dt>
+                  <dd>{selectedPlace.city}</dd>
+                </div>
+                <div>
+                  <dt>Address</dt>
+                  <dd>{selectedPlace.address || "-"}</dd>
+                </div>
+                <div>
+                  <dt>Latitude</dt>
+                  <dd>{selectedPlace.latitude}</dd>
+                </div>
+                <div>
+                  <dt>Longitude</dt>
+                  <dd>{selectedPlace.longitude}</dd>
+                </div>
+                <div>
+                  <dt>Google Maps URL</dt>
+                  <dd>{selectedPlace.googleMapsUrl || "-"}</dd>
+                </div>
+                <div>
+                  <dt>Google Place ID</dt>
+                  <dd>{selectedPlace.googlePlaceId || "-"}</dd>
+                </div>
+              </dl>
+
+              {inspectorHasChanges ? (
+                <p className="floating-inspector-unsaved">Unsaved changes</p>
+              ) : null}
+              {inspectorMessage ? (
+                <p className="floating-inspector-message is-success">
+                  {inspectorMessage}
+                </p>
+              ) : null}
+              {inspectorError ? (
+                <p className="floating-inspector-message is-error">
+                  {inspectorError}
+                </p>
+              ) : null}
+
+              <div className="floating-inspector-actions">
+                <button
+                  disabled={isSavingInspector}
+                  onClick={cancelInspectorEdit}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={
+                    isSavingInspector ||
+                    !inspectorHasChanges ||
+                    !inspectorDraft.name.trim() ||
+                    !inspectorDraft.category.trim()
+                  }
+                  onClick={saveInspectorEdit}
+                  type="button"
+                >
+                  {isSavingInspector ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          )}
+        </aside>
+      ) : null}
     </main>
   );
 }

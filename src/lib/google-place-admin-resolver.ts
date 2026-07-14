@@ -1,5 +1,3 @@
-import { readFileSync, writeFileSync } from "node:fs";
-
 import {
   FreeGeocodingAccess,
   type FreeGeocodeCandidate,
@@ -20,8 +18,10 @@ import {
   type GooglePlacesCounters,
 } from "@/lib/google-places-access";
 import type { Place, VerificationSource } from "@/lib/place";
-
-const PLACES_FILE_PATH = "src/data/places.json";
+import {
+  readPlacesJsonSnapshot,
+  writePlacesJsonAtomic,
+} from "@/lib/places-json-store";
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
 const PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places";
 const TEXT_SEARCH_FIELD_MASK = [
@@ -448,11 +448,14 @@ async function fetchGoogleCandidatesForAdminPlace(
 }
 
 export function readProductionPlaces() {
-  return JSON.parse(readFileSync(PLACES_FILE_PATH, "utf8")) as Place[];
+  return readPlacesJsonSnapshot().places;
 }
 
-export function writeProductionPlaces(places: Place[]) {
-  writeFileSync(PLACES_FILE_PATH, `${JSON.stringify(places, null, 2)}\n`);
+export function writeProductionPlaces(
+  places: Place[],
+  expectedFileHash?: string,
+) {
+  return writePlacesJsonAtomic(places, { expectedFileHash });
 }
 
 function hasVerifiedCandidateCoordinates(place: Place) {
@@ -728,7 +731,8 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     >;
   } = {},
 ) {
-  const currentPlaces = readProductionPlaces();
+  const productionSnapshot = readPlacesJsonSnapshot();
+  const currentPlaces = productionSnapshot.places;
   const placeIndex = currentPlaces.findIndex((place) => place.id === id);
 
   if (placeIndex === -1) {
@@ -929,7 +933,7 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     place.id === id ? (nextPlace as Place) : place,
   );
 
-  writeProductionPlaces(nextPlaces);
+  writeProductionPlaces(nextPlaces, productionSnapshot.fileHash);
 
   return {
     candidateSummaries,

@@ -1,0 +1,714 @@
+.page {
+  --concept-ink: #16211d;
+  --concept-muted: #5c6863;
+  --concept-paper: #f5f2e9;
+  --concept-card: #fffdf8;
+  --concept-line: rgba(22, 33, 29, 0.13);
+  --concept-green: #185c48;
+  --concept-green-soft: #dceadf;
+  --concept-coral: #a8324a;
+  min-height: 100vh;
+  padding: 18px;
+  background:
+    linear-gradient(rgba(22, 33, 29, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 33, 29, 0.035) 1px, transparent 1px),
+    var(--concept-paper);
+  background-size: 32px 32px;
+  color: var(--concept-ink);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.page *,
+.page *::before,
+.page *::after {
+  box-sizing: border-box;
+}
+
+.page button,
+.page input,
+.page select {
+  font: inherit;
+}
+
+.skipLink {
+  position: fixed;
+  z-index: 200;
+  top: 12px;
+  left: 12px;
+  transform: translateY(-160%);
+  border-radius: 999px;
+  padding: 11px 16px;
+  background: var(--concept-ink);
+  color: #fff;
+  font-weight: 800;
+}
+
+.skipLink:focus {
+  transform: translateY(0);
+}
+
+.topbar,
+.cityHeader,
+.controls,
+.workspace {
+  width: min(1560px, 100%);
+  margin-inline: auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  border: 1px solid var(--concept-line);
+  border-radius: 18px 18px 0 0;
+  padding: 10px 14px;
+  background: rgba(255, 253, 248, 0.92);
+  box-shadow: 0 12px 38px rgba(22, 33, 29, 0.07);
+  backdrop-filter: blur(18px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brandMark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--concept-green);
+  color: #fff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.brand > span:last-child {
+  display: grid;
+  gap: 1px;
+}
+
+.brand strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.brand small {
+  color: var(--concept-muted);
+  font-size: 12px;
+}
+
+.originalLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  border: 1px solid var(--concept-line);
+  border-radius: 999px;
+  padding: 0 14px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cityHeader {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 8px 22px;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--concept-green);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cityHeader h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(42px, 6vw, 76px);
+  font-weight: 500;
+  line-height: 0.96;
+  letter-spacing: -0.045em;
+}
+
+.citySummary {
+  margin: 11px 0 0;
+  color: var(--concept-muted);
+  font-size: 14px;
+}
+
+.citySelect,
+.compactSelect {
+  display: grid;
+  gap: 5px;
+}
+
+.citySelect > span,
+.compactSelect > span {
+  color: var(--concept-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.citySelect select,
+.compactSelect select {
+  min-height: 46px;
+  border: 1px solid var(--concept-line);
+  border-radius: 12px;
+  padding: 0 40px 0 13px;
+  background: var(--concept-card);
+  color: var(--concept-ink);
+  font-weight: 750;
+}
+
+.citySelect select {
+  min-width: 230px;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) auto auto minmax(150px, 0.4fr) minmax(150px, 0.4fr);
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--concept-line);
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255, 253, 248, 0.9);
+  box-shadow: 0 12px 34px rgba(22, 33, 29, 0.055);
+}
+
+.searchField {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  border: 1px solid var(--concept-line);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.searchField svg {
+  flex: 0 0 auto;
+  width: 19px;
+  height: 19px;
+  margin-left: 14px;
+  fill: none;
+  stroke: var(--concept-muted);
+  stroke-width: 1.8;
+}
+
+.searchField input {
+  min-width: 0;
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  outline: 0;
+  padding: 0 13px 0 9px;
+  background: transparent;
+  color: var(--concept-ink);
+  font-size: 14px;
+}
+
+.statusGroup {
+  display: flex;
+  min-height: 48px;
+  border: 1px solid var(--concept-line);
+  border-radius: 13px;
+  padding: 4px;
+  background: #ece9df;
+}
+
+.statusGroup button {
+  border: 0;
+  border-radius: 9px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--concept-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.statusGroup .activeStatus {
+  background: var(--concept-card);
+  color: var(--concept-ink);
+  box-shadow: 0 2px 8px rgba(22, 33, 29, 0.11);
+}
+
+.lovedToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 48px;
+  border: 1px solid rgba(168, 50, 74, 0.25);
+  border-radius: 13px;
+  padding: 0 14px;
+  background: #fff5f6;
+  color: #84253a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.activeLoved {
+  border-color: var(--concept-coral);
+  background: var(--concept-coral);
+  color: #fff;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.55fr);
+  gap: 14px;
+  align-items: stretch;
+  padding-top: 14px;
+}
+
+.mapPanel,
+.resultsPanel {
+  min-width: 0;
+  height: min(700px, calc(100vh - 306px));
+  min-height: 570px;
+  border: 1px solid var(--concept-line);
+  border-radius: 18px;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 16px 42px rgba(22, 33, 29, 0.075);
+}
+
+.mapPanel {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.mapHeading,
+.resultsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.mapHeading {
+  min-height: 62px;
+  padding: 2px 6px 12px;
+}
+
+.mapHeading h2,
+.resultsHeader h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 23px;
+  font-weight: 600;
+}
+
+.mapHeading > p,
+.resultsHeader > span {
+  margin: 0;
+  color: var(--concept-muted);
+  font-size: 12px;
+}
+
+.mapFrame {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 13px;
+}
+
+.resultsPanel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.resultsHeader {
+  flex: 0 0 auto;
+  min-height: 76px;
+  border-bottom: 1px solid var(--concept-line);
+  padding: 12px 15px;
+}
+
+.placeList {
+  display: grid;
+  grid-auto-rows: max-content;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+  overscroll-behavior: contain;
+}
+
+.placeCard {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--concept-line);
+  border-radius: 13px;
+  background: var(--concept-card);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.placeCard:hover,
+.activeCard {
+  transform: translateY(-1px);
+  border-color: rgba(24, 92, 72, 0.45);
+  box-shadow: 0 8px 22px rgba(22, 33, 29, 0.1);
+}
+
+.cardButton {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  padding: 12px 11px;
+  background: transparent;
+  color: var(--concept-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.cardCopy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.cardCopy > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.cardCopy > small {
+  overflow: hidden;
+  color: var(--concept-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.badge {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lovedBadge {
+  background: #fae2e7;
+  color: #762037;
+}
+
+.wantBadge {
+  background: #fff0cf;
+  color: #70470a;
+}
+
+.beenBadge {
+  background: var(--concept-green-soft);
+  color: #174f3e;
+}
+
+.savedBadge {
+  background: #e9e8e2;
+  color: #414a46;
+}
+
+.cardArrow {
+  color: var(--concept-green);
+  font-size: 17px;
+}
+
+.mapsLink {
+  display: grid;
+  min-width: 62px;
+  place-items: center;
+  border-left: 1px solid var(--concept-line);
+  color: var(--concept-green);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.showMore,
+.emptyState button {
+  min-height: 46px;
+  border: 1px solid var(--concept-line);
+  border-radius: 12px;
+  background: #eef3ec;
+  color: var(--concept-green);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.selection {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--concept-line);
+  padding: 13px 15px 14px;
+  background: #eef3ec;
+}
+
+.selection h3 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+}
+
+.selection > p:not(.eyebrow) {
+  margin: 4px 0 0;
+  color: var(--concept-muted);
+  font-size: 12px;
+}
+
+.selection blockquote {
+  margin: 9px 0 0;
+  border-left: 2px solid var(--concept-green);
+  padding-left: 9px;
+  color: var(--concept-muted);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.emptyState {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 260px;
+  padding: 24px;
+  text-align: center;
+}
+
+.emptyState p {
+  margin: 0;
+  color: var(--concept-muted);
+}
+
+.emptyState button {
+  margin-top: 7px;
+  padding: 0 14px;
+}
+
+.page :is(button, a, input, select):focus-visible {
+  outline: 3px solid #0b64c0;
+  outline-offset: 2px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .controls {
+    grid-template-columns: minmax(260px, 1fr) auto auto;
+  }
+
+  .compactSelect {
+    grid-row: 2;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1.25fr) minmax(330px, 0.75fr);
+  }
+
+  .mapPanel,
+  .resultsPanel {
+    height: 650px;
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .mapPanel,
+  .resultsPanel {
+    height: auto;
+    min-height: 0;
+  }
+
+  .mapFrame {
+    height: 520px;
+    flex: 0 0 auto;
+  }
+
+  .resultsPanel {
+    max-height: 700px;
+  }
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 8px;
+    background-size: 24px 24px;
+  }
+
+  .topbar {
+    min-height: 56px;
+    border-radius: 14px 14px 0 0;
+    padding: 7px 9px;
+  }
+
+  .brandMark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  .brand strong {
+    font-size: 16px;
+  }
+
+  .brand {
+    min-height: 44px;
+  }
+
+  .brand small {
+    display: none;
+  }
+
+  .originalLink {
+    min-height: 44px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .cityHeader {
+    align-items: end;
+    padding: 17px 4px 14px;
+  }
+
+  .cityHeader h1 {
+    max-width: 10ch;
+    font-size: clamp(34px, 11vw, 46px);
+  }
+
+  .citySummary {
+    margin-top: 7px;
+    font-size: 11px;
+  }
+
+  .citySelect > span {
+    display: none;
+  }
+
+  .citySelect select {
+    min-width: 112px;
+    max-width: 130px;
+    min-height: 44px;
+    padding-left: 9px;
+    font-size: 11px;
+  }
+
+  .controls {
+    grid-template-columns: 1fr auto;
+    gap: 7px;
+    border-radius: 14px;
+    padding: 8px;
+  }
+
+  .searchField {
+    grid-column: 1 / -1;
+  }
+
+  .statusGroup {
+    grid-column: 1 / -1;
+    overflow-x: auto;
+  }
+
+  .statusGroup button {
+    flex: 1 0 auto;
+    min-height: 44px;
+    padding: 0 10px;
+  }
+
+  .lovedToggle {
+    grid-column: 1 / -1;
+    min-height: 44px;
+  }
+
+  .compactSelect {
+    grid-row: auto;
+  }
+
+  .compactSelect select {
+    min-width: 0;
+    width: 100%;
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .workspace {
+    gap: 8px;
+    padding-top: 8px;
+  }
+
+  .mapPanel,
+  .resultsPanel {
+    border-radius: 14px;
+  }
+
+  .mapPanel {
+    padding: 8px;
+  }
+
+  .mapHeading {
+    min-height: 54px;
+    padding: 1px 3px 8px;
+  }
+
+  .mapHeading h2,
+  .resultsHeader h2 {
+    font-size: 19px;
+  }
+
+  .mapHeading > p {
+    max-width: 130px;
+    text-align: right;
+  }
+
+  .mapFrame {
+    height: 360px;
+    min-height: 360px;
+    border-radius: 10px;
+  }
+
+  .resultsPanel {
+    max-height: 620px;
+  }
+}

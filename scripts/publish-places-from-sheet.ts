@@ -42,8 +42,8 @@ Usage:
 
 Behavior:
   Reads Review rows where reviewStatus = Verified,
-  appends non-duplicate ids to Published, and does not call Google Places or modify
-  Capture/Review.`);
+  appends new ids, updates corrected existing ids in Published, rejects ambiguous
+  duplicate ids, and does not call Google Places or modify Capture/Review.`);
 }
 
 async function main() {

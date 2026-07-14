@@ -5,6 +5,10 @@ import * as xlsx from "xlsx";
 import { getDistanceKm } from "@/lib/geo";
 import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
 import { validatePlaceVerification } from "@/lib/place-verification";
+import {
+  readPlacesJsonSnapshot,
+  writePlacesJsonAtomic,
+} from "@/lib/places-json-store";
 
 export type AdminDraftStatus = PlaceStatus | "loved";
 
@@ -100,8 +104,16 @@ export interface AdminProductionPlaceVerificationInput {
   verificationNotes: string;
 }
 
+export interface AdminFloatingPlaceEditInput {
+  editMode: "floating-inspector";
+  name: string;
+  category: string;
+  district: string;
+  status: PlaceStatus;
+  loved: boolean;
+}
+
 const STAGING_FILE_PATH = join(process.cwd(), "src/data/admin-staged-places.json");
-const PLACES_FILE_PATH = join(process.cwd(), "src/data/places.json");
 
 function slugify(value: string) {
   return value
@@ -364,9 +376,8 @@ export function publishStagedPlaces({ allowDuplicates = false } = {}) {
     };
   }
 
-  const currentPlaces = JSON.parse(
-    readFileSync(PLACES_FILE_PATH, "utf8"),
-  ) as Place[];
+  const productionSnapshot = readPlacesJsonSnapshot();
+  const currentPlaces = productionSnapshot.places;
   const duplicatePlaces = stagedPlaces
     .map((place) => ({
       place,
@@ -398,7 +409,9 @@ export function publishStagedPlaces({ allowDuplicates = false } = {}) {
     return firstPlace.name.localeCompare(secondPlace.name);
   });
 
-  writeFileSync(PLACES_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
+  writePlacesJsonAtomic(nextPlaces, {
+    expectedFileHash: productionSnapshot.fileHash,
+  });
   clearStagedPlaces();
 
   return { publishedCount: stagedPlaces.length, places: stagedPlaces };
@@ -654,14 +667,75 @@ function applyProductionExportWorksheetFormatting(
 }
 
 export function readProductionPlaces() {
-  return JSON.parse(readFileSync(PLACES_FILE_PATH, "utf8")) as Place[];
+  return readPlacesJsonSnapshot().places;
+}
+
+function isPlaceStatus(value: unknown): value is PlaceStatus {
+  return value === "location" || value === "want_to_go" || value === "been";
+}
+
+export function updateProductionPlaceFloatingEdit(
+  id: string,
+  input: AdminFloatingPlaceEditInput,
+) {
+  const productionSnapshot = readPlacesJsonSnapshot();
+  const currentPlaces = productionSnapshot.places;
+  const placeIndex = currentPlaces.findIndex((place) => place.id === id);
+
+  if (placeIndex === -1) {
+    return { error: "Production place was not found." };
+  }
+
+  const name = input.name.trim();
+  const category = input.category.trim();
+  const district = input.district.trim();
+
+  if (!name) {
+    return { error: "Place name is required." };
+  }
+
+  if (!category) {
+    return { error: "Category is required." };
+  }
+
+  if (!isPlaceStatus(input.status)) {
+    return { error: "Valid status is required." };
+  }
+
+  if (typeof input.loved !== "boolean") {
+    return { error: "Loved must be true or false." };
+  }
+
+  const currentPlace = currentPlaces[placeIndex];
+  if (!currentPlace) {
+    return { error: "Production place was not found." };
+  }
+
+  const updatedPlace: Place = {
+    ...currentPlace,
+    name,
+    category,
+    district,
+    status: input.status,
+    loved: input.loved,
+  };
+  const nextPlaces = currentPlaces.map((place) =>
+    place.id === id ? updatedPlace : place,
+  );
+
+  writePlacesJsonAtomic(nextPlaces, {
+    expectedFileHash: productionSnapshot.fileHash,
+  });
+
+  return { place: updatedPlace, places: nextPlaces };
 }
 
 export function updateProductionPlaceVerification(
   id: string,
   input: AdminProductionPlaceVerificationInput,
 ) {
-  const currentPlaces = readProductionPlaces();
+  const productionSnapshot = readPlacesJsonSnapshot();
+  const currentPlaces = productionSnapshot.places;
   const placeIndex = currentPlaces.findIndex((place) => place.id === id);
 
   if (placeIndex === -1) {
@@ -726,13 +800,16 @@ export function updateProductionPlaceVerification(
     place.id === id ? updatedPlace : place,
   );
 
-  writeFileSync(PLACES_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
+  writePlacesJsonAtomic(nextPlaces, {
+    expectedFileHash: productionSnapshot.fileHash,
+  });
 
   return { place: updatedPlace, places: nextPlaces };
 }
 
 export function deleteProductionPlace(id: string) {
-  const currentPlaces = readProductionPlaces();
+  const productionSnapshot = readPlacesJsonSnapshot();
+  const currentPlaces = productionSnapshot.places;
   const placeToDelete = currentPlaces.find((place) => place.id === id);
 
   if (!placeToDelete) {
@@ -741,7 +818,9 @@ export function deleteProductionPlace(id: string) {
 
   const nextPlaces = currentPlaces.filter((place) => place.id !== id);
 
-  writeFileSync(PLACES_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
+  writePlacesJsonAtomic(nextPlaces, {
+    expectedFileHash: productionSnapshot.fileHash,
+  });
 
   return { place: placeToDelete, places: nextPlaces };
 }

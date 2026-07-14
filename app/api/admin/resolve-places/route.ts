@@ -6,6 +6,7 @@ import {
 } from "@/lib/google-places-access";
 import { normalizeArea } from "@/lib/import";
 import type { Place } from "@/lib/place";
+import { isAdminAuthorized } from "@/lib/admin-auth";
 
 type OpenAIExtraction = {
   place_names?: string[];
@@ -120,16 +121,6 @@ const CATEGORY_PRIORITY_TYPES = [
 ];
 const GOOGLE_PLACE_SEARCH_FIELD_MASK =
   "places.displayName,places.formattedAddress,places.location,places.primaryType,places.primaryTypeDisplayName,places.types";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-
-  if (!adminPassword) {
-    return process.env.NODE_ENV !== "production";
-  }
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
 
 function normalizeCityHint(cityHint: string) {
   return cityHint && cityHint !== "all" ? cityHint : "";
@@ -913,7 +904,7 @@ async function searchGooglePlace(query: string, access: GooglePlacesAccess) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!isAdminAuthorized(request)) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
