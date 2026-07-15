@@ -197,15 +197,6 @@ export function MapView({
       return;
     }
 
-    if (selectedPlace) {
-      map.panTo({
-        lat: selectedPlace.latitude,
-        lng: selectedPlace.longitude,
-      });
-      map.setZoom(Math.max(map.getZoom() ?? 2, 12));
-      return;
-    }
-
     if (userLocation && locationStatus === "found") {
       return;
     }
@@ -225,7 +216,19 @@ export function MapView({
     }
 
     map.fitBounds(bounds, 72);
-  }, [isLoaded, locationStatus, map, places, selectedPlace, userLocation]);
+  }, [isLoaded, locationStatus, map, places, userLocation]);
+
+  useEffect(() => {
+    if (!map || !isLoaded || !selectedPlace) {
+      return;
+    }
+
+    map.panTo({
+      lat: selectedPlace.latitude,
+      lng: selectedPlace.longitude,
+    });
+    map.setZoom(Math.max(map.getZoom() ?? 2, 12));
+  }, [isLoaded, map, selectedPlace]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 720px)");

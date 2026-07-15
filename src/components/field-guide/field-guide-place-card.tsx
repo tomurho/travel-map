@@ -87,7 +87,17 @@ export function FieldGuidePlaceDetail({
             {place.loved ? "♥ " : null}
             {getStatusLabel(place)}
           </p>
-          <h2>{place.name}</h2>
+          <h2>
+            <a
+              aria-label={`Open ${place.name} in Google Maps`}
+              className={styles.detailNameLink}
+              href={getGoogleMapsHandoffUrl(place)}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {place.name}
+            </a>
+          </h2>
           <span>
             {place.category}
             {place.district ? ` · ${place.district}` : ""}
@@ -102,14 +112,6 @@ export function FieldGuidePlaceDetail({
           {notes.map((note) => <p key={note}>{note}</p>)}
         </div>
       ) : null}
-      <a
-        className={styles.detailMapsLink}
-        href={getGoogleMapsHandoffUrl(place)}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        Open in Google Maps <span aria-hidden="true">↗</span>
-      </a>
     </aside>
   );
 }
