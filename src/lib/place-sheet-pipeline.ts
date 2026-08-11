@@ -8,6 +8,7 @@ import type { OAuth2Client } from "google-auth-library";
 import {
   appendValues,
   assertSheetExists,
+  batchReadValues,
   batchUpdateValues,
   columnName,
   createGoogleSheetsAuthClient,
@@ -21,6 +22,8 @@ import {
   updateValues,
 } from "@/lib/google-sheets-oauth";
 import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
+import { findCanonicalCategory } from "@/lib/place-category";
+import { normalizePlaceCity } from "@/lib/place-city";
 import {
   readPlacesJsonSnapshot,
   writePlacesJsonAtomic,
@@ -135,6 +138,62 @@ export type PlacePipelineStatus = {
   };
   validationErrors: number;
 };
+
+export type ReviewCandidate = {
+  area: string;
+  candidateAddress: string;
+  candidateGoogleMapsUrl: string;
+  candidateGooglePlaceId: string;
+  candidateLatitude: number | null;
+  candidateLongitude: number | null;
+  candidateName: string;
+  category: string;
+  city: string;
+  id: string;
+  loved: boolean | null;
+  notes: string;
+  rawName: string;
+  rowNumber: number;
+  status: string;
+  validationIssues: string[];
+};
+
+export type ReviewCandidateDecision = "verify" | "reject";
+export type ReviewCandidateStatus = PlaceStatus | "loved";
+
+export type ReviewCandidateEdits = {
+  category: string;
+  status: ReviewCandidateStatus;
+};
+
+export function normalizeReviewCandidateEdits(
+  edits: ReviewCandidateEdits,
+  categoryOptions: string[],
+) {
+  const category = findCanonicalCategory(edits.category, categoryOptions);
+
+  if (!category) {
+    throw new Error("Choose an existing category before verifying.");
+  }
+
+  if (edits.status === "loved") {
+    return { category, loved: "TRUE", status: "Been" };
+  }
+
+  if (edits.status === "been") {
+    return { category, loved: "FALSE", status: "Been" };
+  }
+
+  if (edits.status === "want_to_go") {
+    return { category, loved: "", status: "Want to go" };
+  }
+
+  if (edits.status === "location") {
+    return { category, loved: "", status: "Location" };
+  }
+
+  throw new Error("Choose a valid status before verifying.");
+}
 
 export type ExportPlacesToAuditOptions = {
   city: string;
@@ -1556,7 +1615,7 @@ function buildReviewRecords(input: {
       candidateGooglePlaceId: candidate?.id ?? "",
       category: inferCategoryFromTypes(candidate?.types),
       area: reviewArea,
-      city: cityHint,
+      city: normalizePlaceCity(cityHint),
       status,
       loved: "FALSE",
       notes: duplicateNote
@@ -1915,7 +1974,7 @@ function buildPublishedRecord(reviewRow: Record<string, string>, lastChecked: st
     name: readMappedSheetField(reviewRow, ["candidateName"]),
     category: readMappedSheetField(reviewRow, ["category"]),
     area: readMappedSheetField(reviewRow, ["area"]),
-    city: readMappedSheetField(reviewRow, ["city"]),
+    city: normalizePlaceCity(readMappedSheetField(reviewRow, ["city"])),
     address: readMappedSheetField(reviewRow, ["candidateAddress"]),
     latitude: readMappedSheetField(reviewRow, ["candidateLatitude"]),
     longitude: readMappedSheetField(reviewRow, ["candidateLongitude"]),
@@ -1926,6 +1985,250 @@ function buildPublishedRecord(reviewRow: Record<string, string>, lastChecked: st
     notes: readMappedSheetField(reviewRow, ["notes"]),
     verifiedStatus: readMappedSheetField(reviewRow, ["reviewStatus"]),
     lastChecked,
+  };
+}
+
+export function buildReviewCandidateQueue(reviewValues: string[][]) {
+  const reviewHeaders = (reviewValues[0] ?? []).map((value) =>
+    String(value ?? ""),
+  );
+  requireHeaders(REVIEW_TAB, reviewHeaders, [
+    "id",
+    "rawName",
+    "candidateName",
+    "category",
+    "area",
+    "city",
+    "candidateAddress",
+    "candidateLatitude",
+    "candidateLongitude",
+    "candidateGoogleMapsUrl",
+    "candidateGooglePlaceId",
+    "status",
+    "notes",
+    "reviewStatus",
+  ]);
+
+  return reviewValues
+    .slice(1)
+    .map((values, index) => ({
+      fields: mapSheetRowToObject(reviewHeaders, values),
+      rowNumber: index + 2,
+      values,
+    }))
+    .filter(
+      (row) =>
+        readMappedSheetField(row.fields, ["reviewStatus"]).toLowerCase() ===
+        "candidate",
+    )
+    .map((row): ReviewCandidate => {
+      const publishFields = {
+        ...buildPublishedRecord(row.fields, ""),
+        verifiedStatus: "Verified",
+      };
+      const normalized = normalizePublishedRow({
+        fields: Object.fromEntries(
+          Object.entries(publishFields).map(([key, value]) => [
+            key,
+            String(value ?? ""),
+          ]),
+        ),
+        rowNumber: row.rowNumber,
+        values: [],
+      });
+
+      return {
+        area: readMappedSheetField(row.fields, ["area"]),
+        candidateAddress: readMappedSheetField(row.fields, [
+          "candidateAddress",
+        ]),
+        candidateGoogleMapsUrl: readMappedSheetField(row.fields, [
+          "candidateGoogleMapsUrl",
+        ]),
+        candidateGooglePlaceId: readMappedSheetField(row.fields, [
+          "candidateGooglePlaceId",
+        ]),
+        candidateLatitude: readNumber(
+          readMappedSheetField(row.fields, ["candidateLatitude"]),
+        ),
+        candidateLongitude: readNumber(
+          readMappedSheetField(row.fields, ["candidateLongitude"]),
+        ),
+        candidateName: readMappedSheetField(row.fields, ["candidateName"]),
+        category: readMappedSheetField(row.fields, ["category"]),
+        city: normalizePlaceCity(readMappedSheetField(row.fields, ["city"])),
+        id: readMappedSheetField(row.fields, ["id"]),
+        loved: readLoved(readMappedSheetField(row.fields, ["loved"])),
+        notes: readMappedSheetField(row.fields, ["notes"]),
+        rawName: readMappedSheetField(row.fields, ["rawName"]),
+        rowNumber: row.rowNumber,
+        status: readMappedSheetField(row.fields, ["status"]),
+        validationIssues: normalized.ok ? [] : normalized.errors,
+      };
+    });
+}
+
+export async function getReviewCandidates(input: { sheetId: string }) {
+  if (!input.sheetId?.trim()) {
+    throw new Error("A Google Sheet ID is required.");
+  }
+
+  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+  const [reviewValues = []] = await batchReadValues(
+    sheetsAuthClient,
+    input.sheetId,
+    [`${quoteSheetName(REVIEW_TAB)}!A1:ZZ`],
+  );
+
+  return { candidates: buildReviewCandidateQueue(reviewValues) };
+}
+
+export async function decideReviewCandidate(input: {
+  edits?: ReviewCandidateEdits;
+  decision: ReviewCandidateDecision;
+  id: string;
+  rowNumber: number;
+  sheetId: string;
+}) {
+  if (!input.sheetId?.trim()) {
+    throw new Error("A Google Sheet ID is required.");
+  }
+
+  if (!Number.isInteger(input.rowNumber) || input.rowNumber < 2) {
+    throw new Error("A valid Review row number is required.");
+  }
+
+  if (input.decision !== "verify" && input.decision !== "reject") {
+    throw new Error("Decision must be verify or reject.");
+  }
+
+  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+  const [reviewValues = []] = await batchReadValues(
+    sheetsAuthClient,
+    input.sheetId,
+    [`${quoteSheetName(REVIEW_TAB)}!A1:ZZ`],
+  );
+  const reviewHeaders = (reviewValues[0] ?? []).map((value) =>
+    String(value ?? ""),
+  );
+  const candidates = buildReviewCandidateQueue(reviewValues);
+  const candidate = candidates.find(
+    (row) => row.rowNumber === input.rowNumber && row.id === input.id,
+  );
+
+  if (!candidate) {
+    throw new Error(
+      "This Candidate row changed or is no longer waiting. Refresh Admin and try again.",
+    );
+  }
+
+  const headerIndexes = indexHeaders(reviewHeaders);
+  const categoryIndex = getHeaderIndex(headerIndexes, ["category"]);
+  const lovedIndex = getHeaderIndex(headerIndexes, ["loved"]);
+  const statusIndex = getHeaderIndex(headerIndexes, ["status"]);
+  const reviewStatusIndex = getHeaderIndex(headerIndexes, ["reviewStatus"]);
+
+  if (
+    categoryIndex === undefined ||
+    lovedIndex === undefined ||
+    statusIndex === undefined ||
+    reviewStatusIndex === undefined
+  ) {
+    throw new Error(
+      'Review tab must include "category", "status", "loved", and "reviewStatus" columns.',
+    );
+  }
+
+  const reviewStatus = input.decision === "verify" ? "Verified" : "Rejected";
+  const updates = [
+    {
+      range: `${quoteSheetName(REVIEW_TAB)}!${columnName(reviewStatusIndex)}${input.rowNumber}`,
+      values: [[reviewStatus]],
+    },
+  ];
+  let updatedCandidate = candidate;
+
+  if (input.decision === "verify") {
+    if (!input.edits) {
+      throw new Error("Category and status are required before verifying.");
+    }
+
+    const categoryOptions = Array.from(
+      new Set(
+        readPlacesJsonSnapshot().places
+          .map((place) => place.category.trim())
+          .filter(Boolean),
+      ),
+    );
+    const normalizedEdits = normalizeReviewCandidateEdits(
+      input.edits,
+      categoryOptions,
+    );
+    const rowValues = reviewValues[input.rowNumber - 1] ?? [];
+    const editedFields = {
+      ...mapSheetRowToObject(reviewHeaders, rowValues),
+      category: normalizedEdits.category,
+      loved: normalizedEdits.loved,
+      status: normalizedEdits.status,
+    };
+    const publishFields = {
+      ...buildPublishedRecord(editedFields, ""),
+      verifiedStatus: "Verified",
+    };
+    const normalizedRow = normalizePublishedRow({
+      fields: Object.fromEntries(
+        Object.entries(publishFields).map(([key, value]) => [
+          key,
+          String(value ?? ""),
+        ]),
+      ),
+      rowNumber: input.rowNumber,
+      values: [],
+    });
+
+    if (!normalizedRow.ok) {
+      throw new Error(
+        `This Candidate cannot be verified: ${normalizedRow.errors.join(" ")}`,
+      );
+    }
+
+    updates.unshift(
+      {
+        range: `${quoteSheetName(REVIEW_TAB)}!${columnName(categoryIndex)}${input.rowNumber}`,
+        values: [[normalizedEdits.category]],
+      },
+      {
+        range: `${quoteSheetName(REVIEW_TAB)}!${columnName(statusIndex)}${input.rowNumber}`,
+        values: [[normalizedEdits.status]],
+      },
+      {
+        range: `${quoteSheetName(REVIEW_TAB)}!${columnName(lovedIndex)}${input.rowNumber}`,
+        values: [[normalizedEdits.loved]],
+      },
+    );
+    updatedCandidate = {
+      ...candidate,
+      category: normalizedEdits.category,
+      loved: normalizedEdits.loved === "TRUE"
+        ? true
+        : normalizedEdits.loved === "FALSE"
+          ? false
+          : null,
+      status: normalizedEdits.status,
+      validationIssues: [],
+    };
+  }
+
+  await batchUpdateValues(
+    sheetsAuthClient,
+    input.sheetId,
+    updates,
+  );
+
+  return {
+    candidate: { ...updatedCandidate, reviewStatus },
+    decision: input.decision,
+    remainingCandidates: candidates.length - 1,
   };
 }
 
@@ -2173,6 +2476,10 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions) {
 }
 
 function readNumber(value: string) {
+  if (!value.trim()) {
+    return null;
+  }
+
   const numberValue = Number(value);
 
   return Number.isFinite(numberValue) ? numberValue : null;
@@ -2247,7 +2554,7 @@ function normalizePublishedRow(row: SheetRow): NormalizedPublishedRow {
   const fields = row.fields;
   const id = readMappedSheetField(fields, ["id"]);
   const name = readMappedSheetField(fields, ["name"]);
-  const city = readMappedSheetField(fields, ["city"]);
+  const city = normalizePlaceCity(readMappedSheetField(fields, ["city"]));
   const category = readMappedSheetField(fields, ["category"]);
   const latitude = readNumber(readMappedSheetField(fields, ["latitude", "lat"]));
   const longitude = readNumber(readMappedSheetField(fields, ["longitude", "lng", "lon"]));
@@ -2412,13 +2719,23 @@ export function buildPublishedSyncPlan(input: {
       continue;
     }
 
-    if (placesEqual(existingPlace, normalized.place)) {
+    const nextPlace = {
+      ...normalized.place,
+      // Once a place exists in the app, these editorial fields are maintained
+      // in the localhost Field Guide. Sheet sync continues to own identity,
+      // location, verification, and all other published metadata.
+      category: existingPlace.category,
+      loved: existingPlace.loved,
+      status: existingPlace.status,
+    };
+
+    if (placesEqual(existingPlace, nextPlace)) {
       skipped += 1;
       continue;
     }
 
     updated += 1;
-    nextPlacesById.set(normalized.place.id, normalized.place);
+    nextPlacesById.set(normalized.place.id, nextPlace);
     changes.push({
       action: "update",
       id: normalized.place.id,
@@ -2473,36 +2790,13 @@ function countSheetStatuses(
   return { counts, total };
 }
 
-export async function getPlacePipelineStatus(input: {
-  sheetId: string;
-}): Promise<PlacePipelineStatus> {
-  if (!input.sheetId?.trim()) {
-    throw new Error("A Google Sheet ID is required.");
-  }
-
-  const sheetsAuthClient = await createGoogleSheetsAuthClient();
-  const metadata = await getSpreadsheetMetadata(sheetsAuthClient, input.sheetId);
-  assertSheetExists(metadata, CAPTURE_TAB);
-  assertSheetExists(metadata, REVIEW_TAB);
-  assertSheetExists(metadata, PUBLISHED_TAB);
-
-  const [captureValues, reviewValues, publishedValues] = await Promise.all([
-    readValues(
-      sheetsAuthClient,
-      input.sheetId,
-      `${quoteSheetName(CAPTURE_TAB)}!A1:ZZ`,
-    ),
-    readValues(
-      sheetsAuthClient,
-      input.sheetId,
-      `${quoteSheetName(REVIEW_TAB)}!A1:ZZ`,
-    ),
-    readValues(
-      sheetsAuthClient,
-      input.sheetId,
-      `${quoteSheetName(PUBLISHED_TAB)}!A1:ZZ`,
-    ),
-  ]);
+export function buildPlacePipelineStatus(input: {
+  captureValues: string[][];
+  fetchedAt?: string;
+  publishedValues: string[][];
+  reviewValues: string[][];
+}): PlacePipelineStatus {
+  const { captureValues, publishedValues, reviewValues } = input;
   const captureHeaders = (captureValues[0] ?? []).map(String);
   const reviewHeaders = (reviewValues[0] ?? []).map(String);
   const publishedHeaders = (publishedValues[0] ?? []).map(String);
@@ -2596,7 +2890,7 @@ export async function getPlacePipelineStatus(input: {
       ready: captureReady,
       total: captureStatus.total,
     },
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: input.fetchedAt ?? new Date().toISOString(),
     published: {
       total: publishedStatus.total,
       verified: publishedVerified,
@@ -2610,6 +2904,44 @@ export async function getPlacePipelineStatus(input: {
       verified: reviewVerified,
     },
     validationErrors,
+  };
+}
+
+async function readPlacePipelineValues(sheetId: string) {
+  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+  const ranges = [
+    `${quoteSheetName(CAPTURE_TAB)}!A1:ZZ`,
+    `${quoteSheetName(REVIEW_TAB)}!A1:ZZ`,
+    `${quoteSheetName(PUBLISHED_TAB)}!A1:ZZ`,
+  ];
+  const [captureValues = [], reviewValues = [], publishedValues = []] =
+    await batchReadValues(sheetsAuthClient, sheetId, ranges);
+
+  return { captureValues, publishedValues, reviewValues };
+}
+
+export async function getPlacePipelineStatus(input: {
+  sheetId: string;
+}): Promise<PlacePipelineStatus> {
+  if (!input.sheetId?.trim()) {
+    throw new Error("A Google Sheet ID is required.");
+  }
+
+  return buildPlacePipelineStatus(
+    await readPlacePipelineValues(input.sheetId.trim()),
+  );
+}
+
+export async function getPlacePipelineSnapshot(input: { sheetId: string }) {
+  if (!input.sheetId?.trim()) {
+    throw new Error("A Google Sheet ID is required.");
+  }
+
+  const values = await readPlacePipelineValues(input.sheetId.trim());
+
+  return {
+    candidates: buildReviewCandidateQueue(values.reviewValues),
+    status: buildPlacePipelineStatus(values),
   };
 }
 

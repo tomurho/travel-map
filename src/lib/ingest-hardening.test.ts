@@ -12,11 +12,19 @@ import test from "node:test";
 
 import { assessImportSafety } from "@/lib/import-safety";
 import { isAdminAuthorized } from "@/lib/admin-auth";
+import { batchReadValues } from "@/lib/google-sheets-oauth";
+import {
+  getGoogleSheetsErrorMessage,
+  getGoogleSheetsErrorStatus,
+} from "@/lib/google-sheets-errors";
 import {
   assertPublishedSyncCanWrite,
+  buildPlacePipelineStatus,
+  buildReviewCandidateQueue,
   buildCaptureIntakeKey,
   buildPublishedSyncPlan,
   buildPublishedUpsertPlan,
+  normalizeReviewCandidateEdits,
   shouldReconcileCapture,
 } from "@/lib/place-sheet-pipeline";
 import type { Place } from "@/lib/place";
@@ -144,6 +152,221 @@ test("capture intake keys are stable and distinguish different source evidence",
   );
   assert.equal(shouldReconcileCapture(new Set([key]), fields), true);
   assert.equal(shouldReconcileCapture(new Set(), fields), false);
+});
+
+test("Review candidate queue includes waiting rows and reports verification blockers", () => {
+  const headers = [
+    "id",
+    "rawName",
+    "candidateName",
+    "candidateAddress",
+    "candidateLatitude",
+    "candidateLongitude",
+    "candidateGoogleMapsUrl",
+    "candidateGooglePlaceId",
+    "category",
+    "area",
+    "city",
+    "status",
+    "loved",
+    "notes",
+    "reviewStatus",
+  ];
+  const row = (values: Record<string, string>) =>
+    headers.map((header) => values[header] ?? "");
+  const candidates = buildReviewCandidateQueue([
+    headers,
+    row({
+      area: "Nakagyo Ward",
+      candidateAddress: "1 Kyoto Street",
+      candidateGoogleMapsUrl: "https://maps.google.com/example",
+      candidateGooglePlaceId: "place-1",
+      candidateLatitude: "35.01",
+      candidateLongitude: "135.76",
+      candidateName: "Example Cafe",
+      category: "Cafe",
+      city: "Kyoto",
+      id: "example-cafe",
+      rawName: "Example",
+      reviewStatus: "Candidate",
+      status: "Location",
+    }),
+    row({
+      city: "Kyoto",
+      id: "incomplete",
+      rawName: "Incomplete Place",
+      reviewStatus: "Candidate",
+      status: "Location",
+    }),
+    row({
+      candidateName: "Already verified",
+      id: "verified",
+      reviewStatus: "Verified",
+    }),
+  ]);
+
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0]?.candidateName, "Example Cafe");
+  assert.deepEqual(candidates[0]?.validationIssues, []);
+  assert.match(candidates[1]?.validationIssues.join(" ") ?? "", /Missing name/);
+  assert.match(candidates[1]?.validationIssues.join(" ") ?? "", /Invalid latitude/);
+});
+
+test("Review candidate edits reuse canonical categories and preserve status semantics", () => {
+  const categoryOptions = ["Cafe", "Beef noodles", "Restaurant"];
+
+  assert.deepEqual(
+    normalizeReviewCandidateEdits(
+      { category: "beef NOODLES", status: "loved" },
+      categoryOptions,
+    ),
+    { category: "Beef noodles", loved: "TRUE", status: "Been" },
+  );
+  assert.deepEqual(
+    normalizeReviewCandidateEdits(
+      { category: "Cafe", status: "want_to_go" },
+      categoryOptions,
+    ),
+    { category: "Cafe", loved: "", status: "Want to go" },
+  );
+  assert.deepEqual(
+    normalizeReviewCandidateEdits(
+      { category: "Restaurant", status: "been" },
+      categoryOptions,
+    ),
+    { category: "Restaurant", loved: "FALSE", status: "Been" },
+  );
+  assert.throws(
+    () =>
+      normalizeReviewCandidateEdits(
+        { category: "New category", status: "location" },
+        categoryOptions,
+      ),
+    /Choose an existing category/,
+  );
+});
+
+test("Sheets batch reads retrieve multiple worksheet ranges in one request", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestCount = 0;
+  let requestedUrl = "";
+
+  globalThis.fetch = async (input) => {
+    requestCount += 1;
+    requestedUrl = String(input);
+
+    return new Response(
+      JSON.stringify({
+        valueRanges: [
+          { values: [["capture"]] },
+          { values: [["review"]] },
+          { values: [["published"]] },
+        ],
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 200 },
+    );
+  };
+
+  try {
+    const ranges = ["'Capture'!A1:ZZ", "'Review'!A1:ZZ", "'Published'!A1:ZZ"];
+    const values = await batchReadValues(
+      {
+        getAccessToken: async () => ({ token: "test-token" }),
+      } as never,
+      "sheet-id",
+      ranges,
+    );
+    const requestRanges = new URL(requestedUrl).searchParams.getAll("ranges");
+
+    assert.equal(requestCount, 1);
+    assert.deepEqual(requestRanges, ranges);
+    assert.deepEqual(values, [
+      [["capture"]],
+      [["review"]],
+      [["published"]],
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Sheets rate-limit errors give a recoverable Admin message", () => {
+  const error = new Error(
+    "Google Sheets API 429: RESOURCE_EXHAUSTED RATE_LIMIT_EXCEEDED",
+  );
+
+  assert.equal(getGoogleSheetsErrorStatus(error), 429);
+  assert.match(getGoogleSheetsErrorMessage(error, "fallback"), /60 seconds/);
+  assert.match(
+    getGoogleSheetsErrorMessage(error, "fallback"),
+    /existing Admin data is still available/,
+  );
+});
+
+test("Pipeline status is derived from a shared worksheet snapshot", () => {
+  const reviewHeaders = [
+    "id",
+    "candidateName",
+    "category",
+    "area",
+    "city",
+    "candidateAddress",
+    "candidateLatitude",
+    "candidateLongitude",
+    "candidateGoogleMapsUrl",
+    "candidateGooglePlaceId",
+    "status",
+    "loved",
+    "notes",
+    "reviewStatus",
+  ];
+  const publishedHeaders = [
+    "id",
+    "name",
+    "category",
+    "area",
+    "city",
+    "address",
+    "latitude",
+    "longitude",
+    "googleMapsUrl",
+    "googlePlaceId",
+    "status",
+    "loved",
+    "notes",
+    "verifiedStatus",
+    "lastChecked",
+  ];
+  const status = buildPlacePipelineStatus({
+    captureValues: [["intakeStatus"], ["Ready"], ["New"]],
+    fetchedAt: "2026-08-11T07:00:00.000Z",
+    publishedValues: [publishedHeaders],
+    reviewValues: [
+      reviewHeaders,
+      [
+        "candidate-1",
+        "Candidate One",
+        "Cafe",
+        "Center",
+        "Test City",
+        "1 Test Street",
+        "1.3",
+        "103.8",
+        "https://maps.example/candidate-1",
+        "place-1",
+        "Location",
+        "",
+        "",
+        "Candidate",
+      ],
+    ],
+  });
+
+  assert.equal(status.capture.ready, 1);
+  assert.equal(status.capture.new, 1);
+  assert.equal(status.review.candidate, 1);
+  assert.equal(status.recommendedAction, "process_ready");
+  assert.equal(status.fetchedAt, "2026-08-11T07:00:00.000Z");
 });
 
 test("Published writes fail closed unless partial sync is explicit", () => {
@@ -353,6 +576,70 @@ test("Published sync planning counts only actionable app changes", () => {
       ["update", "changed"],
       ["insert", "new"],
     ],
+  );
+});
+
+test("Published sync preserves locally owned status, loved, and category fields", () => {
+  const headers = [
+    "id", "name", "category", "area", "city", "address", "latitude",
+    "longitude", "googleMapsUrl", "googlePlaceId", "status", "loved",
+    "notes", "verifiedStatus", "lastChecked",
+  ];
+  const localPlace = {
+    ...place("edited", "Local favorite"),
+    category: "Coffee",
+    loved: true,
+    status: "been" as const,
+  };
+  const plan = buildPublishedSyncPlan({
+    currentPlaces: [localPlace],
+    publishedHeaders: headers,
+    publishedValues: [
+      headers,
+      [
+        "edited", "Corrected identity", "Restaurant", "Center", "Test City",
+        "1 Test Street", "1.3", "103.8", "https://maps.example/place", "",
+        "Want to go", "FALSE", "", "Verified", "",
+      ],
+    ],
+  });
+
+  const syncedPlace = plan.nextPlaces[0];
+  assert.equal(syncedPlace?.name, "Corrected identity");
+  assert.equal(syncedPlace?.category, "Coffee");
+  assert.equal(syncedPlace?.status, "been");
+  assert.equal(syncedPlace?.loved, true);
+});
+
+test("Published sync canonicalizes known city aliases", () => {
+  const headers = [
+    "id", "name", "category", "area", "city", "address", "latitude",
+    "longitude", "googleMapsUrl", "googlePlaceId", "status", "loved",
+    "notes", "verifiedStatus", "lastChecked",
+  ];
+  const plan = buildPublishedSyncPlan({
+    currentPlaces: [],
+    publishedHeaders: headers,
+    publishedValues: [
+      headers,
+      [
+        "taipei-alias", "Taipei Alias", "Cafe", "Da’an", "Taipei City",
+        "No. 1, Taipei City", "25.03", "121.56",
+        "https://maps.example/taipei-alias", "", "Location", "", "",
+        "Verified", "",
+      ],
+      [
+        "hcmc-alias", "HCMC Alias", "Cafe", "District 1",
+        "Ho Chi Minh City", "No. 1, Ho Chi Minh City", "10.77", "106.7",
+        "https://maps.example/hcmc-alias", "", "Location", "", "",
+        "Verified", "",
+      ],
+    ],
+  });
+
+  assert.deepEqual(
+    plan.nextPlaces.map((candidate) => candidate.city).sort(),
+    ["Ho Chi Minh", "Taipei"],
   );
 });
 

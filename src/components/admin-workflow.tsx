@@ -2,9 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { AdminReviewQueue } from "@/components/admin-review-queue";
 import { formatProviderAttemptSummary } from "@/lib/admin-ui";
 import { formatDistance } from "@/lib/geo";
-import type { PlacePipelineStatus } from "@/lib/place-sheet-pipeline";
+import type {
+  PlacePipelineStatus,
+  ReviewCandidate,
+  ReviewCandidateDecision,
+  ReviewCandidateEdits,
+} from "@/lib/place-sheet-pipeline";
 import {
   hasMaterialCanonicalAddressDifference,
   type Place,
@@ -185,7 +191,12 @@ type PipelineReviewResult = {
   skippedRows?: number;
 };
 
-type PipelineStatusResponse = PlacePipelineStatus & { error?: string };
+type PipelineSnapshotResponse = {
+  cached?: boolean;
+  candidates?: ReviewCandidate[];
+  error?: string;
+  status?: PlacePipelineStatus;
+};
 
 type ScreenshotExtractionResult = {
   cityHint: string;
@@ -224,7 +235,7 @@ const PIPELINE_ACTION_LABELS: Record<
   publish_verified: "Preview and apply Publish for the verified changes.",
   up_to_date: "Nothing is waiting. The Sheet and travel map are up to date.",
   update_app: "Preview and apply the travel-map update next.",
-  verify_candidates: "Review the Candidate rows and verify the correct places.",
+  verify_candidates: "Use Candidate review below to verify or reject each match.",
 };
 
 function formatOptionalValue(value: string | number | undefined | null) {
@@ -415,6 +426,8 @@ export function AdminWorkflow({
   productionPlaces: initialProductionPlaces,
 }: AdminWorkflowProps) {
   const capturePanelRef = useRef<HTMLDetailsElement | null>(null);
+  const lastPipelineResumeRefreshAtRef = useRef(0);
+  const pipelineSnapshotRequestRef = useRef<Promise<void> | null>(null);
   const [cityHint, setCityHint] = useState("all");
   const [plainText, setPlainText] = useState("");
   const [placeUrl, setPlaceUrl] = useState("");
@@ -503,7 +516,18 @@ export function AdminWorkflow({
   const [pipelineStatusError, setPipelineStatusError] = useState<string | null>(
     null,
   );
-  const [isLoadingPipelineStatus, setIsLoadingPipelineStatus] = useState(false);
+  const [reviewCandidates, setReviewCandidates] = useState<ReviewCandidate[]>([]);
+  const [reviewCandidateError, setReviewCandidateError] = useState<string | null>(
+    null,
+  );
+  const [reviewCandidateMessage, setReviewCandidateMessage] = useState<
+    string | null
+  >(null);
+  const [isLoadingPipelineSnapshot, setIsLoadingPipelineSnapshot] =
+    useState(false);
+  const [updatingReviewCandidateKey, setUpdatingReviewCandidateKey] = useState<
+    string | null
+  >(null);
   const [pipelineMaxApiCalls, setPipelineMaxApiCalls] = useState("1");
   const [isReviewingNewPlaces, setIsReviewingNewPlaces] = useState(false);
   const [isSyncingPublished, setIsSyncingPublished] = useState(false);
@@ -531,11 +555,41 @@ export function AdminWorkflow({
   ).length;
 
   useEffect(() => {
-    void refreshPipelineStatus(DEFAULT_PIPELINE_SHEET_ID);
+    void refreshPipelineSnapshot(DEFAULT_PIPELINE_SHEET_ID);
     // The initial status is intentionally loaded once for the default Sheet.
     // A changed Sheet ID is refreshed explicitly to avoid requests on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const refreshAfterResume = () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastPipelineResumeRefreshAtRef.current < 60_000) {
+        return;
+      }
+
+      const sheetId = pipelineSheetId.trim();
+      if (!sheetId) {
+        return;
+      }
+
+      void refreshPipelineSnapshot(sheetId);
+    };
+
+    window.addEventListener("focus", refreshAfterResume);
+    document.addEventListener("visibilitychange", refreshAfterResume);
+
+    return () => {
+      window.removeEventListener("focus", refreshAfterResume);
+      document.removeEventListener("visibilitychange", refreshAfterResume);
+    };
+    // The handlers intentionally use the latest Sheet ID and admin credential.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminPassword, pipelineSheetId]);
   const stagedCityNames = Array.from(
     new Set(stagedPlaces.map((place) => place.city).filter(Boolean)),
   ).sort((firstCity, secondCity) => firstCity.localeCompare(secondCity));
@@ -1131,39 +1185,139 @@ export function AdminWorkflow({
     }
   }
 
-  async function refreshPipelineStatus(
+  function refreshPipelineSnapshot(
     sheetId = pipelineSheetId.trim(),
+    options: { force?: boolean } = {},
   ) {
     if (!sheetId) {
+      setReviewCandidates([]);
       setPipelineStatus(null);
+      setReviewCandidateError("Add a Google Sheet ID to check Review candidates.");
       setPipelineStatusError("Add a Google Sheet ID to check pipeline status.");
+      return Promise.resolve();
+    }
+
+    if (pipelineSnapshotRequestRef.current) {
+      return pipelineSnapshotRequestRef.current;
+    }
+
+    setIsLoadingPipelineSnapshot(true);
+    setReviewCandidateError(null);
+    setPipelineStatusError(null);
+    lastPipelineResumeRefreshAtRef.current = Date.now();
+
+    const request = (async () => {
+      const searchParams = new URLSearchParams({ sheetId });
+
+      if (options.force) {
+        searchParams.set("force", "1");
+      }
+
+      const response = await fetch(
+        `/api/admin/place-pipeline/snapshot?${searchParams.toString()}`,
+        { headers: authHeaders() },
+      );
+      const payload = (await response.json()) as PipelineSnapshotResponse;
+
+      if (!response.ok || !payload.status) {
+        throw new Error(payload.error ?? "Could not read the pipeline snapshot.");
+      }
+
+      setReviewCandidates(payload.candidates ?? []);
+      setPipelineStatus(payload.status);
+    })()
+      .catch((snapshotError) => {
+        const message =
+          snapshotError instanceof Error
+            ? snapshotError.message
+            : "Could not read the Google Sheets pipeline.";
+
+        // Keep the last successful snapshot visible during transient failures.
+        setReviewCandidateError(message);
+        setPipelineStatusError(message);
+      })
+      .finally(() => {
+        setIsLoadingPipelineSnapshot(false);
+        pipelineSnapshotRequestRef.current = null;
+      });
+
+    pipelineSnapshotRequestRef.current = request;
+    return request;
+  }
+
+  async function updateReviewCandidateDecision(
+    candidate: ReviewCandidate,
+    decision: ReviewCandidateDecision,
+    edits?: ReviewCandidateEdits,
+  ) {
+    if (!pipelineSheetId.trim()) {
+      setReviewCandidateError("Add a Google Sheet ID before reviewing candidates.");
       return;
     }
 
-    setIsLoadingPipelineStatus(true);
-    setPipelineStatusError(null);
+    const displayName = candidate.candidateName || candidate.rawName || "this row";
+    if (
+      decision === "reject" &&
+      !window.confirm(`Reject ${displayName} as the match for this capture?`)
+    ) {
+      return;
+    }
+
+    const candidateKey = `${candidate.rowNumber}:${candidate.id}`;
+    setUpdatingReviewCandidateKey(candidateKey);
+    setReviewCandidateError(null);
+    setReviewCandidateMessage(null);
 
     try {
       const response = await fetch(
-        `/api/admin/place-pipeline/status?sheetId=${encodeURIComponent(sheetId)}`,
-        { headers: authHeaders() },
+        "/api/admin/place-pipeline/review-candidates",
+        {
+          body: JSON.stringify({
+            confirmWrite: true,
+            decision,
+            edits,
+            id: candidate.id,
+            rowNumber: candidate.rowNumber,
+            sheetId: pipelineSheetId.trim(),
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            ...(authHeaders() ?? {}),
+          },
+          method: "POST",
+        },
       );
-      const payload = (await response.json()) as PipelineStatusResponse;
+      const payload = (await response.json()) as {
+        error?: string;
+      };
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not read pipeline status.");
+        throw new Error(payload.error ?? "Could not update the Review candidate.");
       }
 
-      setPipelineStatus(payload);
-    } catch (statusError) {
-      setPipelineStatus(null);
-      setPipelineStatusError(
-        statusError instanceof Error
-          ? statusError.message
-          : "Could not read pipeline status.",
+      setReviewCandidates((currentCandidates) =>
+        currentCandidates.filter(
+          (currentCandidate) =>
+            currentCandidate.rowNumber !== candidate.rowNumber ||
+            currentCandidate.id !== candidate.id,
+        ),
+      );
+      setPipelinePublishResult(null);
+      setPipelineResult(null);
+      setReviewCandidateMessage(
+        decision === "verify"
+          ? `Verified ${displayName}. It is ready for Publish preview.`
+          : `Rejected ${displayName}. It will not be published.`,
+      );
+      void refreshPipelineSnapshot(undefined, { force: true });
+    } catch (candidateError) {
+      setReviewCandidateError(
+        candidateError instanceof Error
+          ? candidateError.message
+          : "Could not update the Review candidate.",
       );
     } finally {
-      setIsLoadingPipelineStatus(false);
+      setUpdatingReviewCandidateKey(null);
     }
   }
 
@@ -1222,7 +1376,7 @@ export function AdminWorkflow({
           : "Dry run complete. No app data was changed.",
       );
       if (write) {
-        void refreshPipelineStatus();
+        void refreshPipelineSnapshot(undefined, { force: true });
       }
     } catch (syncError) {
       setError(
@@ -1290,7 +1444,7 @@ export function AdminWorkflow({
       );
       setPipelinePublishResult(null);
       setPipelineResult(null);
-      void refreshPipelineStatus();
+      void refreshPipelineSnapshot(undefined, { force: true });
     } catch (reviewError) {
       setError(
         reviewError instanceof Error
@@ -1358,7 +1512,7 @@ export function AdminWorkflow({
           : "Publish preview ready. Review the summary before applying changes.",
       );
       if (write) {
-        void refreshPipelineStatus();
+        void refreshPipelineSnapshot(undefined, { force: true });
       }
     } catch (publishError) {
       setError(
@@ -1549,7 +1703,7 @@ export function AdminWorkflow({
           payload.rowsSkipped === 1 ? "" : "s"
         }.`,
       );
-      void refreshPipelineStatus();
+      void refreshPipelineSnapshot(undefined, { force: true });
     } catch (sendError) {
       setError(
         sendError instanceof Error
@@ -2215,11 +2369,13 @@ export function AdminWorkflow({
             </div>
             <div className="admin-pipeline-guide-actions">
               <button
-                disabled={isLoadingPipelineStatus}
-                onClick={() => refreshPipelineStatus()}
+                disabled={isLoadingPipelineSnapshot}
+                onClick={() => {
+                  void refreshPipelineSnapshot(undefined, { force: true });
+                }}
                 type="button"
               >
-                {isLoadingPipelineStatus ? "Checking…" : "Refresh status"}
+                {isLoadingPipelineSnapshot ? "Checking…" : "Refresh data"}
               </button>
               <a
                 href={`https://docs.google.com/spreadsheets/d/${pipelineSheetId.trim()}/edit`}
@@ -2285,9 +2441,8 @@ export function AdminWorkflow({
               <code>intakeStatus = Enriched</code>
               <code>reviewStatus = Candidate</code>
               <p>
-                Lookup is complete, but the place is not verified. Check its
-                Review row and Maps link, then change it to <code>Verified</code>
-                only when correct.
+                Lookup is complete, but the place is not verified. Use Candidate
+                review below to open Maps, then verify or reject the match.
               </p>
             </li>
             <li>
@@ -2323,6 +2478,16 @@ export function AdminWorkflow({
           </ol>
         </section>
 
+        <AdminReviewQueue
+          candidates={reviewCandidates}
+          categoryOptions={categoryOptions}
+          error={reviewCandidateError}
+          isLoading={isLoadingPipelineSnapshot}
+          message={reviewCandidateMessage}
+          onDecision={updateReviewCandidateDecision}
+          updatingKey={updatingReviewCandidateKey}
+        />
+
         <details className="admin-pipeline-settings">
           <summary>Advanced settings</summary>
           <div className="admin-pipeline-settings-grid">
@@ -2336,6 +2501,9 @@ export function AdminWorkflow({
                   setPipelineStatusError(null);
                   setPipelinePublishResult(null);
                   setPipelineResult(null);
+                  setReviewCandidates([]);
+                  setReviewCandidateError(null);
+                  setReviewCandidateMessage(null);
                 }}
                 value={pipelineSheetId}
               />
@@ -2375,7 +2543,7 @@ export function AdminWorkflow({
                 </div>
                 <div>
                   <dt>Your next action</dt>
-                  <dd>Inspect the candidate in Review and change <code>reviewStatus</code> to <code>Verified</code> only if it is correct.</dd>
+                  <dd>Use Candidate review above to open Maps, then verify or reject the match.</dd>
                 </div>
               </dl>
             </div>

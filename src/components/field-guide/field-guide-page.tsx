@@ -2,10 +2,11 @@ import places from "@/data/places.json";
 import { FieldGuideApp } from "@/components/field-guide/field-guide-app";
 import { isPublicPlace } from "@/lib/filtering";
 import {
-  getDefaultFieldGuideCity,
+  resolveFieldGuideCityPreference,
   type FieldGuideFilters,
 } from "@/lib/field-guide";
 import type { Place } from "@/lib/place";
+import { normalizePlaceCity } from "@/lib/place-city";
 
 type FieldGuidePageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -23,7 +24,7 @@ function toPublicPlace(place: Place): Place {
   return {
     id: place.id,
     name: place.name,
-    city: place.city,
+    city: normalizePlaceCity(place.city),
     category: place.category,
     status: place.status,
     loved: place.loved,
@@ -44,9 +45,10 @@ export async function FieldGuidePage({
 }: FieldGuidePageProps) {
   const params = await searchParams;
   const publicPlaces = (places as Place[]).filter(isPublicPlace).map(toPublicPlace);
+  const requestedCity = readParam(params.city) ?? null;
   const lovedParam = readParam(params.loved);
   const initialFilters: FieldGuideFilters = {
-    city: readParam(params.city) ?? getDefaultFieldGuideCity(publicPlaces),
+    city: resolveFieldGuideCityPreference(publicPlaces, requestedCity, null),
     status: readStatus(readParam(params.status)),
     category: readParam(params.category) ?? "all",
     area: readParam(params.area) ?? "all",
@@ -54,5 +56,11 @@ export async function FieldGuidePage({
     query: readParam(params.q) ?? "",
   };
 
-  return <FieldGuideApp initialFilters={initialFilters} places={publicPlaces} />;
+  return (
+    <FieldGuideApp
+      initialFilters={initialFilters}
+      places={publicPlaces}
+      requestedCity={requestedCity}
+    />
+  );
 }

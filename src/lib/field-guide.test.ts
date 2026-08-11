@@ -4,11 +4,13 @@ import {
   buildFieldGuideQuery,
   filterAndSortFieldGuidePlaces,
   normalizeFieldGuideFilters,
+  resolveFieldGuideCityPreference,
   toggleFieldGuideLoved,
   toggleFieldGuideWantToGo,
   type FieldGuideFilters,
 } from "@/lib/field-guide";
 import type { Place } from "@/lib/place";
+import { normalizePlaceCity } from "@/lib/place-city";
 
 const places: Place[] = [
   {
@@ -78,6 +80,31 @@ const baseFilters: FieldGuideFilters = {
   query: "",
 };
 
+test("city aliases resolve to the canonical Field Guide cities", () => {
+  assert.equal(normalizePlaceCity("Ho Chi Minh City"), "Ho Chi Minh");
+  assert.equal(normalizePlaceCity("Hồ Chí Minh City"), "Ho Chi Minh");
+  assert.equal(normalizePlaceCity("Taipei City"), "Taipei");
+  assert.equal(normalizePlaceCity("Kyoto"), "Kyoto");
+
+  const aliasPlaces = [
+    { ...places[0]!, city: "Taipei" },
+    { ...places[1]!, city: "Taipei City" },
+  ];
+
+  assert.equal(
+    resolveFieldGuideCityPreference(aliasPlaces, "Taipei City", null),
+    "Taipei",
+  );
+  assert.equal(
+    filterAndSortFieldGuidePlaces(
+      aliasPlaces,
+      { ...baseFilters, city: "Taipei" },
+      { nearbyActive: false, userLocation: null },
+    ).length,
+    2,
+  );
+});
+
 test("field guide defaults to loved-first stable ordering", () => {
   const result = filterAndSortFieldGuidePlaces(places, baseFilters, {
     nearbyActive: false,
@@ -144,6 +171,31 @@ test("field guide normalizes invalid cities and persists non-location filters", 
   assert.equal(
     buildFieldGuideQuery(normalized),
     "city=Elsewhere&loved=1&q=coffee",
+  );
+});
+
+test("field guide city preference favors a valid URL city", () => {
+  assert.equal(
+    resolveFieldGuideCityPreference(places, "Elsewhere", "Test City"),
+    "Elsewhere",
+  );
+});
+
+test("field guide city preference restores a remembered city without a valid URL city", () => {
+  assert.equal(
+    resolveFieldGuideCityPreference(places, null, "Test City"),
+    "Test City",
+  );
+  assert.equal(
+    resolveFieldGuideCityPreference(places, "Missing", "Test City"),
+    "Test City",
+  );
+});
+
+test("field guide city preference ignores a stale remembered city", () => {
+  assert.equal(
+    resolveFieldGuideCityPreference(places, null, "Missing"),
+    "Elsewhere",
   );
 });
 

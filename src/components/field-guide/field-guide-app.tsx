@@ -8,13 +8,14 @@ import {
   FieldGuidePlaceCard,
   FieldGuidePlaceDetail,
 } from "@/components/field-guide/field-guide-place-card";
+import { FieldGuidePlaceEditor } from "@/components/field-guide/field-guide-place-editor";
 import { type CityCenter, MapView } from "@/components/map-view";
-import { getAvailableAreas, getAvailableCategories, getCities } from "@/lib/filtering";
+import { getAvailableAreas, getAvailableCategories, getCategories, getCities } from "@/lib/filtering";
 import {
   buildFieldGuideQuery,
   filterAndSortFieldGuidePlaces,
-  getDefaultFieldGuideCity,
   normalizeFieldGuideFilters,
+  resolveFieldGuideCityPreference,
   type FieldGuideFilters,
 } from "@/lib/field-guide";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
@@ -24,6 +25,7 @@ import styles from "./field-guide.module.css";
 type LocationStatus = "idle" | "locating" | "found" | "error";
 
 const resultBatchSize = 24;
+const lastCityStorageKey = "travel-field-guide:last-city:v1";
 
 const fieldGuideMapStyles: google.maps.MapTypeStyle[] = [
   {
@@ -146,9 +148,11 @@ function CitySelect({
 export function FieldGuideApp({
   initialFilters,
   places,
+  requestedCity,
 }: {
   initialFilters: FieldGuideFilters;
   places: Place[];
+  requestedCity: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -164,40 +168,47 @@ export function FieldGuideApp({
   const [requestLocationNonce, setRequestLocationNonce] = useState(0);
   const [visibleCount, setVisibleCount] = useState(resultBatchSize);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [hasRestoredCityPreference, setHasRestoredCityPreference] = useState(false);
+  const [editablePlaces, setEditablePlaces] = useState(places);
+  const [isLocalhost, setIsLocalhost] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
+  const [editMessage, setEditMessage] = useState("");
 
-  const cities = useMemo(() => getCities(places), [places]);
-  const cityCenters = useMemo(() => getCityCenters(places), [places]);
+  const cities = useMemo(() => getCities(editablePlaces), [editablePlaces]);
+  const cityCenters = useMemo(() => getCityCenters(editablePlaces), [editablePlaces]);
+  const allCategories = useMemo(() => getCategories(editablePlaces), [editablePlaces]);
   const cityPlaces = useMemo(
-    () => places.filter((place) => place.city === filters.city),
-    [filters.city, places],
+    () => editablePlaces.filter((place) => place.city === filters.city),
+    [editablePlaces, filters.city],
   );
   const categories = useMemo(
     () =>
-      getAvailableCategories(places, {
+      getAvailableCategories(editablePlaces, {
         city: filters.city,
         status: filters.status,
         area: filters.area,
         loved: "all",
       }),
-    [filters.area, filters.city, filters.status, places],
+    [editablePlaces, filters.area, filters.city, filters.status],
   );
   const areas = useMemo(
     () =>
-      getAvailableAreas(places, {
+      getAvailableAreas(editablePlaces, {
         city: filters.city,
         status: filters.status,
         category: filters.category,
         loved: "all",
       }),
-    [filters.category, filters.city, filters.status, places],
+    [editablePlaces, filters.category, filters.city, filters.status],
   );
   const filteredPlaces = useMemo(
     () =>
-      filterAndSortFieldGuidePlaces(places, filters, {
+      filterAndSortFieldGuidePlaces(editablePlaces, filters, {
         nearbyActive,
         userLocation,
       }),
-    [filters, nearbyActive, places, userLocation],
+    [editablePlaces, filters, nearbyActive, userLocation],
   );
   const visibleListPlaces = filteredPlaces.slice(0, visibleCount);
   const selectedPlace =
@@ -207,6 +218,18 @@ export function FieldGuideApp({
     : null;
 
   useEffect(() => {
+    setEditablePlaces(places);
+  }, [places]);
+
+  useEffect(() => {
+    setIsLocalhost(["localhost", "127.0.0.1", "::1"].includes(window.location.hostname));
+  }, []);
+
+  useEffect(() => {
+    if (!hasRestoredCityPreference) {
+      return;
+    }
+
     const nextQuery = buildFieldGuideQuery(filters);
     const currentQuery = searchParams.toString();
 
@@ -219,11 +242,45 @@ export function FieldGuideApp({
         scroll: false,
       });
     });
-  }, [filters, pathname, router, searchParams]);
+  }, [filters, hasRestoredCityPreference, pathname, router, searchParams]);
+
+  useEffect(() => {
+    let rememberedCity: string | null = null;
+
+    try {
+      rememberedCity = window.localStorage.getItem(lastCityStorageKey);
+    } catch {
+      // Storage can be unavailable in restricted browser modes.
+    }
+
+    const city = resolveFieldGuideCityPreference(
+      places,
+      requestedCity,
+      rememberedCity,
+    );
+
+    setFilters((current) =>
+      current.city === city ? current : { ...current, city },
+    );
+    setHasRestoredCityPreference(true);
+  }, [places, requestedCity]);
+
+  useEffect(() => {
+    if (!hasRestoredCityPreference || !filters.city) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(lastCityStorageKey, filters.city);
+    } catch {
+      // The app remains usable when browser storage is unavailable.
+    }
+  }, [filters.city, hasRestoredCityPreference]);
 
   useEffect(() => {
     setVisibleCount(resultBatchSize);
     setSelectedPlaceId(null);
+    setEditingPlaceId(null);
   }, [filters]);
 
   useEffect(() => {
@@ -368,10 +425,32 @@ export function FieldGuideApp({
               <p>{nearbyActive && userLocation ? "Nearby" : "Places"}</p>
               <h2>{filteredPlaces.length} results</h2>
             </div>
-            <span>
-              {nearbyActive && userLocation ? "Sorted by distance" : "Loved first"}
-            </span>
+            <div className={styles.resultsActions}>
+              <span className={isEditMode ? styles.editingLabel : undefined}>
+                {isEditMode
+                  ? "Editing"
+                  : nearbyActive && userLocation
+                    ? "Sorted by distance"
+                    : "Loved first"}
+              </span>
+              {isLocalhost ? (
+                <button
+                  aria-pressed={isEditMode}
+                  className={styles.editModeButton}
+                  onClick={() => {
+                    setIsEditMode((current) => !current);
+                    setEditingPlaceId(null);
+                    setEditMessage("");
+                  }}
+                  type="button"
+                >
+                  {isEditMode ? "Done" : "Edit list"}
+                </button>
+              ) : null}
+            </div>
           </div>
+
+          {editMessage ? <p className={styles.editNotice} role="status">{editMessage}</p> : null}
 
           {filteredPlaces.length === 0 ? (
             <div className={styles.emptyState}>
@@ -386,8 +465,35 @@ export function FieldGuideApp({
                   distanceKm={
                     userLocation ? getDistanceKm(userLocation, place) : null
                   }
-                  isSelected={selectedPlaceId === place.id}
+                  editor={
+                    isEditMode && editingPlaceId === place.id ? (
+                      <FieldGuidePlaceEditor
+                        categories={allCategories}
+                        onCancel={() => setEditingPlaceId(null)}
+                        onSaved={(savedPlace) => {
+                          setEditablePlaces((current) =>
+                            current.map((candidate) =>
+                              candidate.id === savedPlace.id ? savedPlace : candidate,
+                            ),
+                          );
+                          setEditingPlaceId(null);
+                          setEditMessage(`Saved ${savedPlace.name}.`);
+                        }}
+                        place={place}
+                      />
+                    ) : undefined
+                  }
+                  isEditable={
+                    isEditMode &&
+                    (editingPlaceId === null || editingPlaceId === place.id)
+                  }
+                  isEditing={editingPlaceId === place.id}
+                  isSelected={selectedPlaceId === place.id || editingPlaceId === place.id}
                   key={place.id}
+                  onEdit={() => {
+                    setEditingPlaceId((current) => current === place.id ? null : place.id);
+                    setEditMessage("");
+                  }}
                   place={place}
                 />
               ))}

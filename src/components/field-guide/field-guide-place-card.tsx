@@ -1,5 +1,6 @@
 import { formatDistance } from "@/lib/geo";
 import { getGoogleMapsHandoffUrl, getPublicNotes, type Place } from "@/lib/place";
+import type { ReactNode } from "react";
 import styles from "./field-guide.module.css";
 
 function getStatusLabel(place: Place) {
@@ -17,11 +18,19 @@ function getStatusLabel(place: Place) {
 
 export function FieldGuidePlaceCard({
   distanceKm,
+  editor,
+  isEditable,
+  isEditing,
   isSelected,
+  onEdit,
   place,
 }: {
   distanceKm: number | null;
+  editor?: ReactNode;
+  isEditable?: boolean;
+  isEditing?: boolean;
   isSelected: boolean;
+  onEdit?: () => void;
   place: Place;
 }) {
   return (
@@ -30,7 +39,7 @@ export function FieldGuidePlaceCard({
       className={`${styles.placeCard}${isSelected ? ` ${styles.selectedCard}` : ""}`}
       data-place-id={place.id}
     >
-      <div className={styles.placeCopy}>
+      <div className={`${styles.placeCopy}${isEditable && !isEditing ? ` ${styles.placeCopyEditable}` : ""}`}>
         <div className={styles.placeTitleRow}>
           <a
             aria-label={`Open ${place.name} in Google Maps`}
@@ -46,6 +55,10 @@ export function FieldGuidePlaceCard({
               <span aria-hidden="true">♥</span>
               <span className={styles.srOnly}>Loved</span>
             </span>
+          ) : place.status === "want_to_go" ? (
+            <span className={styles.wantMark} title="Want to go">
+              <span className={styles.srOnly}>Want to go</span>
+            </span>
           ) : null}
         </div>
         <small>
@@ -55,7 +68,13 @@ export function FieldGuidePlaceCard({
         {distanceKm === null ? null : (
           <span className={styles.distance}>{formatDistance(distanceKm)} away</span>
         )}
+        {isEditable && !isEditing ? (
+          <button className={styles.rowEditButton} onClick={onEdit} type="button">
+            Edit
+          </button>
+        ) : null}
       </div>
+      {editor}
     </article>
   );
 }

@@ -20,7 +20,8 @@ function isFloatingPlaceEditInput(
     typeof input === "object" &&
     input !== null &&
     "editMode" in input &&
-    input.editMode === "floating-inspector"
+    (input.editMode === "floating-inspector" ||
+      input.editMode === "field-guide-inline")
   );
 }
 
@@ -43,7 +44,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (isFloatingPlaceEditInput(input)) {
     if (!isLocalhostRequest(request)) {
       return NextResponse.json(
-        { error: "Floating inspector edits are only available on localhost." },
+        { error: "Inline place edits are only available on localhost." },
         { status: 403 },
       );
     }

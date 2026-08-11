@@ -28,6 +28,13 @@ export type ValuesResponse = {
   values?: string[][];
 };
 
+export type BatchValuesResponse = {
+  valueRanges?: Array<{
+    range?: string;
+    values?: string[][];
+  }>;
+};
+
 type GoogleOAuthClientConfig = {
   installed?: {
     client_id?: string;
@@ -198,13 +205,19 @@ export async function sheetsFetch<TResponse>(
   options: {
     body?: unknown;
     method?: "GET" | "POST" | "PUT";
-    searchParams?: Record<string, string>;
+    searchParams?: Record<string, string | string[]>;
   } = {},
 ) {
   const url = new URL(`https://sheets.googleapis.com/v4/${sheetPath}`);
 
   for (const [key, value] of Object.entries(options.searchParams ?? {})) {
-    url.searchParams.set(key, value);
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        url.searchParams.append(key, item);
+      }
+    } else {
+      url.searchParams.set(key, value);
+    }
   }
 
   const accessToken = await authClient.getAccessToken();
@@ -292,6 +305,31 @@ export async function readValues(
   );
 
   return response.values ?? [];
+}
+
+export async function batchReadValues(
+  authClient: OAuth2Client,
+  sheetId: string,
+  ranges: string[],
+) {
+  if (ranges.length === 0) {
+    return [];
+  }
+
+  const response = await sheetsFetch<BatchValuesResponse>(
+    authClient,
+    `spreadsheets/${sheetId}/values:batchGet`,
+    {
+      searchParams: {
+        majorDimension: "ROWS",
+        ranges,
+      },
+    },
+  );
+
+  return ranges.map(
+    (_, index) => response.valueRanges?.[index]?.values ?? [],
+  );
 }
 
 export async function appendValues(

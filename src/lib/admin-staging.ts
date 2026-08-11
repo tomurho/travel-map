@@ -4,6 +4,8 @@ import * as xlsx from "xlsx";
 
 import { getDistanceKm } from "@/lib/geo";
 import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
+import { findCanonicalCategory } from "@/lib/place-category";
+import { normalizePlaceCity } from "@/lib/place-city";
 import { validatePlaceVerification } from "@/lib/place-verification";
 import {
   readPlacesJsonSnapshot,
@@ -105,12 +107,12 @@ export interface AdminProductionPlaceVerificationInput {
 }
 
 export interface AdminFloatingPlaceEditInput {
-  editMode: "floating-inspector";
+  editMode: "field-guide-inline" | "floating-inspector";
   name: string;
   category: string;
   district: string;
   status: PlaceStatus;
-  loved: boolean;
+  loved: boolean | null;
 }
 
 const STAGING_FILE_PATH = join(process.cwd(), "src/data/admin-staged-places.json");
@@ -299,7 +301,7 @@ export function stagePlace(input: AdminStagedPlaceInput) {
   const stagedPlace: AdminStagedPlace = {
     id: idBase || `staged-${Date.now()}`,
     name: input.name.trim(),
-    city: input.city.trim() || "Unknown",
+    city: normalizePlaceCity(input.city) || "Unknown",
     category: input.category.trim(),
     status: normalizedStatus.status,
     loved: normalizedStatus.loved,
@@ -338,7 +340,7 @@ function stagedPlaceToPlace(place: AdminStagedPlace): Place {
   return {
     id: place.id,
     name: place.name,
-    city: place.city,
+    city: normalizePlaceCity(place.city),
     category: place.category,
     status: place.status,
     loved: place.loved,
@@ -687,23 +689,41 @@ export function updateProductionPlaceFloatingEdit(
   }
 
   const name = input.name.trim();
-  const category = input.category.trim();
+  const requestedCategory = input.category.trim();
   const district = input.district.trim();
 
   if (!name) {
     return { error: "Place name is required." };
   }
 
-  if (!category) {
+  if (!requestedCategory) {
     return { error: "Category is required." };
+  }
+
+  const category =
+    input.editMode === "field-guide-inline"
+      ? findCanonicalCategory(
+          requestedCategory,
+          Array.from(
+            new Set(currentPlaces.map((place) => place.category.trim()).filter(Boolean)),
+          ),
+        )
+      : requestedCategory;
+
+  if (!category) {
+    return { error: "Choose an existing category." };
   }
 
   if (!isPlaceStatus(input.status)) {
     return { error: "Valid status is required." };
   }
 
-  if (typeof input.loved !== "boolean") {
-    return { error: "Loved must be true or false." };
+  if (typeof input.loved !== "boolean" && input.loved !== null) {
+    return { error: "Loved must be true, false, or null." };
+  }
+
+  if (input.loved === true && input.status !== "been") {
+    return { error: "Loved places must also have Been status." };
   }
 
   const currentPlace = currentPlaces[placeIndex];
@@ -756,7 +776,7 @@ export function updateProductionPlaceVerification(
   const updatedPlace: Place = {
     ...currentPlace,
     name: input.name?.trim() || currentPlace.name,
-    city: input.city?.trim() || currentPlace.city,
+    city: normalizePlaceCity(input.city ?? currentPlace.city),
     category: input.category?.trim() || currentPlace.category,
     status: input.status ?? currentPlace.status,
     loved: input.loved ?? currentPlace.loved,

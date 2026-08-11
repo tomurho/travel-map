@@ -371,6 +371,68 @@
   font-size: 11px;
 }
 
+.resultsActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.resultsActions > span {
+  color: var(--fg-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.resultsActions > .editingLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-charcoal);
+  font-weight: 600;
+}
+
+.editingLabel::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--fg-maple);
+  content: "";
+}
+
+.editModeButton {
+  appearance: none;
+  min-height: 36px;
+  border: 1px solid var(--fg-line);
+  border-radius: 999px;
+  padding: 0 13px;
+  background: var(--fg-paper);
+  color: var(--fg-charcoal);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.editModeButton[aria-pressed="true"] {
+  border-color: rgba(36, 35, 33, 0.22);
+  background: var(--fg-maple-soft);
+  color: var(--fg-charcoal);
+}
+
+.editModeButton:hover {
+  border-color: rgba(36, 35, 33, 0.35);
+  background: var(--fg-maple-soft);
+}
+
+.editNotice {
+  margin: 0;
+  border-bottom: 1px solid var(--fg-line);
+  padding: 8px 14px;
+  color: var(--fg-muted);
+  font-size: 11px;
+}
+
 .placeList {
   display: grid;
   grid-auto-rows: max-content;
@@ -394,16 +456,185 @@
   border: 1px solid rgba(36, 35, 33, 0.26);
   border-left: 4px solid var(--fg-charcoal);
   border-radius: 12px;
-  background: #f7f6f3;
+  background: #faf9f6;
+  box-shadow: 0 8px 24px rgba(36, 35, 33, 0.06);
 }
 
 .placeCopy {
+  position: relative;
   display: grid;
   min-width: 0;
   gap: 3px;
   align-content: center;
   min-height: 76px;
   padding: 8px 4px;
+}
+
+.rowEditButton {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  min-height: 34px;
+  transform: translateY(-50%);
+  appearance: none;
+  border: 1px solid rgba(36, 35, 33, 0.12);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: #f7f0e7;
+  color: var(--fg-charcoal);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rowEditButton:hover {
+  border-color: rgba(36, 35, 33, 0.25);
+  background: var(--fg-maple-soft);
+}
+
+.placeCopyEditable {
+  padding-right: 54px;
+}
+
+.inlineEditor {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid var(--fg-line);
+  padding: 15px 12px 14px;
+  background: #faf9f6;
+}
+
+.editorStatus {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.editorStatus legend,
+.editorCategory > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--fg-charcoal);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.editorStatus > div {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  border: 1px solid var(--fg-line);
+  border-radius: 11px;
+  padding: 3px;
+  background: #efeeeb;
+}
+
+.editorStatus label {
+  min-width: 0;
+}
+
+.editorStatus input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+}
+
+.editorStatus span {
+  display: grid;
+  min-height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 5px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.editorStatus input:checked + span {
+  background: var(--fg-charcoal);
+  box-shadow: 0 2px 7px rgba(36, 35, 33, 0.18);
+  color: white;
+}
+
+.editorStatus label:hover span {
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.editorStatus label:hover input:checked + span {
+  background: var(--fg-charcoal);
+}
+
+.editorStatus input:focus-visible + span {
+  outline: 2px solid var(--fg-paper);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px var(--fg-charcoal);
+}
+
+.editorCategory input {
+  appearance: none;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--fg-line);
+  border-radius: 11px;
+  padding: 0 12px;
+  background: white;
+  color: var(--fg-ink);
+  font-size: 13px;
+}
+
+.editorError {
+  margin: -3px 0 0;
+  color: #9d2e24;
+  font-size: 11px;
+}
+
+.editorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 1px;
+}
+
+.editorActions button {
+  appearance: none;
+  min-height: 40px;
+  border: 1px solid var(--fg-line);
+  border-radius: 999px;
+  padding: 0 16px;
+  background: white;
+  color: var(--fg-charcoal);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editorActions button[type="submit"] {
+  border-color: var(--fg-charcoal);
+  background: var(--fg-charcoal);
+  color: white;
+}
+
+.editorActions button:not([type="submit"]):hover {
+  border-color: rgba(36, 35, 33, 0.3);
+  background: var(--fg-maple-soft);
+}
+
+.editorActions button[type="submit"]:hover {
+  background: #11110f;
+}
+
+.editorActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .placeTitleRow {
@@ -460,6 +691,17 @@
   color: #c7465f;
   font-size: 15px;
   line-height: 1;
+}
+
+.wantMark {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  border: 2px solid white;
+  border-radius: 999px;
+  background: #f59e0b;
+  box-shadow: 0 0 0 1px rgba(36, 35, 33, 0.08);
 }
 
 .showMore {
@@ -668,7 +910,10 @@
   }
 
   .desktopCitySelect,
-  .placeTotal {
+  .placeTotal,
+  .editModeButton,
+  .rowEditButton,
+  .inlineEditor {
     display: none;
   }
 

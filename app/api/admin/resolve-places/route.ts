@@ -6,6 +6,7 @@ import {
 } from "@/lib/google-places-access";
 import { normalizeArea } from "@/lib/import";
 import type { Place } from "@/lib/place";
+import { normalizePlaceCity } from "@/lib/place-city";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
 type OpenAIExtraction = {
@@ -123,7 +124,7 @@ const GOOGLE_PLACE_SEARCH_FIELD_MASK =
   "places.displayName,places.formattedAddress,places.location,places.primaryType,places.primaryTypeDisplayName,places.types";
 
 function normalizeCityHint(cityHint: string) {
-  return cityHint && cityHint !== "all" ? cityHint : "";
+  return cityHint && cityHint !== "all" ? normalizePlaceCity(cityHint) : "";
 }
 
 function firstNonEmpty(...values: Array<string | null | undefined>) {

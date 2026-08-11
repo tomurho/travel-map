@@ -1,4 +1,5 @@
 import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
+import { normalizePlaceCity } from "@/lib/place-city";
 
 export type SpreadsheetRow = Record<string, unknown>;
 
@@ -188,7 +189,8 @@ export function normalizePlaceRow(row: SpreadsheetRow): NormalizedResult {
     "location",
     "Location",
   ]);
-  const city = readText(row, ["city", "City"]) || "Uncategorized";
+  const city =
+    normalizePlaceCity(readText(row, ["city", "City"])) || "Uncategorized";
   const category =
     readText(row, ["category", "Category", "Verified Category", "type"]) ||
     "Uncategorized";
