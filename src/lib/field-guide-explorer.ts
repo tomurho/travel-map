@@ -8,7 +8,7 @@ import { getPlaceTypeAliases, getPlaceTypeGroup, normalizeApprovedPlaceType, nor
 // Keep the pilot's chip ordering and provisional memberships for deferred types.
 // Approved memberships come from the shared catalog; neither changes a place here.
 export const explorerGroups = [
-  { id: "all", label: "All places", categories: [] },
+  { id: "all", label: "All categories", categories: [] },
   { id: "food", label: "Food", categories: [
     "Soba", "Tempura", "Ramen", "Kaiseki", "Izakaya", "Japanese Cuisine",
     "Beef", "Restaurant", "Chinese", "Tofu Dishes", "Unagi", "Vegetarian",
@@ -36,7 +36,7 @@ export function matchesExplorerGroup(place: Place, group: ExplorerGroup) {
 }
 
 export function specialtyLabel(category: string) {
-  return ({ "Wine bar": "Wine", "Cider bar": "Cider", Bar: "Other bars", "Café": "Cafés" } as Record<string, string>)[normalizeApprovedPlaceType(category)] ?? category;
+  return ({ "Wine bar": "Wine", "Cider bar": "Cider", Bar: "Bars", "Café": "Cafés" } as Record<string, string>)[normalizeApprovedPlaceType(category)] ?? category;
 }
 
 export function readExplorerFilters(

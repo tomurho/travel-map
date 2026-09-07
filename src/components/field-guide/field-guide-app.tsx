@@ -275,7 +275,7 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
     {sheet === "specialties" ? <ExplorerSheet title={`${group.label} specialties`} onClose={() => setSheet(null)}>
       <input className={styles.sheetSearch} type="search" aria-label="Find a specialty" placeholder="Find a specialty" value={specialtyQuery} onChange={(event) => setSpecialtyQuery(event.target.value)} />
       <div className={styles.options}>
-        <button type="button" aria-pressed={filters.category === "all"} onClick={() => selectSpecialty("all")}><span>All {group.label.toLowerCase()}</span><span>{totalInGroup}</span></button>
+        <button type="button" aria-pressed={filters.category === "all"} onClick={() => selectSpecialty("all")}><span>{group.id === "all" ? group.label : `All ${group.label.toLowerCase()}`}</span><span>{totalInGroup}</span></button>
         {matchingSpecialties.map((specialty) => <button key={specialty.category} type="button" aria-pressed={filters.category === specialty.category} onClick={() => selectSpecialty(specialty.category)}><span>{specialty.label}</span><span>{specialty.count}</span></button>)}
         {!matchingSpecialties.length ? <p className={styles.sheetIntro}>No specialties match that search.</p> : null}
       </div>
