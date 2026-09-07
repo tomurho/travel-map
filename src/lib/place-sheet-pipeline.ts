@@ -22,8 +22,13 @@ import {
   updateValues,
 } from "@/lib/google-sheets-oauth";
 import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
+import { mergePublishedPlace, verifyPublishedCorrection } from "@/lib/published-place-merge";
 import { findCanonicalCategory } from "@/lib/place-category";
 import { normalizePlaceCity } from "@/lib/place-city";
+import {
+  assertPreviewMatches, buildPreviewHash, describeFieldChanges,
+  PipelineError, requirePreviewHash, type FieldChange,
+} from "@/lib/pipeline-preview";
 import {
   readPlacesJsonSnapshot,
   writePlacesJsonAtomic,
@@ -95,12 +100,14 @@ export type EnrichReadyRowsOptions = {
 };
 
 export type PublishApprovedRowsOptions = {
+  expectedPreviewHash?: string;
   dryRun?: boolean;
   sheetId: string;
   write?: boolean;
 };
 
 export type SyncPublishedToAppOptions = {
+  expectedPreviewHash?: string;
   allowPartial?: boolean;
   dryRun?: boolean;
   sheetId: string;
@@ -2364,31 +2371,37 @@ export function buildPublishedUpsertPlan(input: {
   };
 }
 
-export async function publishApprovedRows(options: PublishApprovedRowsOptions) {
+const pipelineIO = {
+  createGoogleSheetsAuthClient, getSpreadsheetMetadata, readValues,
+  batchUpdateValues, appendValues, readPlacesJsonSnapshot, writePlacesJsonAtomic,
+};
+
+export async function publishApprovedRows(options: PublishApprovedRowsOptions, overrides: Partial<typeof pipelineIO> = {}) {
   if (!options.sheetId?.trim()) {
     throw new Error("--sheet-id is required.");
   }
 
-  const dryRun =
-    options.dryRun ?? (options.write === undefined ? false : !options.write);
-  const write = options.write ?? !dryRun;
+  const write = options.write ?? false;
+  const dryRun = options.dryRun ?? !write;
   if (dryRun && write) {
     throw new Error("Choose only one of preview mode or write mode.");
   }
 
-  const sheetId = options.sheetId;
-  const sheetsAuthClient = await createGoogleSheetsAuthClient();
-  const metadata = await getSpreadsheetMetadata(sheetsAuthClient, sheetId);
+  if (write) requirePreviewHash(options.expectedPreviewHash);
+  const io = { ...pipelineIO, ...overrides };
+  const sheetId = options.sheetId.trim();
+  const sheetsAuthClient = await io.createGoogleSheetsAuthClient();
+  const metadata = await io.getSpreadsheetMetadata(sheetsAuthClient, sheetId);
 
   assertSheetExists(metadata, REVIEW_TAB);
   assertSheetExists(metadata, PUBLISHED_TAB);
 
-  const reviewValues = await readValues(
+  const reviewValues = await io.readValues(
     sheetsAuthClient,
     sheetId,
     `${quoteSheetName(REVIEW_TAB)}!A1:ZZ`,
   );
-  const publishedValues = await readValues(
+  const publishedValues = await io.readValues(
     sheetsAuthClient,
     sheetId,
     `${quoteSheetName(PUBLISHED_TAB)}!A1:ZZ`,
@@ -2398,23 +2411,31 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions) {
     String(value ?? ""),
   );
 
-  requireHeaders(REVIEW_TAB, reviewHeaders, [
-    "id",
-    "candidateName",
-    "category",
-    "area",
-    "city",
-    "candidateAddress",
-    "candidateLatitude",
-    "candidateLongitude",
-    "candidateGoogleMapsUrl",
-    "candidateGooglePlaceId",
-    "status",
-    "loved",
-    "notes",
-    "reviewStatus",
-  ]);
-  requireHeaders(PUBLISHED_TAB, publishedHeaders, PUBLISHED_HEADERS);
+  const previewHash = buildPreviewHash({ operation: "publish", sheetId, reviewValues, publishedValues });
+  if (write) assertPreviewMatches(options.expectedPreviewHash, previewHash);
+
+  try {
+    requireHeaders(REVIEW_TAB, reviewHeaders, [
+      "id",
+      "candidateName",
+      "category",
+      "area",
+      "city",
+      "candidateAddress",
+      "candidateLatitude",
+      "candidateLongitude",
+      "candidateGoogleMapsUrl",
+      "candidateGooglePlaceId",
+      "status",
+      "loved",
+      "notes",
+      "reviewStatus",
+    ]);
+    requireHeaders(PUBLISHED_TAB, publishedHeaders, PUBLISHED_HEADERS);
+
+  } catch (error) {
+    throw new PipelineError("VALIDATION_FAILED", error instanceof Error ? error.message : "Invalid sheet headers.");
+  }
 
   const approvedRows = reviewValues
     .slice(1)
@@ -2423,33 +2444,60 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions) {
       (row) => readMappedSheetField(row, ["reviewStatus"]) === "Verified",
     );
   const lastChecked = new Date().toISOString();
-  const plan = buildPublishedUpsertPlan({
-    approvedRows,
-    lastChecked,
-    publishedHeaders,
-    publishedValues,
-  });
+  let plan: ReturnType<typeof buildPublishedUpsertPlan>;
+  try {
+    plan = buildPublishedUpsertPlan({
+      approvedRows,
+      lastChecked,
+      publishedHeaders,
+      publishedValues,
+    });
 
-  if (write && plan.updateRows.length > 0) {
-    await batchUpdateValues(
-      sheetsAuthClient,
-      sheetId,
-      plan.updateRows.map((row) => ({
-        range: `${quoteSheetName(PUBLISHED_TAB)}!A${row.rowNumber}:${columnName(
-          publishedHeaders.length - 1,
-        )}${row.rowNumber}`,
-        values: [row.values],
-      })),
-    );
+  } catch (error) {
+    throw new PipelineError("VALIDATION_FAILED", error instanceof Error ? error.message : "Invalid Published plan.");
   }
+  if (write && plan.blankIdRowsSkipped > 0) {
+    throw new PipelineError("VALIDATION_FAILED", "Verified Review rows are missing IDs.");
+  }
+  // Generated lastChecked is execution metadata, not a user-approved venue change.
+  const publishedById = new Map(publishedValues.slice(1).map((values) => {
+    const fields = mapSheetRowToObject(publishedHeaders, values);
+    return [readMappedSheetField(fields, ["id"]), fields] as const;
+  }));
+  const fieldChanges = [...plan.updateRows.map((row) => row.values), ...plan.appendRows].map((values) => {
+    const after = mapSheetRowToObject(publishedHeaders, values);
+    const id = readMappedSheetField(after, ["id"]);
+    const before = publishedById.get(id) ?? {};
+    const fields = describeFieldChanges(before, after).filter((change) => normalizeSheetHeader(change.field) !== normalizeSheetHeader("lastChecked"));
+    return { id, name: readMappedSheetField(after, ["name"]), fields };
+  });
+  const canApply = plan.blankIdRowsSkipped === 0 && fieldChanges.length > 0;
 
-  if (write && plan.appendRows.length > 0) {
-    await appendValues(
-      sheetsAuthClient,
-      sheetId,
-      `${quoteSheetName(PUBLISHED_TAB)}!A:${columnName(publishedHeaders.length - 1)}`,
-      plan.appendRows,
-    );
+  try {
+    if (write && plan.updateRows.length > 0) {
+      await io.batchUpdateValues(
+        sheetsAuthClient,
+        sheetId,
+        plan.updateRows.map((row) => ({
+          range: `${quoteSheetName(PUBLISHED_TAB)}!A${row.rowNumber}:${columnName(
+            publishedHeaders.length - 1,
+          )}${row.rowNumber}`,
+          values: [row.values],
+        })),
+      );
+    }
+
+    if (write && plan.appendRows.length > 0) {
+      await io.appendValues(
+        sheetsAuthClient,
+        sheetId,
+        `${quoteSheetName(PUBLISHED_TAB)}!A:${columnName(publishedHeaders.length - 1)}`,
+        plan.appendRows,
+      );
+    }
+
+  } catch {
+    throw new PipelineError("WRITE_OUTCOME_UNKNOWN", "Publish may have partially completed. Refresh and preview again before retrying.");
   }
 
   console.log(
@@ -2457,6 +2505,9 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions) {
   );
 
   return {
+    previewHash,
+    canApply: !write && canApply,
+    fieldChanges,
     approvedRowsFound: approvedRows.length,
     blankIdRowsSkipped: plan.blankIdRowsSkipped,
     duplicateIdsSkipped: [] as string[],
@@ -2661,6 +2712,15 @@ function placesEqual(firstPlace: Place, secondPlace: Place) {
   );
 }
 
+export type VerificationConflict = {
+  id: string;
+  name: string;
+  rowNumber: number;
+  fields: FieldChange[];
+  local: Place;
+  published: Place;
+};
+
 export function buildPublishedSyncPlan(input: {
   currentPlaces: Place[];
   publishedHeaders: string[];
@@ -2682,18 +2742,48 @@ export function buildPublishedSyncPlan(input: {
     id: string;
     name: string;
     rowNumber: number;
+    fields: FieldChange[];
   }> = [];
   const validationErrors: Array<{
     errors: string[];
     id: string;
     rowNumber: number;
   }> = [];
+  const verificationConflicts: VerificationConflict[] = [];
+  const preservedClosures: Array<{ id: string; name: string; rowNumber: number }> = [];
+  const publishedRowsById = new Map<string, number[]>();
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
 
   for (const row of publishedRows) {
+    const id = readMappedSheetField(row.fields, ["id"]).trim();
+    if (id) {
+      publishedRowsById.set(id, [...(publishedRowsById.get(id) ?? []), row.rowNumber]);
+    }
+  }
+
+  const duplicateIds = new Set(
+    [...publishedRowsById.entries()]
+      .filter(([, rowNumbers]) => rowNumbers.length > 1)
+      .map(([id]) => id),
+  );
+
+  for (const row of publishedRows) {
     const normalized = normalizePublishedRow(row);
+    const publishedId = readMappedSheetField(row.fields, ["id"]).trim();
+
+    if (publishedId && duplicateIds.has(publishedId)) {
+      skipped += 1;
+      validationErrors.push({
+        errors: [
+          `Duplicate Published id appears on rows ${publishedRowsById.get(publishedId)?.join(", ")}.`,
+        ],
+        id: publishedId,
+        rowNumber: normalized.rowNumber,
+      });
+      continue;
+    }
 
     if (!normalized.ok) {
       skipped += 1;
@@ -2715,19 +2805,23 @@ export function buildPublishedSyncPlan(input: {
         id: normalized.place.id,
         name: normalized.place.name,
         rowNumber: normalized.rowNumber,
+        fields: describeFieldChanges({}, { ...normalized.place }),
       });
       continue;
     }
 
-    const nextPlace = {
-      ...normalized.place,
-      // Once a place exists in the app, these editorial fields are maintained
-      // in the localhost Field Guide. Sheet sync continues to own identity,
-      // location, verification, and all other published metadata.
-      category: existingPlace.category,
-      loved: existingPlace.loved,
-      status: existingPlace.status,
-    };
+    const merge = mergePublishedPlace(existingPlace, normalized.place);
+    if (merge.kind === "closed") {
+      skipped += 1;
+      preservedClosures.push({ id: existingPlace.id, name: existingPlace.name, rowNumber: row.rowNumber });
+      continue;
+    }
+    if (merge.kind === "conflict") {
+      skipped += 1;
+      verificationConflicts.push({ id: existingPlace.id, name: existingPlace.name, rowNumber: row.rowNumber, fields: merge.changes, local: existingPlace, published: normalized.place });
+      continue;
+    }
+    const nextPlace = merge.place;
 
     if (placesEqual(existingPlace, nextPlace)) {
       skipped += 1;
@@ -2741,11 +2835,15 @@ export function buildPublishedSyncPlan(input: {
       id: normalized.place.id,
       name: normalized.place.name,
       rowNumber: normalized.rowNumber,
+      fields: describeFieldChanges({ ...existingPlace }, { ...nextPlace }),
     });
   }
 
   return {
     changes,
+    verificationConflicts,
+    preservedClosures,
+    duplicateIdCount: duplicateIds.size,
     inserted,
     nextPlaces: sortPlaces(Array.from(nextPlacesById.values())),
     rowsRead: publishedRows.length,
@@ -2757,10 +2855,18 @@ export function buildPublishedSyncPlan(input: {
 
 export function assertPublishedSyncCanWrite(input: {
   allowPartial?: boolean;
+  duplicateIdCount?: number;
   validationErrorCount: number;
+  verificationConflicts?: Array<{ id: string; rowNumber: number; fields: FieldChange[] }>;
 }) {
+  if ((input.duplicateIdCount ?? 0) > 0) {
+    throw new PipelineError("VALIDATION_FAILED", "Refusing to write because Published contains duplicate IDs.");
+  }
+  if (input.verificationConflicts?.length) {
+    throw new PipelineError("VERIFICATION_CONFLICT", "Reconcile the conflicting verified places before syncing.", input.verificationConflicts);
+  }
   if (input.validationErrorCount > 0 && !input.allowPartial) {
-    throw new Error(
+    throw new PipelineError("VALIDATION_FAILED",
       `Refusing to write because Published contains ${input.validationErrorCount} invalid row(s). Run a dry run, correct every row, or explicitly allow a partial sync.`,
     );
   }
@@ -2856,7 +2962,7 @@ export function buildPlacePipelineStatus(input: {
   const readyToPublish =
     publishPlan.appendRows.length + publishPlan.updateRows.length;
   const appChanges = appPlan.inserted + appPlan.updated;
-  const validationErrors = appPlan.validationErrors.length;
+  const validationErrors = appPlan.validationErrors.length + appPlan.verificationConflicts.length;
   const captureNew = captureStatus.counts.get("new") ?? 0;
   const captureReady = captureStatus.counts.get("ready") ?? 0;
   const captureEnriched = captureStatus.counts.get("enriched") ?? 0;
@@ -2945,7 +3051,7 @@ export async function getPlacePipelineSnapshot(input: { sheetId: string }) {
   };
 }
 
-export async function syncPublishedToApp(options: SyncPublishedToAppOptions) {
+export async function syncPublishedToApp(options: SyncPublishedToAppOptions, overrides: Partial<typeof pipelineIO> = {}) {
   const dryRun = options.dryRun ?? !options.write;
   const write = options.write ?? false;
 
@@ -2957,12 +3063,14 @@ export async function syncPublishedToApp(options: SyncPublishedToAppOptions) {
     throw new Error("Choose only one of --dry-run or --write.");
   }
 
-  const sheetId = options.sheetId;
-  const sheetsAuthClient = await createGoogleSheetsAuthClient();
-  const metadata = await getSpreadsheetMetadata(sheetsAuthClient, sheetId);
+  if (write) requirePreviewHash(options.expectedPreviewHash);
+  const io = { ...pipelineIO, ...overrides };
+  const sheetId = options.sheetId.trim();
+  const sheetsAuthClient = await io.createGoogleSheetsAuthClient();
+  const metadata = await io.getSpreadsheetMetadata(sheetsAuthClient, sheetId);
   assertSheetExists(metadata, PUBLISHED_TAB);
 
-  const publishedValues = await readValues(
+  const publishedValues = await io.readValues(
     sheetsAuthClient,
     sheetId,
     `${quoteSheetName(PUBLISHED_TAB)}!A1:ZZ`,
@@ -2970,7 +3078,14 @@ export async function syncPublishedToApp(options: SyncPublishedToAppOptions) {
   const publishedHeaders = (publishedValues[0] ?? []).map((value) =>
     String(value ?? ""),
   );
-  const productionSnapshot = readPlacesJsonSnapshot(PLACES_JSON_PATH);
+  const productionSnapshot = io.readPlacesJsonSnapshot(PLACES_JSON_PATH);
+  const previewHash = buildPreviewHash({ operation: "sync", sheetId, publishedValues, fileHash: productionSnapshot.fileHash, allowPartial: options.allowPartial === true });
+  if (write) assertPreviewMatches(options.expectedPreviewHash, previewHash);
+  try {
+    requireHeaders(PUBLISHED_TAB, publishedHeaders, PUBLISHED_HEADERS);
+  } catch (error) {
+    throw new PipelineError("VALIDATION_FAILED", error instanceof Error ? error.message : "Invalid Published headers.");
+  }
   const plan = buildPublishedSyncPlan({
     currentPlaces: productionSnapshot.places,
     publishedHeaders,
@@ -2978,6 +3093,9 @@ export async function syncPublishedToApp(options: SyncPublishedToAppOptions) {
   });
   const { changes, inserted, nextPlaces, rowsRead, skipped, updated, validationErrors } =
     plan;
+
+  const { verificationConflicts, preservedClosures } = plan;
+  const canApply = changes.length > 0 && plan.duplicateIdCount === 0 && verificationConflicts.length === 0 && (validationErrors.length === 0 || options.allowPartial === true);
 
   console.log("Published sync summary");
   console.table({
@@ -3005,9 +3123,12 @@ export async function syncPublishedToApp(options: SyncPublishedToAppOptions) {
     );
   }
 
-  if (dryRun) {
+  if (!write) {
     console.log("Dry-run mode: src/data/places.json was not written.");
     return {
+      previewHash, canApply, verificationConflicts, preservedClosures,
+      fileHash: productionSnapshot.fileHash,
+      publishedTabId: metadata.sheets?.find((sheet) => sheet.properties?.title === PUBLISHED_TAB)?.properties?.sheetId,
       changes,
       inserted,
       rowsRead,
@@ -3020,16 +3141,28 @@ export async function syncPublishedToApp(options: SyncPublishedToAppOptions) {
 
   assertPublishedSyncCanWrite({
     allowPartial: options.allowPartial,
+    duplicateIdCount: plan.duplicateIdCount,
+    verificationConflicts,
     validationErrorCount: validationErrors.length,
   });
 
-  writePlacesJsonAtomic(nextPlaces, {
-    expectedFileHash: productionSnapshot.fileHash,
-    filePath: PLACES_JSON_PATH,
-  });
+  if (changes.length > 0) {
+    try {
+      io.writePlacesJsonAtomic(nextPlaces, {
+        expectedFileHash: productionSnapshot.fileHash,
+        filePath: PLACES_JSON_PATH,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("changed after it was read")) {
+        throw new PipelineError("PREVIEW_STALE", "The local data changed during Apply. Preview again before applying.");
+      }
+      throw new PipelineError("WRITE_OUTCOME_UNKNOWN", "The app update could not be confirmed. Refresh and preview again before retrying.");
+    }
+  }
   console.log(`Wrote ${nextPlaces.length} place(s) to ${PLACES_JSON_PATH}.`);
 
   return {
+    previewHash, canApply: false, verificationConflicts, preservedClosures,
     changes,
     inserted,
     rowsRead,
@@ -3039,4 +3172,47 @@ export async function syncPublishedToApp(options: SyncPublishedToAppOptions) {
     partialWrite: validationErrors.length > 0,
     wrote: true,
   };
+}
+
+
+export async function resolvePublishedConflict(input: {
+  sheetId: string;
+  id: string;
+  rowNumber: number;
+  expectedPreviewHash?: string;
+  confirmVerified: boolean;
+  verificationNote: string;
+}, overrides: Partial<typeof pipelineIO> = {}) {
+  requirePreviewHash(input.expectedPreviewHash);
+  if (input.confirmVerified !== true || typeof input.verificationNote !== "string" || !input.verificationNote.trim()) {
+    throw new PipelineError("VALIDATION_FAILED", "Confirm the venue and pin, and explain how you verified the correction.");
+  }
+  if (!Number.isInteger(input.rowNumber) || input.rowNumber < 2 || typeof input.id !== "string" || !input.id.trim()) {
+    throw new PipelineError("VALIDATION_FAILED", "A valid place and Published row are required.");
+  }
+  // Reconstruct from trusted sources. Never accept replacement venue values from the client.
+  const preview = await syncPublishedToApp({ sheetId: input.sheetId, write: false }, overrides);
+  assertPreviewMatches(input.expectedPreviewHash, preview.previewHash);
+  const conflict = preview.verificationConflicts.find((row) => row.id === input.id && row.rowNumber === input.rowNumber);
+  if (!conflict) {
+    throw new PipelineError("PREVIEW_STALE", "This conflict no longer exists. Preview again before reviewing a correction.");
+  }
+  const io = { ...pipelineIO, ...overrides };
+  const snapshot = io.readPlacesJsonSnapshot(PLACES_JSON_PATH);
+  if (!("fileHash" in preview) || snapshot.fileHash !== preview.fileHash) {
+    throw new PipelineError("PREVIEW_STALE", "The local record changed. Preview again before reviewing a correction.");
+  }
+  const place = verifyPublishedCorrection(conflict.local, conflict.published, input.verificationNote);
+  try {
+    io.writePlacesJsonAtomic(snapshot.places.map((current) => current.id === place.id ? place : current), {
+      expectedFileHash: snapshot.fileHash,
+      filePath: PLACES_JSON_PATH,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("changed after it was read")) {
+      throw new PipelineError("PREVIEW_STALE", "The local record changed during verification. Preview again.");
+    }
+    throw new PipelineError("WRITE_OUTCOME_UNKNOWN", "The correction could not be confirmed. Preview again before retrying.");
+  }
+  return { place, requiresPreview: true };
 }

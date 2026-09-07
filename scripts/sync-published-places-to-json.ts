@@ -10,13 +10,14 @@ dotenv.config({ path: ".env.local", quiet: true });
 
 type CliOptions = {
   allowPartial: boolean;
+  expectedPreviewHash?: string;
   dryRun: boolean;
   help: boolean;
   sheetId: string | null;
   write: boolean;
 };
 
-function parseArgs(rawArgv: string[]): CliOptions {
+export function parseArgs(rawArgv: string[]): CliOptions {
   const argv = rawArgv[0] === "--" ? rawArgv.slice(1) : rawArgv;
   const options: CliOptions = {
     allowPartial: false,
@@ -38,8 +39,13 @@ function parseArgs(rawArgv: string[]): CliOptions {
       options.dryRun = true;
     } else if (arg === "--write") {
       options.write = true;
+    } else if (arg === "--expected-preview-hash") {
+      options.expectedPreviewHash = argv[index + 1];
+      index += 1;
     } else if (arg === "--allow-partial") {
       options.allowPartial = true;
+    } else {
+      throw new Error(`Unknown option: ${arg}`);
     }
   }
 
@@ -55,13 +61,15 @@ function printHelp() {
 
 Usage:
   pnpm sync:published:places -- --sheet-id <SHEET_ID> --dry-run
-  pnpm sync:published:places -- --sheet-id <SHEET_ID> --write
-  pnpm sync:published:places -- --sheet-id <SHEET_ID> --write --allow-partial
+  pnpm sync:published:places -- --sheet-id <SHEET_ID> --write --expected-preview-hash <HASH>
+  pnpm sync:published:places -- --sheet-id <SHEET_ID> --write --expected-preview-hash <HASH> --allow-partial
 
 Behavior:
   Reads Published, validates rows, merges by id into src/data/places.json,
   and writes only when --write is passed. Write mode fails closed if any row is
-  invalid. --allow-partial is an explicit recovery override. Defaults to --dry-run.`);
+  invalid. Apply requires the preview hash; use the same --allow-partial option
+  in preview and apply. Partial mode never bypasses verification conflicts or
+  duplicate IDs. Defaults to --dry-run.`);
 }
 
 async function main() {
@@ -72,12 +80,14 @@ async function main() {
     return;
   }
 
-  await syncPublishedToApp({
+  const result = await syncPublishedToApp({
+    expectedPreviewHash: options.expectedPreviewHash,
     allowPartial: options.allowPartial,
     dryRun: options.dryRun,
     sheetId: options.sheetId ?? "",
     write: options.write,
   });
+  console.log(JSON.stringify(result, null, 2));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

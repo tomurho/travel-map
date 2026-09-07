@@ -1,4 +1,3 @@
-import places from "@/data/places.json";
 import { TravelMapApp } from "@/components/travel-map-app";
 import { isPublicPlace } from "@/lib/filtering";
 import type {
@@ -7,6 +6,9 @@ import type {
   PlaceFilterState,
   PlaceStatus,
 } from "@/lib/place";
+import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
+
+export const dynamic = "force-dynamic";
 
 type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -54,6 +56,7 @@ export default async function OriginalPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const status = readStatus(readSearchParam(params.status));
   const loved = readLoved(readSearchParam(params.loved));
+  const places = readPlacesJsonSnapshot().places;
 
   const initialFilters: PlaceFilterState = {
     city: readSearchParam(params.city) ?? "all",

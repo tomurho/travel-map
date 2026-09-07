@@ -1,4 +1,9 @@
 :root {
+  --ui-bg: #f3f2ef;
+  --ui-paper: #fcfcfb;
+  --ui-ink: #242321;
+  --ui-muted: #696763;
+  --ui-line: rgba(36, 35, 33, 0.16);
   --bg: #f4efe6;
   --bg-strong: #d9e6f2;
   --surface: rgba(255, 250, 243, 0.8);
@@ -2243,8 +2248,7 @@ select {
   color: #8a4512;
 }
 
-.admin-pipeline-resume-list code,
-.admin-pipeline-step-guide code {
+.admin-pipeline-resume-list code {
   border-radius: 5px;
   padding: 1px 4px;
   background: rgba(31, 42, 47, 0.06);
@@ -2328,32 +2332,6 @@ select {
   gap: 12px;
   min-height: 190px;
   padding: 14px;
-}
-
-.admin-pipeline-step-guide {
-  display: grid;
-  gap: 10px;
-  margin: 12px 0 0;
-}
-
-.admin-pipeline-step-guide div {
-  display: grid;
-  gap: 3px;
-}
-
-.admin-pipeline-step-guide dt {
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.admin-pipeline-step-guide dd {
-  margin: 0;
-  color: var(--ink);
-  font-size: 0.8rem;
-  line-height: 1.45;
 }
 
 .admin-pipeline-step::after {
@@ -3808,3 +3786,80 @@ select {
     flex-direction: column;
   }
 }
+
+.admin-conflict-list { list-style: none; padding: 0; display: grid; gap: 1rem; }
+.admin-conflict-card { border: 1px solid #d6c9bb; border-radius: 12px; padding: 1rem; min-width: 0; }
+.admin-conflict-card h4 { margin: 0; }
+.admin-conflict-table { overflow-x: auto; }
+.admin-conflict-table table { border-collapse: collapse; width: 100%; text-align: left; }
+.admin-conflict-table caption { text-align: left; margin-bottom: .5rem; }
+.admin-conflict-table th, .admin-conflict-table td { padding: .6rem; border-bottom: 1px solid #e5ddd3; vertical-align: top; overflow-wrap: anywhere; min-width: 7rem; }
+.admin-conflict-links { display: flex; flex-wrap: wrap; gap: .75rem; }
+.admin-conflict-card form { display: grid; gap: .75rem; }
+.admin-conflict-card textarea { display: block; box-sizing: border-box; width: 100%; min-height: 5rem; margin-top: .4rem; padding: .6rem; border: 1px solid #d6c9bb; border-radius: 8px; font: inherit; }
+.admin-conflict-card :focus-visible { outline: 2px solid #735232; outline-offset: 3px; }
+
+.admin-credential { display: grid; gap: 0.5rem; max-width: 28rem; }
+.admin-credential small { font-weight: 400; }
+
+.admin-conflict-scroll-hint { display: none; }
+@media (max-width: 720px) { .admin-conflict-scroll-hint { display: block; font-size: .85rem; } }
+
+/* Current admin shares the Field Guide's visual language; legacy views keep their styles. */
+.admin-shell {
+  --ink: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --border: var(--ui-line);
+  --surface: var(--ui-paper);
+  --shadow: none;
+  --radius-xl: 16px;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--ui-bg);
+  font-size: 14px;
+  line-height: 1.5;
+  align-content: start;
+}
+.admin-shell > * { width: min(1320px, 100%); margin-inline: auto; }
+.admin-shell .panel { backdrop-filter: none; }
+.admin-shell .panel::after { display: none; }
+.admin-shell .admin-hero { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: center; gap: 24px; padding: 20px; }
+.admin-shell .admin-hero h1 { font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; }
+.admin-shell .admin-hero p { font-size: 14px; margin-top: 6px; color: var(--muted); }
+.admin-shell .admin-credential { gap: 6px; font-size: 13px; }
+.admin-shell .admin-credential input { min-height: 40px; font: inherit; }
+.admin-shell .admin-credential small { font-size: 12px; line-height: 1.4; color: var(--muted); }
+.admin-shell :is(h2, h3, h4, summary) { font-weight: 600; }
+.admin-shell :is(input, select, textarea) { font-family: inherit; }
+.admin-shell .admin-pipeline-guide { background: #f7f6f3; border-color: var(--border); padding: 14px; gap: 12px; }
+.admin-pipeline-counts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.admin-pipeline-counts div { border-left: 1px solid var(--border); padding-left: 12px; }
+.admin-pipeline-counts div:first-child { border: 0; padding-left: 0; }
+.admin-pipeline-counts dt { font-size: 12px; color: var(--muted); }
+.admin-pipeline-counts dd { margin: 2px 0 0; font-size: 22px; font-weight: 600; }
+.admin-shell .admin-pipeline-step { min-height: 160px; gap: 10px; padding: 16px; }
+.admin-shell .admin-pipeline-step p { font-size: 13px; line-height: 1.5; margin-top: 8px; }
+.admin-shell .admin-pipeline-step-number { background: var(--ui-bg); color: var(--ink); border-color: var(--border); }
+.admin-shell .admin-pipeline-step::after { display: none; }
+.admin-shell .admin-pipeline-action { background: white; color: var(--ink); border-color: var(--border); font-size: 14px; font-weight: 600; }
+.admin-shell .admin-pipeline-action:hover:not(:disabled) { background: #eeece7; border-color: #898680; }
+.admin-shell .admin-pipeline-action.is-primary:not(:disabled) { background: var(--ink); color: white; border-color: var(--ink); }
+.admin-shell .admin-pipeline-action.is-primary:hover:not(:disabled) { background: #403e3a; }
+.admin-shell .admin-pipeline-action:disabled { background: #f3f2ef; color: #807d76; opacity: 1; border-color: #e3e0da; }
+.admin-shell .admin-pipeline-guide-actions button { min-height: 40px; font-size: 13px; border-color: var(--border); color: var(--ink); }
+.admin-shell .admin-pipeline-guide-actions a { color: var(--ink); font-size: 13px; }
+.admin-shell .admin-pipeline-next-action:not(.is-warning) { border-color: var(--border); }
+.admin-shell .admin-pipeline-next-action > span { color: var(--ink); }
+.admin-shell .admin-pipeline-resume-heading > span { color: var(--ink); }
+.admin-shell .admin-pipeline-resume-heading > strong:not(.is-warning) { color: var(--ink); background: var(--ui-bg); }
+.admin-workflow-reference { border-top: 1px solid var(--border); padding-top: 12px; }
+.admin-workflow-reference summary { cursor: pointer; padding: 6px 0; font-size: 14px; }
+.admin-workflow-reference > p { color: var(--muted); font-size: 13px; margin: 12px 0; }
+.admin-shell .admin-screenshot-upload-card { display: grid; gap: 8px; }
+.admin-shell .admin-screenshot-upload-card h3 { margin: 0; }
+.admin-shell .admin-review-queue-header > strong { background: var(--ui-bg); color: var(--muted); }
+.admin-shell :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.admin-shell .admin-hidden-file-input:focus-visible + .admin-screenshot-select-button { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+.admin-shell .admin-review-queue-header span,
+.admin-shell .admin-review-candidate-actions > a { color: var(--ink); }

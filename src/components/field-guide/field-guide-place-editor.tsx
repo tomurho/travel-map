@@ -32,12 +32,16 @@ function getStoredStatus(state: EditorialState): {
 }
 
 export function FieldGuidePlaceEditor({
+  adminPassword,
   categories,
+  onAdminPasswordChange,
   onCancel,
   onSaved,
   place,
 }: {
+  adminPassword: string;
   categories: string[];
+  onAdminPasswordChange: (password: string) => void;
   onCancel: () => void;
   onSaved: (place: Place) => void;
   place: Place;
@@ -48,6 +52,7 @@ export function FieldGuidePlaceEditor({
   );
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const categoryListId = `field-guide-categories-${place.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const canonicalCategory = useMemo(
     () => findCanonicalCategory(category, categories),
@@ -71,7 +76,10 @@ export function FieldGuidePlaceEditor({
         `/api/admin/places/${encodeURIComponent(place.id)}`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(adminPassword ? { "x-admin-password": adminPassword } : {}),
+          },
           body: JSON.stringify({
             editMode: "field-guide-inline",
             name: place.name,
@@ -82,6 +90,11 @@ export function FieldGuidePlaceEditor({
         },
       );
       const payload = (await response.json()) as { error?: string; place?: Place };
+
+      if (response.status === 401) {
+        setShowPassword(true);
+        throw new Error("Enter the admin password and try again. Your edits are still here.");
+      }
 
       if (!response.ok || !payload.place) {
         throw new Error(payload.error ?? "Could not save this place.");
@@ -133,6 +146,22 @@ export function FieldGuidePlaceEditor({
           {categories.map((option) => <option key={option} value={option} />)}
         </datalist>
       </label>
+
+      {showPassword ? (
+        <label className={styles.editorCategory}>
+          <span>Admin password</span>
+          <input
+            autoComplete="current-password"
+            autoFocus
+            onChange={(event) => {
+              onAdminPasswordChange(event.target.value);
+              setError("");
+            }}
+            type="password"
+            value={adminPassword}
+          />
+        </label>
+      ) : null}
 
       {error ? (
         <p className={styles.editorError} id={`edit-error-${place.id}`} role="alert">

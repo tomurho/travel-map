@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GoogleMap,
+  GoogleMarkerClusterer,
+  type GoogleMarkerClustererProps,
   MarkerF,
   OverlayView,
   OverlayViewF,
   useJsApiLoader,
+  useGoogleMap,
 } from "@react-google-maps/api";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
 import type { Place } from "@/lib/place";
@@ -28,6 +31,9 @@ type MapViewProps = {
   ) => void;
   showLocationMessage?: boolean;
   showPlaceDetails?: boolean;
+  clusterMarkers?: boolean;
+  viewportCity?: string;
+  followUserLocation?: boolean;
 };
 
 const defaultCenter = { lat: 1.3521, lng: 103.8198 };
@@ -154,6 +160,67 @@ function StatusBadgeIcon({ icon }: { icon: "bookmark" | "heart" }) {
   );
 }
 
+
+type MapClusterer = Parameters<GoogleMarkerClustererProps["children"]>[0];
+const clusterAlgorithmOptions = { radius: 100, maxZoom: 16 };
+const clusterOptions: GoogleMarkerClustererProps["options"] = {
+  algorithmOptions: clusterAlgorithmOptions,
+  renderer: {
+    render: ({ count, position }) => new google.maps.Marker({
+      position,
+      title: `${count} places. Zoom in to explore`,
+      label: { text: String(count), color: "#ffffff", fontSize: "13px", fontWeight: "700" },
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 22,
+        fillColor: "#343330",
+        fillOpacity: 1,
+        strokeColor: "#fffdf9",
+        strokeWeight: 3,
+      },
+      zIndex: 100 + count,
+    }),
+  },
+};
+
+function PlaceMarker({ place, isActive, onSelectPlace, clusterer }: {
+  place: Place;
+  isActive: boolean;
+  onSelectPlace: (id: string) => void;
+  clusterer?: MapClusterer;
+}) {
+  return <MarkerF
+    clusterer={clusterer}
+    title={`${place.name}, ${getStatusBadge(place)?.label ?? "Saved"}`}
+    onClick={() => onSelectPlace(place.id)}
+    position={{ lat: place.latitude, lng: place.longitude }}
+    zIndex={isActive ? 1000 : getMarkerZIndex(place, false)}
+    icon={{ path: google.maps.SymbolPath.CIRCLE, ...getMarkerAppearance(place, isActive) }}
+  />;
+}
+
+function ClusteredPlaces({ clusterer, places, openPlaceId, onSelectPlace }: {
+  clusterer: MapClusterer;
+  places: Place[];
+  openPlaceId: string | null;
+  onSelectPlace: (id: string) => void;
+}) {
+  const map = useGoogleMap();
+  useEffect(() => {
+    clusterer.setMap(map);
+    return () => { clusterer.setMap(null); };
+  }, [clusterer, map]);
+
+  return <>{places.map((place) => (
+    <PlaceMarker
+      // Remount when moving into/out of the clusterer's ownership.
+      key={`${place.id}:${place.id === openPlaceId ? "selected" : "clustered"}`}
+      clusterer={place.id === openPlaceId ? undefined : clusterer}
+      place={place} isActive={place.id === openPlaceId} onSelectPlace={onSelectPlace}
+    />
+  ))}</>;
+}
+
 export function MapView({
   places,
   cityCenters,
@@ -168,7 +235,13 @@ export function MapView({
   onLocationStatusChange,
   showLocationMessage = true,
   showPlaceDetails = true,
+  clusterMarkers = false,
+  viewportCity = places[0]?.city ?? "",
+  followUserLocation = true,
 }: MapViewProps) {
+  const locationCityRef = useRef<string | null>(null);
+  const locationZoomRef = useRef(13);
+  const lastFramedLocationRef = useRef<google.maps.LatLngLiteral | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isCompactPopup, setIsCompactPopup] = useState(false);
   const [userLocation, setUserLocation] = useState<google.maps.LatLngLiteral | null>(
@@ -194,12 +267,21 @@ export function MapView({
 
   useEffect(() => {
     if (!map || !isLoaded) {
+      lastFramedLocationRef.current = null;
       return;
     }
 
-    if (userLocation && locationStatus === "found") {
+    if (followUserLocation && userLocation && locationStatus === "found" && locationCityRef.current === viewportCity) {
+      // City URL changes may render after the location callback. Center only once
+      // the matching city is visible, rather than letting an old-city fit win.
+      if (lastFramedLocationRef.current !== userLocation) {
+        map.panTo(userLocation);
+        map.setZoom(locationZoomRef.current);
+        lastFramedLocationRef.current = userLocation;
+      }
       return;
     }
+    lastFramedLocationRef.current = null;
 
     if (places.length === 0) {
       map.setCenter(defaultCenter);
@@ -216,7 +298,7 @@ export function MapView({
     }
 
     map.fitBounds(bounds, 72);
-  }, [isLoaded, locationStatus, map, places, userLocation]);
+  }, [followUserLocation, isLoaded, locationStatus, map, places, userLocation, viewportCity]);
 
   useEffect(() => {
     if (!map || !isLoaded || !selectedPlace) {
@@ -227,8 +309,8 @@ export function MapView({
       lat: selectedPlace.latitude,
       lng: selectedPlace.longitude,
     });
-    map.setZoom(Math.max(map.getZoom() ?? 2, 12));
-  }, [isLoaded, map, selectedPlace]);
+    map.setZoom(Math.max(map.getZoom() ?? 2, clusterMarkers ? 15 : 12));
+  }, [clusterMarkers, isLoaded, map, selectedPlace]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 720px)");
@@ -300,6 +382,8 @@ export function MapView({
         };
         const nearbyCity = findNearbyCity(nextLocation);
 
+        locationCityRef.current = nearbyCity ?? viewportCity;
+        locationZoomRef.current = nearbyCity ? 13 : 12;
         setUserLocation(nextLocation);
         setLocationStatus("found");
         const nextLocationMessage = nearbyCity
@@ -313,8 +397,6 @@ export function MapView({
         });
         onSelectPlace(null);
         onClosePlace();
-        map?.panTo(nextLocation);
-        map?.setZoom(nearbyCity ? 13 : 12);
 
         if (nearbyCity) {
           onNearbyCityDetected(nearbyCity);
@@ -454,23 +536,17 @@ export function MapView({
           }}
         />
       ) : null}
-      {places.map((place) => {
-        const isActive = place.id === openPlaceId;
-        const markerAppearance = getMarkerAppearance(place, isActive);
-
-        return (
-          <MarkerF
-            key={place.id}
-            onClick={() => onSelectPlace(place.id)}
-            position={{ lat: place.latitude, lng: place.longitude }}
-            zIndex={getMarkerZIndex(place, isActive)}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              ...markerAppearance,
-            }}
-          />
-        );
-      })}
+      {clusterMarkers ? (
+        <GoogleMarkerClusterer options={clusterOptions}>
+          {(clusterer) => (
+            <ClusteredPlaces clusterer={clusterer} places={places}
+              openPlaceId={openPlaceId} onSelectPlace={onSelectPlace} />
+          )}
+        </GoogleMarkerClusterer>
+      ) : places.map((place) => (
+        <PlaceMarker key={place.id} place={place} isActive={place.id === openPlaceId}
+          onSelectPlace={onSelectPlace} />
+      ))}
 
       {showPlaceDetails && openPlace && !isCompactPopup ? (
         <OverlayViewF

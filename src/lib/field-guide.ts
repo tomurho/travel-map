@@ -1,3 +1,4 @@
+import { getAvailableAreas, getAvailableCategories } from "@/lib/filtering";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
 import type { Place } from "@/lib/place";
 import { normalizePlaceCity } from "@/lib/place-city";
@@ -61,6 +62,29 @@ export function normalizeFieldGuideFilters(
       filters.status === "want_to_go" && !filters.lovedOnly
         ? "want_to_go"
         : "all",
+  };
+}
+
+export function readFieldGuideFilters(
+  places: Place[],
+  params: Pick<URLSearchParams, "get">,
+  rememberedCity: string | null = null,
+): FieldGuideFilters {
+  const filters = normalizeFieldGuideFilters(places, {
+    city: resolveFieldGuideCityPreference(places, params.get("city"), rememberedCity),
+    status: params.get("status") === "want_to_go" ? "want_to_go" : "all",
+    category: params.get("category") ?? "all",
+    area: params.get("area") ?? "all",
+    lovedOnly: ["1", "loved"].includes(params.get("loved") ?? ""),
+    query: params.get("q") ?? "",
+  });
+  // Resolve unavailable refinements without writing back over a navigation.
+  const availableCategories = getAvailableCategories(places, { ...filters, loved: "all" });
+  const availableAreas = getAvailableAreas(places, { ...filters, loved: "all" });
+  return {
+    ...filters,
+    category: availableCategories.includes(filters.category) ? filters.category : "all",
+    area: availableAreas.includes(filters.area) ? filters.area : "all",
   };
 }
 
@@ -135,8 +159,8 @@ export function filterAndSortFieldGuidePlaces(
         }
       }
 
-      if (firstPlace.loved !== secondPlace.loved) {
-        return firstPlace.loved ? -1 : 1;
+      if ((firstPlace.loved === true) !== (secondPlace.loved === true)) {
+        return firstPlace.loved === true ? -1 : 1;
       }
 
       return firstPlace.name.localeCompare(secondPlace.name);
@@ -161,8 +185,8 @@ export function buildFieldGuideQuery(filters: FieldGuideFilters) {
   if (filters.lovedOnly) {
     params.set("loved", "1");
   }
-  if (filters.query.trim()) {
-    params.set("q", filters.query.trim());
+  if (filters.query) {
+    params.set("q", filters.query);
   }
 
   return params.toString();

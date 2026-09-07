@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { publishApprovedRows } from "@/lib/place-sheet-pipeline";
+import { PipelineError } from "@/lib/pipeline-preview";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
@@ -10,6 +11,7 @@ export async function POST(request: NextRequest) {
 
   const input = (await request.json()) as {
     confirmWrite?: boolean;
+    expectedPreviewHash?: string;
     sheetId?: string;
     write?: boolean;
   };
@@ -25,12 +27,16 @@ export async function POST(request: NextRequest) {
   try {
     const result = await publishApprovedRows({
       dryRun: !write,
+      expectedPreviewHash: input.expectedPreviewHash,
       sheetId: input.sheetId ?? "",
       write,
     });
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof PipelineError) {
+      return NextResponse.json({ error: error.message, code: error.code, details: error.details }, { status: error.status });
+    }
     return NextResponse.json(
       {
         error:

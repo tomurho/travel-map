@@ -4,6 +4,7 @@ import {
   buildFieldGuideQuery,
   filterAndSortFieldGuidePlaces,
   normalizeFieldGuideFilters,
+  readFieldGuideFilters,
   resolveFieldGuideCityPreference,
   toggleFieldGuideLoved,
   toggleFieldGuideWantToGo,
@@ -253,4 +254,32 @@ test("Nearby composes independently with Loved or Want to go", () => {
 
   assert.deepEqual(lovedNearby.map((place) => place.id), ["loved-cafe"]);
   assert.deepEqual(wantToGoNearby.map((place) => place.id), ["nearby-noodle"]);
+});
+
+
+test("URL filters restore all controls across successive navigation entries", () => {
+  const first = { ...baseFilters, status: "want_to_go" as const, category: "Noodles", area: "South", query: "Nearby Noodle " };
+  const second = { ...baseFilters, city: "Elsewhere", lovedOnly: true, query: "Other City" };
+  for (const expected of [first, second, first, second]) {
+    const params = new URLSearchParams(buildFieldGuideQuery(expected));
+    assert.deepEqual(readFieldGuideFilters(places, params, "Elsewhere"), expected);
+  }
+  assert.deepEqual(readFieldGuideFilters(places, new URLSearchParams("city=Test+City")), baseFilters);
+});
+
+test("URL filters normalize unavailable refinements without changing the URL", () => {
+  const params = new URLSearchParams("city=Test+City&category=Missing&area=Missing&loved=loved&status=want_to_go&q=hello+world");
+  const before = params.toString();
+  assert.deepEqual(readFieldGuideFilters(places, params), { ...baseFilters, lovedOnly: true, query: "hello world" });
+  assert.equal(params.toString(), before);
+  assert.equal(readFieldGuideFilters(places, new URLSearchParams(), "Test City").city, "Test City");
+});
+
+test("false and unrated loved values sort alphabetically regardless of input order", () => {
+  const alpha = { ...places[0], id: "alpha", name: "Alpha", loved: false };
+  const beta = { ...places[0], id: "beta", name: "Beta", loved: null };
+  const loved = { ...places[0], id: "loved", name: "Zebra", loved: true };
+  for (const input of [[alpha, beta, loved], [beta, alpha, loved], [loved, beta, alpha], [loved, alpha, beta], [alpha, loved, beta], [beta, loved, alpha]]) {
+    assert.deepEqual(filterAndSortFieldGuidePlaces(input, baseFilters, { nearbyActive: false, userLocation: null }).map((p) => p.id), ["loved", "alpha", "beta"]);
+  }
 });

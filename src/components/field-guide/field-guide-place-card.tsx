@@ -23,6 +23,7 @@ export function FieldGuidePlaceCard({
   isEditing,
   isSelected,
   onEdit,
+  onSelect,
   place,
 }: {
   distanceKm: number | null;
@@ -31,6 +32,7 @@ export function FieldGuidePlaceCard({
   isEditing?: boolean;
   isSelected: boolean;
   onEdit?: () => void;
+  onSelect: () => void;
   place: Place;
 }) {
   return (
@@ -41,15 +43,15 @@ export function FieldGuidePlaceCard({
     >
       <div className={`${styles.placeCopy}${isEditable && !isEditing ? ` ${styles.placeCopyEditable}` : ""}`}>
         <div className={styles.placeTitleRow}>
-          <a
-            aria-label={`Open ${place.name} in Google Maps`}
+          <button
+            aria-label={`Show ${place.name} on map`}
+            aria-pressed={isSelected}
             className={styles.placeNameLink}
-            href={getGoogleMapsHandoffUrl(place)}
-            rel="noopener noreferrer"
-            target="_blank"
+            onClick={onSelect}
+            type="button"
           >
             {place.name}
-          </a>
+          </button>
           {place.loved ? (
             <span className={styles.lovedMark} title="Loved">
               <span aria-hidden="true">♥</span>
@@ -88,7 +90,7 @@ export function FieldGuidePlaceDetail({
   onClose: () => void;
   place: Place;
 }) {
-  const notes = getPublicNotes(place).slice(0, 2);
+  const notes = getPublicNotes(place);
 
   return (
     <aside className={styles.placeDetail} aria-label={`Selected place: ${place.name}`}>
@@ -106,29 +108,34 @@ export function FieldGuidePlaceDetail({
             {place.loved ? "♥ " : null}
             {getStatusLabel(place)}
           </p>
-          <h2>
-            <a
-              aria-label={`Open ${place.name} in Google Maps`}
-              className={styles.detailNameLink}
-              href={getGoogleMapsHandoffUrl(place)}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              {place.name}
-            </a>
-          </h2>
+          <h2>{place.name}</h2>
           <span>
             {place.category}
             {place.district ? ` · ${place.district}` : ""}
           </span>
         </div>
       </div>
+      {place.address.trim() ? <p className={styles.detailAddress}>{place.address}</p> : null}
+      <a
+        className={styles.mapsHandoff}
+        href={getGoogleMapsHandoffUrl(place)}
+        rel="noopener noreferrer"
+        target="_blank"
+        aria-label={`Open ${place.name} in Google Maps (new tab)`}
+      >
+        Open in Google Maps ↗
+      </a>
       {distanceKm === null ? null : (
         <p className={styles.detailDistance}>{formatDistance(distanceKm)} away</p>
       )}
       {notes.length > 0 ? (
         <div className={styles.detailNotes}>
-          {notes.map((note) => <p key={note}>{note}</p>)}
+          <h3>Your notes</h3>
+          {notes.slice(0, 2).map((note, index) => <p key={index}>{note}</p>)}
+          {notes.length > 2 ? <details>
+            <summary>Read {notes.length - 2} more {notes.length === 3 ? "note" : "notes"}</summary>
+            {notes.slice(2).map((note, index) => <p key={index}>{note}</p>)}
+          </details> : null}
         </div>
       ) : null}
     </aside>

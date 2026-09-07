@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { AdminConflictReview } from "@/components/admin-conflict-review";
 import { AdminReviewQueue } from "@/components/admin-review-queue";
 import { formatProviderAttemptSummary } from "@/lib/admin-ui";
 import { formatDistance } from "@/lib/geo";
 import type {
   PlacePipelineStatus,
+  VerificationConflict,
   ReviewCandidate,
   ReviewCandidateDecision,
   ReviewCandidateEdits,
@@ -132,9 +134,31 @@ type AdminCandidateSummary = {
   provider: Place["verificationSource"];
 };
 
+type PipelineFieldChange = { field: string; before: unknown; after: unknown };
+type PipelineRowChanges = { id: string; name?: string; rowNumber?: number; fields: PipelineFieldChange[] };
+
+function PipelineChanges({ rows }: { rows: PipelineRowChanges[] }) {
+  return <ul className="admin-note-list">{rows.map((row) => (
+    <li key={`${row.id}-${row.rowNumber ?? ""}`}>
+      <details>
+        <summary>{row.name || row.id}{row.rowNumber ? ` · Row ${row.rowNumber}` : ""} · {row.fields.length} changed fields</summary>
+        <ul>{row.fields.map((change) => <li key={change.field}>
+          <strong>{change.field.replace(/([a-z])([A-Z])/g, "$1 $2")}</strong>: {JSON.stringify(change.before)} → {JSON.stringify(change.after)}
+        </li>)}</ul>
+      </details>
+    </li>
+  ))}</ul>;
+}
+
 type PipelineSyncResult = {
+  previewHash?: string;
+  canApply?: boolean;
+  verificationConflicts?: VerificationConflict[];
+  publishedTabId?: number;
+  preservedClosures?: Array<{ id: string; name: string; rowNumber: number }>;
   changes?: Array<{
     action: "insert" | "update";
+    fields: PipelineFieldChange[];
     id: string;
     name: string;
     rowNumber: number;
@@ -153,6 +177,9 @@ type PipelineSyncResult = {
 };
 
 type PipelinePublishResult = {
+  previewHash?: string;
+  canApply?: boolean;
+  fieldChanges?: PipelineRowChanges[];
   approvedRowsFound?: number;
   blankIdRowsSkipped?: number;
   duplicateIdsSkipped?: string[];
@@ -1343,6 +1370,11 @@ export function AdminWorkflow({
       return;
     }
 
+    if (write && (!pipelineResult?.previewHash || !pipelineResult.canApply)) {
+      setError("Create a valid preview with changes before applying.");
+      return;
+    }
+
     setIsSyncingPublished(true);
     setError(null);
     setPipelineMessage(null);
@@ -1354,6 +1386,7 @@ export function AdminWorkflow({
       const response = await fetch("/api/admin/place-pipeline/sync-published", {
         body: JSON.stringify({
           confirmWrite: write,
+          expectedPreviewHash: write ? pipelineResult?.previewHash : undefined,
           sheetId: pipelineSheetId.trim(),
           write,
         }),
@@ -1379,6 +1412,9 @@ export function AdminWorkflow({
         void refreshPipelineSnapshot(undefined, { force: true });
       }
     } catch (syncError) {
+      if (write) {
+        setPipelineResult((current) => current ? { ...current, canApply: false, previewHash: undefined } : null);
+      }
       setError(
         syncError instanceof Error
           ? syncError.message
@@ -1476,6 +1512,11 @@ export function AdminWorkflow({
       return;
     }
 
+    if (write && (!pipelinePublishResult?.previewHash || !pipelinePublishResult.canApply)) {
+      setError("Create a valid preview with changes before applying.");
+      return;
+    }
+
     setIsPublishingApprovedPlaces(true);
     setError(null);
     setPipelinePublishMessage(null);
@@ -1487,6 +1528,7 @@ export function AdminWorkflow({
       const response = await fetch("/api/admin/place-pipeline/publish-approved", {
         body: JSON.stringify({
           confirmWrite: write,
+          expectedPreviewHash: write ? pipelinePublishResult?.previewHash : undefined,
           sheetId: pipelineSheetId.trim(),
           write,
         }),
@@ -1515,6 +1557,9 @@ export function AdminWorkflow({
         void refreshPipelineSnapshot(undefined, { force: true });
       }
     } catch (publishError) {
+      if (write) {
+        setPipelinePublishResult((current) => current ? { ...current, canApply: false, previewHash: undefined } : null);
+      }
       setError(
         publishError instanceof Error
           ? publishError.message
@@ -2361,10 +2406,9 @@ export function AdminWorkflow({
         >
           <div className="admin-pipeline-guide-header">
             <div>
-              <h3 id="admin-resume-guide-title">Coming back after a break?</h3>
+              <h3 id="admin-resume-guide-title">Pipeline overview</h3>
               <p>
-                Find the first row below that matches your Google Sheet, then
-                continue from there. Use column headers; column letters may move.
+                Check what is ready, review candidates, then preview your changes.
               </p>
             </div>
             <div className="admin-pipeline-guide-actions">
@@ -2416,6 +2460,120 @@ export function AdminWorkflow({
               Checking the Google Sheet…
             </p>
           )}
+          {pipelineStatus && pipelineStatus.validationErrors > 0 ? (
+            <p className="admin-pipeline-status-error" role="alert">
+              {pipelineStatus.validationErrors} Published {pipelineStatus.validationErrors === 1 ? "row needs" : "rows need"} correction before applying an update. Preview Update shows the details.
+            </p>
+          ) : null}
+          <dl className="admin-pipeline-counts">
+            <div><dt>New captures</dt><dd>{pipelineStatus?.capture.new ?? "–"}</dd></div>
+            <div><dt>Ready for lookup</dt><dd>{pipelineStatus?.capture.ready ?? "–"}</dd></div>
+            <div><dt>Candidates to review</dt><dd>{pipelineStatus?.review.candidate ?? "–"}</dd></div>
+            <div><dt>Ready to publish</dt><dd>{pipelineStatus?.readyToPublish ?? "–"}</dd></div>
+            <div><dt>App changes</dt><dd>{pipelineStatus?.appChanges ?? "–"}</dd></div>
+          </dl>
+
+        </section>
+
+        <AdminReviewQueue
+          candidates={reviewCandidates}
+          categoryOptions={categoryOptions}
+          error={reviewCandidateError}
+          isLoading={isLoadingPipelineSnapshot}
+          message={reviewCandidateMessage}
+          onDecision={updateReviewCandidateDecision}
+          updatingKey={updatingReviewCandidateKey}
+        />
+
+
+
+        <section className="admin-pipeline-workflow" aria-label="Pipeline workflow">
+          <article className="admin-pipeline-step">
+            <span className="admin-pipeline-step-number">1</span>
+            <div>
+              <h3>Enrich Ready Captures</h3>
+              <p>Looks up Capture rows marked Ready using Google Places. Review the resulting candidates before publishing.</p>
+            </div>
+            <button
+              className="admin-pipeline-action is-secondary"
+              disabled={isReviewingNewPlaces}
+              onClick={reviewNewPlaces}
+              type="button"
+            >
+              {isReviewingNewPlaces ? "Processing..." : "Process Ready Rows"}
+            </button>
+          </article>
+
+          <article className="admin-pipeline-step">
+            <span className="admin-pipeline-step-number">2</span>
+            <div>
+              <h3>Publish Verified Reviews</h3>
+              <p>Preview verified Review rows, then apply the changes to Published.</p>
+            </div>
+            <div className="admin-pipeline-step-actions">
+            <button
+              className="admin-pipeline-action is-secondary"
+              disabled={isPublishingApprovedPlaces}
+              onClick={() => publishApprovedPlaces(false)}
+              type="button"
+            >
+              {isPublishingApprovedPlaces
+                ? "Working..."
+                : "Preview Publish"}
+            </button>
+            <button
+              className="admin-pipeline-action is-primary"
+              disabled={
+                isPublishingApprovedPlaces ||
+                pipelinePublishResult?.mode !== "preview" ||
+                pipelinePublishResult?.canApply !== true ||
+                (pipelinePublishResult.rowsToPublish ?? 0) === 0 ||
+                Boolean(pipelinePublishResult.validationIssues)
+              }
+              onClick={() => publishApprovedPlaces(true)}
+              type="button"
+            >
+              Apply Publish
+            </button>
+            </div>
+          </article>
+
+          <article className="admin-pipeline-step">
+            <span className="admin-pipeline-step-number">3</span>
+            <div>
+              <h3>Update Travel Map</h3>
+              <p>Preview Published changes, resolve any conflicts, then update the app.</p>
+            </div>
+            <div className="admin-pipeline-step-actions">
+            <button
+              className="admin-pipeline-action is-secondary"
+              disabled={isSyncingPublished}
+              onClick={() => syncPublishedToApp(false)}
+              type="button"
+            >
+              {isSyncingPublished ? "Working..." : "Preview Update"}
+            </button>
+            <button
+              className="admin-pipeline-action is-primary"
+              disabled={
+                isSyncingPublished ||
+                pipelineResult?.wrote !== false ||
+                pipelineResult?.canApply !== true ||
+                Boolean(pipelineResult.validationErrors?.length) ||
+                (pipelineResult.changes?.length ?? 0) === 0
+              }
+              onClick={() => syncPublishedToApp(true)}
+              type="button"
+            >
+              Apply Update
+            </button>
+            </div>
+          </article>
+        </section>
+
+        <details className="admin-workflow-reference">
+          <summary>Workflow guide · Coming back after a break?</summary>
+          <p>Find the stage that matches your Sheet. Use column headers; column letters may move.</p>
           <ol className="admin-pipeline-resume-list">
             <li>
               <div className="admin-pipeline-resume-heading">
@@ -2431,7 +2589,7 @@ export function AdminWorkflow({
                 <strong>{pipelineStatus?.capture.ready ?? "–"}</strong>
               </div>
               <code>intakeStatus = Ready</code>
-              <p>Click <strong>Process Ready Rows</strong> below.</p>
+              <p>Select <strong>Process Ready Rows</strong>.</p>
             </li>
             <li>
               <div className="admin-pipeline-resume-heading">
@@ -2442,7 +2600,7 @@ export function AdminWorkflow({
               <code>reviewStatus = Candidate</code>
               <p>
                 Lookup is complete, but the place is not verified. Use Candidate
-                review below to open Maps, then verify or reject the match.
+                review to open Maps, then verify or reject the match.
               </p>
             </li>
             <li>
@@ -2476,17 +2634,8 @@ export function AdminWorkflow({
               </p>
             </li>
           </ol>
-        </section>
-
-        <AdminReviewQueue
-          candidates={reviewCandidates}
-          categoryOptions={categoryOptions}
-          error={reviewCandidateError}
-          isLoading={isLoadingPipelineSnapshot}
-          message={reviewCandidateMessage}
-          onDecision={updateReviewCandidateDecision}
-          updatingKey={updatingReviewCandidateKey}
-        />
+          <p>Google lookup creates candidates, not verification. Review each venue and pin before publishing. Preview and Apply remain separate steps; Published needs no further status edit. After updating, open the Field Guide to check the result.</p>
+        </details>
 
         <details className="admin-pipeline-settings">
           <summary>Advanced settings</summary>
@@ -2522,131 +2671,6 @@ export function AdminWorkflow({
             </label>
           </div>
         </details>
-
-        <section className="admin-pipeline-workflow" aria-label="Pipeline workflow">
-          <article className="admin-pipeline-step">
-            <span className="admin-pipeline-step-number">1</span>
-            <div>
-              <h3>Enrich Ready Captures</h3>
-              <dl className="admin-pipeline-step-guide">
-                <div>
-                  <dt>Before</dt>
-                  <dd>In Capture, change each row you want processed from <code>New</code> to <code>Ready</code>.</dd>
-                </div>
-                <div>
-                  <dt>What happens</dt>
-                  <dd>
-                    Google Places is called, a <code>Candidate</code> row is added
-                    to Review, and Capture becomes <code>Enriched</code>. Enriched
-                    means lookup complete—not verified.
-                  </dd>
-                </div>
-                <div>
-                  <dt>Your next action</dt>
-                  <dd>Use Candidate review above to open Maps, then verify or reject the match.</dd>
-                </div>
-              </dl>
-            </div>
-            <button
-              className="admin-pipeline-action is-secondary"
-              disabled={isReviewingNewPlaces}
-              onClick={reviewNewPlaces}
-              type="button"
-            >
-              {isReviewingNewPlaces ? "Processing..." : "Process Ready Rows"}
-            </button>
-          </article>
-
-          <article className="admin-pipeline-step">
-            <span className="admin-pipeline-step-number">2</span>
-            <div>
-              <h3>Publish Verified Reviews</h3>
-              <dl className="admin-pipeline-step-guide">
-                <div>
-                  <dt>Before</dt>
-                  <dd>Confirm the correct Review rows say <code>reviewStatus = Verified</code>.</dd>
-                </div>
-                <div>
-                  <dt>What happens</dt>
-                  <dd>Preview shows what will be added or corrected. Apply writes those rows to Published.</dd>
-                </div>
-                <div>
-                  <dt>Your next action</dt>
-                  <dd>Review the preview summary, then apply Publish. You do not need to edit Published status.</dd>
-                </div>
-              </dl>
-            </div>
-            <div className="admin-pipeline-step-actions">
-            <button
-              className="admin-pipeline-action is-secondary"
-              disabled={isPublishingApprovedPlaces}
-              onClick={() => publishApprovedPlaces(false)}
-              type="button"
-            >
-              {isPublishingApprovedPlaces
-                ? "Working..."
-                : "Preview Publish"}
-            </button>
-            <button
-              className="admin-pipeline-action is-primary"
-              disabled={
-                isPublishingApprovedPlaces ||
-                pipelinePublishResult?.mode !== "preview" ||
-                (pipelinePublishResult.rowsToPublish ?? 0) === 0 ||
-                Boolean(pipelinePublishResult.validationIssues)
-              }
-              onClick={() => publishApprovedPlaces(true)}
-              type="button"
-            >
-              Apply Publish
-            </button>
-            </div>
-          </article>
-
-          <article className="admin-pipeline-step">
-            <span className="admin-pipeline-step-number">3</span>
-            <div>
-              <h3>Update Travel Map</h3>
-              <dl className="admin-pipeline-step-guide">
-                <div>
-                  <dt>Before</dt>
-                  <dd>Published rows should already say <code>verifiedStatus = Verified</code>. That is the correct final Sheet state.</dd>
-                </div>
-                <div>
-                  <dt>What happens</dt>
-                  <dd>Preview validates Published and lists app changes. Apply updates the local travel-map data.</dd>
-                </div>
-                <div>
-                  <dt>Your next action</dt>
-                  <dd>Open the Field Guide and confirm the new places look correct.</dd>
-                </div>
-              </dl>
-            </div>
-            <div className="admin-pipeline-step-actions">
-            <button
-              className="admin-pipeline-action is-secondary"
-              disabled={isSyncingPublished}
-              onClick={() => syncPublishedToApp(false)}
-              type="button"
-            >
-              {isSyncingPublished ? "Working..." : "Preview Update"}
-            </button>
-            <button
-              className="admin-pipeline-action is-primary"
-              disabled={
-                isSyncingPublished ||
-                pipelineResult?.wrote !== false ||
-                Boolean(pipelineResult.validationErrors?.length) ||
-                (pipelineResult.changes?.length ?? 0) === 0
-              }
-              onClick={() => syncPublishedToApp(true)}
-              type="button"
-            >
-              Apply Update
-            </button>
-            </div>
-          </article>
-        </section>
       </div>
       <section className="admin-pipeline-results" aria-label="Pipeline results">
         <h3>Result summary</h3>
@@ -2766,17 +2790,10 @@ export function AdminWorkflow({
               validation issues
             </span>
           </div>
-          {pipelinePublishResult.wouldPublishRows?.length ? (
-            <ul className="admin-note-list">
-              {pipelinePublishResult.wouldPublishRows
-                .slice(0, 8)
-                .map((row) => (
-                  <li key={`publish-${row.id}`}>
-                    {row.name || "Unnamed place"} ({row.id})
-                  </li>
-                ))}
-            </ul>
+          {pipelinePublishResult.fieldChanges?.length ? (
+            <PipelineChanges rows={pipelinePublishResult.fieldChanges} />
           ) : null}
+          <p>Publication sets the check date when applied. If a write fails, preview again before retrying.</p>
           {pipelinePublishResult.duplicateIdsSkipped?.length ? (
             <ul className="admin-note-list">
               {pipelinePublishResult.duplicateIdsSkipped
@@ -2817,15 +2834,29 @@ export function AdminWorkflow({
               validation errors
             </span>
           </div>
-          {pipelineResult.changes?.length ? (
-            <ul className="admin-note-list">
-              {pipelineResult.changes.slice(0, 8).map((change) => (
-                <li key={`${change.action}-${change.id}-${change.rowNumber}`}>
-                  {change.action}: {change.name} ({change.id})
-                </li>
-            ))}
-          </ul>
-        ) : null}
+          {pipelineResult.verificationConflicts?.length ? <AdminConflictReview
+            conflicts={pipelineResult.verificationConflicts}
+            sheetId={pipelineSheetId.trim()}
+            publishedTabId={pipelineResult.publishedTabId}
+            previewHash={pipelineResult.previewHash}
+            adminPassword={adminPassword}
+            isPreviewing={isSyncingPublished}
+            onPreviewAgain={() => void syncPublishedToApp(false)}
+            onInvalidated={() => setPipelineResult((current) => current ? { ...current, previewHash: undefined, canApply: false } : null)}
+            onVerified={(name) => {
+              setPipelineResult((current) => current ? { ...current, previewHash: undefined, canApply: false } : null);
+              setPipelineMessage(`Verified ${name}. Select Preview again to refresh the remaining changes.`);
+              setPipelinePublishResult(null);
+            }}
+          /> : null}
+          {pipelineResult.preservedClosures?.length ? <ul className="admin-note-list">
+            {pipelineResult.preservedClosures.map((row) => <li key={row.id}>Preserved local closure: {row.name} · Row {row.rowNumber}</li>)}
+          </ul> : null}
+          {pipelineResult.validationErrors?.length ? <ul className="admin-note-list">
+            {pipelineResult.validationErrors.map((row) => <li key={`${row.id}-${row.rowNumber}`}>Row {row.rowNumber} ({row.id}): {row.errors.join(" ")}</li>)}
+          </ul> : null}
+          {pipelineResult.changes?.length ? <PipelineChanges rows={pipelineResult.changes} /> : null}
+          <p>If Apply fails, refresh with Preview Update before retrying.</p>
       </div>
         ) : null}
       </section>
@@ -2835,11 +2866,16 @@ export function AdminWorkflow({
   return (
     <main className="shell admin-shell">
       <section className="hero panel admin-hero">
-        <h1>Admin / Place Pipeline</h1>
-        <p>
-          Capture screenshot finds, enrich ready rows, publish approved places,
-          and update the travel map dataset.
-        </p>
+        <div className="admin-hero-copy">
+          <h1>Places admin</h1>
+          <p>Capture finds, review places, and update your Field Guide.</p>
+        </div>
+        <label className="admin-credential">
+          <span>Admin password</span>
+          <input className="admin-draft-input" type="password" autoComplete="off"
+            value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
+          <small>Required when admin access is protected. Kept only for this page session.</small>
+        </label>
       </section>
 
       <section className="admin-workflow-grid" aria-label="Current admin workflows">

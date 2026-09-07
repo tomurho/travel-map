@@ -2296,7 +2296,7 @@ test("admin place pipeline renders the active ingest controls", () => {
     "utf8",
   );
 
-  assert.match(source, /Admin \/ Place Pipeline/);
+  assert.match(source, /Places admin/);
   assert.match(source, /screenshotIntakePanel/);
   assert.match(source, /googleSheetsPipelinePanel/);
   assert.match(source, /Extract Places/);

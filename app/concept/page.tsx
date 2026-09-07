@@ -1,7 +1,9 @@
-import places from "@/data/places.json";
 import { TravelAtlasConcept } from "@/components/travel-atlas-concept";
 import { isPublicPlace } from "@/lib/filtering";
 import type { Place } from "@/lib/place";
+import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
+
+export const dynamic = "force-dynamic";
 
 function toPublicPlace(place: Place): Place {
   return {
@@ -24,6 +26,7 @@ function toPublicPlace(place: Place): Place {
 }
 
 export default function ConceptPage() {
+  const places = readPlacesJsonSnapshot().places;
   return (
     <TravelAtlasConcept
       places={(places as Place[]).filter(isPublicPlace).map(toPublicPlace)}

@@ -18,6 +18,7 @@ import {
   type GooglePlacesCounters,
 } from "@/lib/google-places-access";
 import type { Place, VerificationSource } from "@/lib/place";
+import { fetchSupportedProviderUrl } from "@/lib/provider-url";
 import {
   readPlacesJsonSnapshot,
   writePlacesJsonAtomic,
@@ -223,15 +224,14 @@ export function extractGooglePlaceIdFromUrl(url: string) {
 
 async function resolveRedirectedUrl(url: string, fetcher: typeof fetch = fetch) {
   try {
-    const response = await fetcher(url, {
+    const response = await fetchSupportedProviderUrl(url, {
       headers: {
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
       },
       method: "GET",
-      redirect: "follow",
-    });
+    }, fetcher);
 
     return {
       error: "",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { syncPublishedToApp } from "@/lib/place-sheet-pipeline";
+import { PipelineError } from "@/lib/pipeline-preview";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
     allowPartial?: boolean;
     confirmPartial?: boolean;
     confirmWrite?: boolean;
+    expectedPreviewHash?: string;
     sheetId?: string;
     write?: boolean;
   };
@@ -35,12 +37,16 @@ export async function POST(request: NextRequest) {
     const result = await syncPublishedToApp({
       allowPartial: input.allowPartial === true,
       dryRun: !write,
+      expectedPreviewHash: input.expectedPreviewHash,
       sheetId: input.sheetId ?? "",
       write,
     });
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof PipelineError) {
+      return NextResponse.json({ error: error.message, code: error.code, details: error.details }, { status: error.status });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not sync Published rows." },
       { status: 400 },

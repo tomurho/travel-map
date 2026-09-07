@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { FieldGuideFiltersPanel } from "@/components/field-guide/field-guide-filters";
 import {
   FieldGuidePlaceCard,
@@ -14,8 +14,7 @@ import { getAvailableAreas, getAvailableCategories, getCategories, getCities } f
 import {
   buildFieldGuideQuery,
   filterAndSortFieldGuidePlaces,
-  normalizeFieldGuideFilters,
-  resolveFieldGuideCityPreference,
+  readFieldGuideFilters,
   type FieldGuideFilters,
 } from "@/lib/field-guide";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
@@ -145,28 +144,20 @@ function CitySelect({
   );
 }
 
-export function FieldGuideApp({
-  initialFilters,
-  places,
-  requestedCity,
-}: {
-  initialFilters: FieldGuideFilters;
-  places: Place[];
-  requestedCity: string | null;
-}) {
-  const router = useRouter();
+export function FieldGuideApp({ places }: { places: Place[] }) {
+  const [adminPassword, setAdminPassword] = useState("");
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [, startTransition] = useTransition();
-  const [filters, setFilters] = useState(() =>
-    normalizeFieldGuideFilters(places, initialFilters),
-  );
+  const [rememberedCity, setRememberedCity] = useState<string | null>(null);
   const [nearbyActive, setNearbyActive] = useState(false);
   const [userLocation, setUserLocation] = useState<GeoPoint | null>(null);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("idle");
   const [locationMessage, setLocationMessage] = useState("");
   const [requestLocationNonce, setRequestLocationNonce] = useState(0);
   const [visibleCount, setVisibleCount] = useState(resultBatchSize);
+  const [mobileView, setMobileView] = useState<"map" | "list">("map");
+  const listRef = useRef<HTMLDivElement>(null);
+  const mapPanelRef = useRef<HTMLElement>(null);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [hasRestoredCityPreference, setHasRestoredCityPreference] = useState(false);
   const [editablePlaces, setEditablePlaces] = useState(places);
@@ -174,6 +165,19 @@ export function FieldGuideApp({
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
   const [editMessage, setEditMessage] = useState("");
+
+  const queryString = searchParams.toString();
+  const filters = useMemo(
+    () => readFieldGuideFilters(editablePlaces, new URLSearchParams(queryString), rememberedCity),
+    [editablePlaces, queryString, rememberedCity],
+  );
+
+  function setFilters(update: SetStateAction<FieldGuideFilters>) {
+    const next = typeof update === "function" ? update(filters) : update;
+    const query = buildFieldGuideQuery(next);
+    // Next integrates native history with useSearchParams; filter edits need no server request.
+    window.history.replaceState(null, "", `${pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }
 
   const cities = useMemo(() => getCities(editablePlaces), [editablePlaces]);
   const cityCenters = useMemo(() => getCityCenters(editablePlaces), [editablePlaces]);
@@ -226,50 +230,20 @@ export function FieldGuideApp({
   }, []);
 
   useEffect(() => {
-    if (!hasRestoredCityPreference) {
-      return;
-    }
-
-    const nextQuery = buildFieldGuideQuery(filters);
-    const currentQuery = searchParams.toString();
-
-    if (nextQuery === currentQuery) {
-      return;
-    }
-
-    startTransition(() => {
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-        scroll: false,
-      });
-    });
-  }, [filters, hasRestoredCityPreference, pathname, router, searchParams]);
-
-  useEffect(() => {
-    let rememberedCity: string | null = null;
-
     try {
-      rememberedCity = window.localStorage.getItem(lastCityStorageKey);
+      setRememberedCity(window.localStorage.getItem(lastCityStorageKey));
     } catch {
       // Storage can be unavailable in restricted browser modes.
     }
-
-    const city = resolveFieldGuideCityPreference(
-      places,
-      requestedCity,
-      rememberedCity,
-    );
-
-    setFilters((current) =>
-      current.city === city ? current : { ...current, city },
-    );
     setHasRestoredCityPreference(true);
-  }, [places, requestedCity]);
+  }, []);
 
   useEffect(() => {
     if (!hasRestoredCityPreference || !filters.city) {
       return;
     }
 
+    setRememberedCity(filters.city);
     try {
       window.localStorage.setItem(lastCityStorageKey, filters.city);
     } catch {
@@ -279,21 +253,10 @@ export function FieldGuideApp({
 
   useEffect(() => {
     setVisibleCount(resultBatchSize);
+    if (listRef.current) listRef.current.scrollTop = 0;
     setSelectedPlaceId(null);
     setEditingPlaceId(null);
   }, [filters]);
-
-  useEffect(() => {
-    if (filters.category !== "all" && !categories.includes(filters.category)) {
-      setFilters((current) => ({ ...current, category: "all" }));
-    }
-  }, [categories, filters.category]);
-
-  useEffect(() => {
-    if (filters.area !== "all" && !areas.includes(filters.area)) {
-      setFilters((current) => ({ ...current, area: "all" }));
-    }
-  }, [areas, filters.area]);
 
   useEffect(() => {
     if (selectedPlaceId && !filteredPlaces.some((place) => place.id === selectedPlaceId)) {
@@ -301,7 +264,42 @@ export function FieldGuideApp({
     }
   }, [filteredPlaces, selectedPlaceId]);
 
-  function changeCity(city: string) {
+  useEffect(() => {
+    if (!selectedPlaceId || !listRef.current) return;
+    const list = listRef.current;
+    const card = Array.from(list.querySelectorAll<HTMLElement>("[data-place-id]"))
+      .find((element) => element.dataset.placeId === selectedPlaceId);
+    if (!card || list.clientHeight === 0) return;
+    // Scroll only the list so selecting a pin never pulls the map out of view.
+    const listBounds = list.getBoundingClientRect();
+    const cardBounds = card.getBoundingClientRect();
+    if (cardBounds.top < listBounds.top || cardBounds.bottom > listBounds.bottom) {
+      list.scrollTop += cardBounds.top - listBounds.top;
+    }
+  }, [selectedPlaceId, mobileView]);
+
+  function selectPlace(placeId: string | null) {
+    const index = filteredPlaces.findIndex((place) => place.id === placeId);
+    setVisibleCount((current) => Math.max(current, index + 1));
+    setSelectedPlaceId(placeId);
+  }
+
+  function selectFromList(placeId: string) {
+    selectPlace(placeId);
+    setMobileView("map");
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      requestAnimationFrame(() => {
+        mapPanelRef.current?.scrollIntoView({ block: "start" });
+        mapPanelRef.current?.focus({ preventScroll: true });
+      });
+    }
+  }
+
+  function changeCity(city: string, fromNearby = false) {
+    if (!fromNearby) {
+      setNearbyActive(false);
+      setLocationMessage("");
+    }
     setFilters((current) => ({
       ...current,
       city,
@@ -341,7 +339,7 @@ export function FieldGuideApp({
 
   return (
     <main className={styles.page}>
-      <a className={styles.skipLink} href="#field-guide-results">Skip to places</a>
+      <a className={styles.skipLink} href="#field-guide-results" onClick={() => setMobileView("list")}>Skip to places</a>
 
       <header className={styles.topbar}>
         <Link className={styles.brand} href="/">
@@ -355,14 +353,17 @@ export function FieldGuideApp({
       </header>
 
       <section className={styles.mobileCityHeader} aria-labelledby="field-guide-city">
-        <p>Current city</p>
-        <div>
-          <h1 id="field-guide-city">{filters.city}</h1>
-          <CitySelect cities={cities} city={filters.city} onChange={changeCity} />
+        <h1 className={styles.srOnly} id="field-guide-city">{filters.city}</h1>
+        <CitySelect cities={cities} city={filters.city} onChange={changeCity} />
+        <div className={styles.mobileViewSwitch} role="group" aria-label="Browse places">
+          <button type="button" aria-pressed={mobileView === "map"}
+            onClick={() => setMobileView("map")}>Map</button>
+          <button type="button" aria-pressed={mobileView === "list"}
+            onClick={() => setMobileView("list")}>List · {filteredPlaces.length}</button>
         </div>
       </section>
 
-      <div className={styles.workspace}>
+      <div className={styles.workspace} data-mobile-view={mobileView}>
         <FieldGuideFiltersPanel
           areas={areas}
           categories={categories}
@@ -375,9 +376,12 @@ export function FieldGuideApp({
           onToggleNearby={toggleNearby}
         />
 
-        <section className={styles.mapPanel} aria-label={`Map of ${filters.city}`}>
+        <section ref={mapPanelRef} tabIndex={-1} className={styles.mapPanel} aria-label={`Map of ${filters.city}`}>
           <div className={`map-frame ${styles.mapFrame}`}>
             <MapView
+              clusterMarkers
+              viewportCity={filters.city}
+              followUserLocation={nearbyActive}
               cityCenters={cityCenters}
               mapStyles={fieldGuideMapStyles}
               onClosePlace={() => setSelectedPlaceId(null)}
@@ -394,10 +398,10 @@ export function FieldGuideApp({
               }}
               onNearbyCityDetected={(city) => {
                 if (cities.includes(city) && city !== filters.city) {
-                  changeCity(city);
+                  changeCity(city, true);
                 }
               }}
-              onSelectPlace={setSelectedPlaceId}
+              onSelectPlace={selectPlace}
               onUserLocationFound={(location) => {
                 setUserLocation(location);
                 setNearbyActive(true);
@@ -410,8 +414,18 @@ export function FieldGuideApp({
               showPlaceDetails={false}
             />
           </div>
+          {!selectedPlace ? (
+            <div className={styles.mapLegend} aria-label="Map legend">
+              <span><i style={{ background: "#ef2b68" }} />Loved</span>
+              <span><i style={{ background: "#f59e0b" }} />Want to go</span>
+              <span><i style={{ background: "#9ca3af" }} />Been</span>
+              <span><i style={{ background: "#d1d5db" }} />Saved</span>
+              <small>Numbered circles group nearby places</small>
+            </div>
+          ) : null}
           {selectedPlace ? (
             <FieldGuidePlaceDetail
+              key={selectedPlace.id}
               distanceKm={selectedDistance}
               onClose={() => setSelectedPlaceId(null)}
               place={selectedPlace}
@@ -459,7 +473,7 @@ export function FieldGuideApp({
               <button onClick={clearRefinements} type="button">Clear filters</button>
             </div>
           ) : (
-            <div className={styles.placeList}>
+            <div className={styles.placeList} ref={listRef}>
               {visibleListPlaces.map((place) => (
                 <FieldGuidePlaceCard
                   distanceKm={
@@ -468,7 +482,9 @@ export function FieldGuideApp({
                   editor={
                     isEditMode && editingPlaceId === place.id ? (
                       <FieldGuidePlaceEditor
+                        adminPassword={adminPassword}
                         categories={allCategories}
+                        onAdminPasswordChange={setAdminPassword}
                         onCancel={() => setEditingPlaceId(null)}
                         onSaved={(savedPlace) => {
                           setEditablePlaces((current) =>
@@ -490,6 +506,7 @@ export function FieldGuideApp({
                   isEditing={editingPlaceId === place.id}
                   isSelected={selectedPlaceId === place.id || editingPlaceId === place.id}
                   key={place.id}
+                  onSelect={() => selectFromList(place.id)}
                   onEdit={() => {
                     setEditingPlaceId((current) => current === place.id ? null : place.id);
                     setEditMessage("");

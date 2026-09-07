@@ -10,13 +10,16 @@ dotenv.config({ path: ".env.local", quiet: true });
 
 type CliOptions = {
   help: boolean;
+  write: boolean;
+  expectedPreviewHash?: string;
   sheetId: string | null;
 };
 
-function parseArgs(rawArgv: string[]): CliOptions {
+export function parseArgs(rawArgv: string[]): CliOptions {
   const argv = rawArgv[0] === "--" ? rawArgv.slice(1) : rawArgv;
   const options: CliOptions = {
     help: false,
+    write: false,
     sheetId: null,
   };
 
@@ -28,6 +31,16 @@ function parseArgs(rawArgv: string[]): CliOptions {
     } else if (arg === "--sheet-id") {
       options.sheetId = argv[index + 1] ?? null;
       index += 1;
+    } else if (arg === "--write") {
+      options.write = true;
+    } else if (arg === "--dry-run") {
+      // Preview is the default; reject contradictory flags below.
+      if (argv.includes("--write")) throw new Error("Choose preview or --write, not both.");
+    } else if (arg === "--expected-preview-hash") {
+      options.expectedPreviewHash = argv[index + 1];
+      index += 1;
+    } else {
+      throw new Error(`Unknown option: ${arg}`);
     }
   }
 
@@ -39,8 +52,10 @@ function printHelp() {
 
 Usage:
   pnpm publish:places -- --sheet-id <SHEET_ID>
+  pnpm publish:places -- --sheet-id <SHEET_ID> --write --expected-preview-hash <HASH>
 
 Behavior:
+  Defaults to preview. Apply requires the hash returned by that preview.
   Reads Review rows where reviewStatus = Verified,
   appends new ids, updates corrected existing ids in Published, rejects ambiguous
   duplicate ids, and does not call Google Places or modify Capture/Review.`);
@@ -54,9 +69,13 @@ async function main() {
     return;
   }
 
-  await publishApprovedRows({
+  const result = await publishApprovedRows({
+    write: options.write,
+    dryRun: !options.write,
+    expectedPreviewHash: options.expectedPreviewHash,
     sheetId: options.sheetId ?? "",
   });
+  console.log(JSON.stringify(result, null, 2));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

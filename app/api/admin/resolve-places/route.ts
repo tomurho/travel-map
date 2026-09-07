@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import places from "@/data/places.json";
 import {
   getTextSearchCacheKey,
   GooglePlacesAccess,
@@ -8,6 +7,12 @@ import { normalizeArea } from "@/lib/import";
 import type { Place } from "@/lib/place";
 import { normalizePlaceCity } from "@/lib/place-city";
 import { isAdminAuthorized } from "@/lib/admin-auth";
+import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
+import {
+  fetchSupportedProviderUrl,
+  isSupportedTabelogUrl,
+  parseSupportedProviderUrl,
+} from "@/lib/provider-url";
 
 type OpenAIExtraction = {
   place_names?: string[];
@@ -172,7 +177,7 @@ function getDuplicateNote(
   const normalizedCity = normalizeDuplicateText(city);
   const normalizedName = normalizeDuplicateText(name);
   const normalizedAddress = normalizeDuplicateText(address);
-  const existingPlace = (places as Place[]).find((place) => {
+  const existingPlace = readPlacesJsonSnapshot().places.find((place) => {
     if (normalizeDuplicateText(place.city) !== normalizedCity) {
       return false;
     }
@@ -200,12 +205,7 @@ function getDuplicateNote(
 }
 
 function isTabelogUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.hostname.endsWith("tabelog.com");
-  } catch {
-    return false;
-  }
+  return isSupportedTabelogUrl(value);
 }
 
 function inferCityFromText(...values: string[]) {
@@ -374,13 +374,12 @@ function parseTabelogHtml(html: string): TabelogExtraction {
 }
 
 async function fetchTabelogExtraction(tabelogUrl: string) {
-  const response = await fetch(tabelogUrl, {
+  const response = await fetchSupportedProviderUrl(tabelogUrl, {
     headers: {
       "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
     },
-    redirect: "follow",
     cache: "no-store",
   });
 
@@ -694,17 +693,13 @@ function extractUsefulTextFromUrl(placeUrl: string) {
 }
 
 async function resolvePlaceUrl(placeUrl: string) {
+  parseSupportedProviderUrl(placeUrl);
   const directText = extractUsefulTextFromUrl(placeUrl);
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4500);
-    const response = await fetch(placeUrl, {
+    const response = await fetchSupportedProviderUrl(placeUrl, {
       method: "GET",
-      redirect: "follow",
-      signal: controller.signal,
     });
-    clearTimeout(timeout);
 
     const finalUrl = response.url;
     const finalText = finalUrl ? extractUsefulTextFromUrl(finalUrl) : "";
@@ -934,6 +929,15 @@ export async function POST(request: NextRequest) {
   const queryContexts: QueryContext[] = textQueries.map((query) => ({ query }));
 
   if (placeUrl) {
+    try {
+      parseSupportedProviderUrl(placeUrl);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Unsupported provider URL." },
+        { status: 400 },
+      );
+    }
+
     if (isTabelogUrl(placeUrl)) {
       try {
         const tabelogExtraction = {

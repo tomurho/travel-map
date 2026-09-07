@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { NextRequest } from "next/server";
 
 import { assessImportSafety } from "@/lib/import-safety";
 import { isAdminAuthorized } from "@/lib/admin-auth";
@@ -32,6 +33,10 @@ import {
   readPlacesJsonSnapshot,
   writePlacesJsonAtomic,
 } from "@/lib/places-json-store";
+import {
+  fetchSupportedProviderUrl,
+  parseSupportedProviderUrl,
+} from "@/lib/provider-url";
 
 function place(id: string, name = id): Place {
   return {
@@ -382,6 +387,82 @@ test("Published writes fail closed unless partial sync is explicit", () => {
   );
 });
 
+test("Published sync rejects every row sharing a duplicate id", () => {
+  const headers = [
+    "id", "name", "category", "area", "city", "address", "latitude",
+    "longitude", "googleMapsUrl", "verifiedStatus",
+  ];
+  const row = (name: string, latitude: string) => [
+    "duplicate", name, "Cafe", "Center", "Test City", "1 Test Street",
+    latitude, "103.8", "https://maps.google.com/?q=test", "Verified",
+  ];
+  const plan = buildPublishedSyncPlan({
+    currentPlaces: [place("existing")],
+    publishedHeaders: headers,
+    publishedValues: [headers, row("First", "1.3"), row("Second", "1.4")],
+  });
+
+  assert.equal(plan.inserted, 0);
+  assert.equal(plan.updated, 0);
+  assert.equal(plan.duplicateIdCount, 1);
+  assert.equal(plan.validationErrors.length, 2);
+  assert.deepEqual(plan.nextPlaces, [place("existing")]);
+  assert.match(plan.validationErrors[0]?.errors.join(" ") ?? "", /rows 2, 3/);
+  assert.throws(
+    () => assertPublishedSyncCanWrite({
+      allowPartial: true,
+      duplicateIdCount: 1,
+      validationErrorCount: 2,
+    }),
+    /duplicate IDs/,
+  );
+});
+
+test("provider URL validation rejects unsafe destinations before fetch", async () => {
+  let requestCount = 0;
+  const fetcher: typeof fetch = async () => {
+    requestCount += 1;
+    return new Response("ok");
+  };
+
+  for (const value of [
+    "http://maps.google.com/place/test",
+    "https://user:pass@maps.google.com/place/test",
+    "https://maps.google.com:8443/place/test",
+    "https://tabelog.com.attacker.example/place/test",
+    "https://127.0.0.1/internal",
+  ]) {
+    await assert.rejects(() => fetchSupportedProviderUrl(value, {}, fetcher));
+  }
+
+  assert.equal(requestCount, 0);
+  assert.equal(
+    parseSupportedProviderUrl("https://maps.app.goo.gl/example").hostname,
+    "maps.app.goo.gl",
+  );
+  assert.equal(
+    parseSupportedProviderUrl("https://s.tabelog.com/tokyo/A1/rstLst/").hostname,
+    "s.tabelog.com",
+  );
+});
+
+test("provider URL validation checks every redirect", async () => {
+  const requested: string[] = [];
+  const fetcher: typeof fetch = async (input) => {
+    requested.push(String(input));
+    return new Response(null, {
+      headers: { location: "http://127.0.0.1/internal" },
+      status: 302,
+    });
+  };
+
+  await assert.rejects(
+    () => fetchSupportedProviderUrl("https://maps.app.goo.gl/example", {}, fetcher),
+    /HTTPS/,
+  );
+  assert.deepEqual(requested, ["https://maps.app.goo.gl/example"]);
+});
+
 test("admin authorization uses the header and fails closed in production", () => {
   assert.equal(
     isAdminAuthorized(
@@ -404,6 +485,53 @@ test("admin authorization uses the header and fails closed in production", () =>
     ),
     false,
   );
+});
+
+test("place PATCH route rejects a wrong password and accepts the configured header", async () => {
+  const previousPassword = process.env.ADMIN_PASSWORD;
+  process.env.ADMIN_PASSWORD = "route-secret";
+
+  try {
+    const { PATCH } = await import("../../app/api/admin/places/[id]/route");
+    const body = JSON.stringify({
+      category: "Cafe",
+      district: "Center",
+      editMode: "field-guide-inline",
+      loved: null,
+      name: "Missing place",
+      status: "location",
+    });
+    const context = { params: Promise.resolve({ id: "missing-route-test-place" }) };
+    const wrong = await PATCH(
+      new NextRequest("http://localhost/api/admin/places/missing-route-test-place", {
+        body,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": "wrong",
+        },
+        method: "PATCH",
+      }),
+      context,
+    );
+    const authorized = await PATCH(
+      new NextRequest("http://localhost/api/admin/places/missing-route-test-place", {
+        body,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-password": "route-secret",
+        },
+        method: "PATCH",
+      }),
+      context,
+    );
+
+    assert.equal(wrong.status, 401);
+    assert.equal(authorized.status, 400);
+    assert.match(await authorized.text(), /not found/i);
+  } finally {
+    if (previousPassword === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = previousPassword;
+  }
 });
 
 test("Published planning appends new ids, updates corrections, and skips unchanged rows", () => {
