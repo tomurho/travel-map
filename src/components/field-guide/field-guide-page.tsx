@@ -4,7 +4,7 @@ import type { Place } from "@/lib/place";
 import { normalizePlaceCity } from "@/lib/place-city";
 import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
 
-function toPublicPlace(place: Place): Place {
+export function toPublicPlace(place: Place): Place {
   return {
     id: place.id,
     name: place.name,

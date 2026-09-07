@@ -2,6 +2,7 @@ import { getAvailableAreas, getAvailableCategories } from "@/lib/filtering";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
 import type { Place } from "@/lib/place";
 import { normalizePlaceCity } from "@/lib/place-city";
+import { getPlaceTypeAliases, normalizePlaceSearch, resolvePlaceTypeOption } from "@/lib/place-types";
 
 export type FieldGuideFilters = {
   city: string;
@@ -73,7 +74,7 @@ export function readFieldGuideFilters(
   const filters = normalizeFieldGuideFilters(places, {
     city: resolveFieldGuideCityPreference(places, params.get("city"), rememberedCity),
     status: params.get("status") === "want_to_go" ? "want_to_go" : "all",
-    category: params.get("category") ?? "all",
+    category: resolvePlaceTypeOption(params.get("category") ?? "all", places.map((place) => place.category)),
     area: params.get("area") ?? "all",
     lovedOnly: ["1", "loved"].includes(params.get("loved") ?? ""),
     query: params.get("q") ?? "",
@@ -121,7 +122,7 @@ export function filterAndSortFieldGuidePlaces(
     userLocation: GeoPoint | null;
   },
 ) {
-  const normalizedQuery = filters.query.trim().toLocaleLowerCase();
+  const normalizedQuery = normalizePlaceSearch(filters.query.trim());
 
   return places
     .filter(
@@ -138,9 +139,8 @@ export function filterAndSortFieldGuidePlaces(
         return true;
       }
 
-      return [place.name, place.category, place.district]
-        .join(" ")
-        .toLocaleLowerCase()
+      return normalizePlaceSearch([place.name, place.category, place.district, ...getPlaceTypeAliases(place.category)]
+        .join(" "))
         .includes(normalizedQuery);
     })
     .sort((firstPlace, secondPlace) => {

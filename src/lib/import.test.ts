@@ -438,7 +438,7 @@ test("normalizePlaceRow supports workbook headers", () => {
   if (result.ok) {
     assert.equal(result.place.status, "been");
     assert.equal(result.place.loved, null);
-    assert.equal(result.place.category, "Cafe");
+    assert.equal(result.place.category, "Café");
     assert.equal(result.place.district, "Daan");
   }
 });

@@ -11,11 +11,53 @@ A personal, map-first travel field guide built with Next.js. It turns saved plac
 
 ## Browse the guide
 
-Select a place name to show it on the map; use **Open in Google Maps** in its
-details when ready to leave the guide. Selecting a pin reveals its list entry,
-even beyond the first batch of results. On mobile, **Map** and **List** preserve
-your filters and selection. Numbered map circles group nearby places; select a
-circle to zoom in. The legend explains the individual marker colors.
+The main guide at `/` and `/field-guide` uses the approved compact mobile layout
+for every city. Choose a city in the header, then a broad group and an optional
+specialty. The guide starts on **All places**, including types awaiting review.
+Specialties occupy one horizontal row; **More** opens the searchable full list.
+Counts and area choices come from the selected city. Empty groups are disabled.
+
+Select a pin or place name to open one card with status, name, type, address, and
+**Open in Google Maps**. On mobile, **Map** and **List** preserve filters and
+selection; desktop shows both panes. Numbered map circles zoom into clusters.
+The list loads in batches, and selecting a pin reveals its entry even beyond the
+first batch. On localhost, **Edit list** retains the existing inline editor.
+
+The last city is remembered when storage is available. An explicit city in a URL
+takes priority. Nearby can switch to the city near your location; choosing a city
+manually turns Nearby off. Group, specialty, area, Loved/Want to go, search, and
+Map/List state persist in the URL. Old `category` links resolve approved aliases
+and choose the corresponding group. Labels awaiting review remain unchanged.
+
+### Kyoto type preview
+
+`/preview/kyoto` remains available with the same shared interface. It stays fixed
+to Kyoto, starts with Bars, has no editing controls, and does not change the
+remembered city. `src/lib/field-guide-explorer.ts` owns grouping/filter behavior;
+`src/lib/kyoto-preview.ts` is a compatibility wrapper for the pilot.
+
+Use the laptop’s iPhone simulator at `http://localhost:3000/?city=Kyoto` to test
+the main guide. No separate HTTPS deployment is needed.
+
+### Approved type reconciliation
+
+The completed September 7 workbook is recorded in
+`src/data/place-type-decisions.json`: blank Types column A means approved, and
+the user's four explicit column E comments supply the chosen labels. The Tea
+house comment on E90 overrides that row's original Defer flag; the other ten
+deferred types retain their labels. No venue-specific review decisions were made.
+
+The batch changed only `category` on 145 of 674 listings, reducing 94 type names
+to 87. `src/lib/place-types.ts` retains the approved old labels as search and URL
+aliases. Imports normalize these aliases so old sheet labels do not return to
+the local catalog. Published sync continues to preserve local editorial types.
+
+The reviewed migration can be inspected with
+`node --import tsx scripts/apply-place-type-decisions.ts`. It previews by default;
+`--apply` writes only against the original reviewed dataset hash, with the atomic
+store's stale-write protection and backup. Rerunning after application is a no-op.
+The local audit is in `outputs/type-reconciliation-2026-09-07/applied/`.
+
 
 ## Import spreadsheet data
 

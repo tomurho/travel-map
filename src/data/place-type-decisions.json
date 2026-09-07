@@ -1,0 +1,667 @@
+{
+  "date": "2026-09-07",
+  "sourceSha256": "cd8372f0e474f463a86f2d4ebcc56c08af24fd938b0b330fc58d0058280ac9c3",
+  "workbook": "outputs/01a07ae0-8f63-7ab3-9a36-97a4182bee9f/place-type-decisions.xlsx",
+  "workbookSha256": "320269927cdaa779911db0d8abc134aefb9e66041305867436ad52a8cc76f039",
+  "decisionRule": "Blank Types column A is approved. Explicit comments on E27, E30, E38 and E90 set the chosen labels; E90 overrides its original Defer flag. Other Defer rows remain deferred. Venue decisions are unchanged.",
+  "types": [
+    {
+      "row": 6,
+      "sourceType": "Bakery",
+      "label": "Bakery",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 7,
+      "sourceType": "Banh mi",
+      "label": "Banh mi",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 8,
+      "sourceType": "Bar",
+      "label": "Bar",
+      "group": "bars",
+      "decision": "approved"
+    },
+    {
+      "row": 9,
+      "sourceType": "Beef noodles",
+      "label": "Beef noodles",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 10,
+      "sourceType": "Beer bar",
+      "label": "Beer bar",
+      "group": "bars",
+      "decision": "approved"
+    },
+    {
+      "row": 11,
+      "sourceType": "Bistro",
+      "label": "Bistro",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 12,
+      "sourceType": "Burger",
+      "label": "Burger",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 13,
+      "sourceType": "Cafe",
+      "label": "Café",
+      "group": "coffee",
+      "decision": "approved"
+    },
+    {
+      "row": 14,
+      "sourceType": "Chicken restaurant",
+      "label": "Chicken restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 15,
+      "sourceType": "Chinese",
+      "label": "Chinese",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 16,
+      "sourceType": "Chocolate",
+      "label": "Chocolate",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 17,
+      "sourceType": "Chocolate, Cake",
+      "label": "Chocolate & cake",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 18,
+      "sourceType": "Cider Bar",
+      "label": "Cider bar",
+      "group": "bars",
+      "decision": "approved"
+    },
+    {
+      "row": 19,
+      "sourceType": "Coffee",
+      "label": "Coffee",
+      "group": "coffee",
+      "decision": "approved"
+    },
+    {
+      "row": 20,
+      "sourceType": "Cultural center",
+      "label": "Cultural center",
+      "group": "sights",
+      "decision": "approved"
+    },
+    {
+      "row": 21,
+      "sourceType": "Curry",
+      "label": "Curry",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 22,
+      "sourceType": "Dessert",
+      "label": "Desserts",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 23,
+      "sourceType": "Duck dishes",
+      "label": "Duck dishes",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 24,
+      "sourceType": "Dumplings",
+      "label": "Dumplings",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 25,
+      "sourceType": "Fine dining restaurant",
+      "label": "Fine dining restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 26,
+      "sourceType": "French",
+      "label": "French",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 27,
+      "sourceType": "French, Innovative",
+      "label": "Fusion",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 28,
+      "sourceType": "Fried chicken",
+      "label": "Fried chicken",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 29,
+      "sourceType": "Fusion",
+      "label": "Fusion",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 30,
+      "sourceType": "Gelato",
+      "label": "Ice cream & gelato",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 31,
+      "sourceType": "Gelato, Ice cream",
+      "label": "Ice cream & gelato",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 32,
+      "sourceType": "Grilled tripe",
+      "label": "Grilled tripe",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 33,
+      "sourceType": "Grocery",
+      "label": "Grocery",
+      "group": "shopping",
+      "decision": "approved"
+    },
+    {
+      "row": 34,
+      "sourceType": "Gyoza",
+      "label": "Gyoza",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 35,
+      "sourceType": "Hakka restaurant",
+      "label": "Hakka restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 36,
+      "sourceType": "Hamburger",
+      "label": "Burger",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 37,
+      "sourceType": "Hot Pot",
+      "label": "Hot pot",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 38,
+      "sourceType": "Innovative",
+      "label": "Fusion",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 39,
+      "sourceType": "Italian",
+      "label": "Italian",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 40,
+      "sourceType": "Izakaya",
+      "label": "Izakaya",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 41,
+      "sourceType": "Japanese Cuisine",
+      "label": "Japanese restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 42,
+      "sourceType": "Japanese restaurant",
+      "label": "Japanese restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 43,
+      "sourceType": "Japanese sweets",
+      "label": "Japanese sweets",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 44,
+      "sourceType": "Kaiseki",
+      "label": "Kaiseki",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 45,
+      "sourceType": "Kakigori",
+      "label": "Kakigori",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 46,
+      "sourceType": "Katsudon",
+      "label": "Katsudon",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 47,
+      "sourceType": "Kushiage",
+      "label": "Kushiage",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 48,
+      "sourceType": "Kushikatsu",
+      "label": "Kushikatsu",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 49,
+      "sourceType": "Mizutaki",
+      "label": "Mizutaki",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 50,
+      "sourceType": "Modern European",
+      "label": "Modern European",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 51,
+      "sourceType": "Noodle shop",
+      "label": "Noodle shop",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 52,
+      "sourceType": "Obanzai",
+      "label": "Obanzai",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 53,
+      "sourceType": "Oden",
+      "label": "Oden",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 54,
+      "sourceType": "Okonomiyaki",
+      "label": "Okonomiyaki",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 55,
+      "sourceType": "Onigiri",
+      "label": "Onigiri",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 56,
+      "sourceType": "Oyakodon",
+      "label": "Oyakodon",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 57,
+      "sourceType": "Pastries",
+      "label": "Pastries",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 58,
+      "sourceType": "Pho",
+      "label": "Pho",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 59,
+      "sourceType": "Pizza",
+      "label": "Pizza",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 60,
+      "sourceType": "Ramen",
+      "label": "Ramen",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 61,
+      "sourceType": "Restaurant",
+      "label": "Restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 62,
+      "sourceType": "Robatayaki",
+      "label": "Robatayaki",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 63,
+      "sourceType": "Sake bar",
+      "label": "Sake bar",
+      "group": "bars",
+      "decision": "approved"
+    },
+    {
+      "row": 64,
+      "sourceType": "Sandwich",
+      "label": "Sandwich",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 65,
+      "sourceType": "Scenic spot",
+      "label": "Scenic spot",
+      "group": "sights",
+      "decision": "approved"
+    },
+    {
+      "row": 66,
+      "sourceType": "Seafood",
+      "label": "Seafood",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 67,
+      "sourceType": "Seafood, Japanese Cuisine",
+      "label": "Seafood, Japanese Cuisine",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 68,
+      "sourceType": "Sight",
+      "label": "Sight",
+      "group": "sights",
+      "decision": "approved"
+    },
+    {
+      "row": 69,
+      "sourceType": "Soba",
+      "label": "Soba",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 70,
+      "sourceType": "Spanish",
+      "label": "Spanish",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 71,
+      "sourceType": "Steak",
+      "label": "Steak",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 72,
+      "sourceType": "Sukiyaki",
+      "label": "Sukiyaki",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 73,
+      "sourceType": "Sukiyaki/Shabu Shabu",
+      "label": "Sukiyaki/Shabu Shabu",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 74,
+      "sourceType": "Sushi",
+      "label": "Sushi",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 75,
+      "sourceType": "Sweets",
+      "label": "Desserts",
+      "group": "desserts",
+      "decision": "approved"
+    },
+    {
+      "row": 76,
+      "sourceType": "Taiwanese restaurant",
+      "label": "Taiwanese restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 77,
+      "sourceType": "Tempura",
+      "label": "Tempura",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 78,
+      "sourceType": "Tofu Dishes",
+      "label": "Tofu dishes",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 79,
+      "sourceType": "Tonkatsu",
+      "label": "Tonkatsu",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 80,
+      "sourceType": "Tsukemen",
+      "label": "Tsukemen",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 81,
+      "sourceType": "Udon",
+      "label": "Udon",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 82,
+      "sourceType": "Unagi",
+      "label": "Unagi",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 83,
+      "sourceType": "Vietnamese restaurant",
+      "label": "Vietnamese restaurant",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 84,
+      "sourceType": "Washoku",
+      "label": "Washoku",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 85,
+      "sourceType": "Wine bar",
+      "label": "Wine bar",
+      "group": "bars",
+      "decision": "approved"
+    },
+    {
+      "row": 86,
+      "sourceType": "Yakiniku",
+      "label": "Yakiniku",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 87,
+      "sourceType": "Yakitori",
+      "label": "Yakitori",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 88,
+      "sourceType": "Yoshoku",
+      "label": "Yoshoku",
+      "group": "food",
+      "decision": "approved"
+    },
+    {
+      "row": 89,
+      "sourceType": "Beef",
+      "label": "Beef",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 90,
+      "sourceType": "Japanese tea specialty store",
+      "label": "Tea house",
+      "group": "tea",
+      "decision": "approved"
+    },
+    {
+      "row": 91,
+      "sourceType": "Kissa",
+      "label": "Kissa",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 92,
+      "sourceType": "Seafood market",
+      "label": "Seafood market",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 93,
+      "sourceType": "Shop",
+      "label": "Shop",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 94,
+      "sourceType": "Snack bar",
+      "label": "Snack bar",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 95,
+      "sourceType": "Tea house",
+      "label": "Tea house",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 96,
+      "sourceType": "Tea Shop",
+      "label": "Tea Shop",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 97,
+      "sourceType": "Tea shop",
+      "label": "Tea shop",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 98,
+      "sourceType": "Vegan restaurant",
+      "label": "Vegan restaurant",
+      "group": null,
+      "decision": "deferred"
+    },
+    {
+      "row": 99,
+      "sourceType": "Vegetarian",
+      "label": "Vegetarian",
+      "group": null,
+      "decision": "deferred"
+    }
+  ]
+}

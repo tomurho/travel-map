@@ -284,8 +284,16 @@ export function MapView({
     lastFramedLocationRef.current = null;
 
     if (places.length === 0) {
-      map.setCenter(defaultCenter);
-      map.setZoom(2);
+      const cityCenter = cityCenters.find((center) => center.city === viewportCity);
+      map.setCenter(cityCenter ? { lat: cityCenter.latitude, lng: cityCenter.longitude } : defaultCenter);
+      map.setZoom(cityCenter ? 12 : 2);
+      return;
+    }
+
+    // A one-point bounds fit zooms into the building and loses street context.
+    if (places.length === 1) {
+      map.setCenter({ lat: places[0].latitude, lng: places[0].longitude });
+      map.setZoom(16);
       return;
     }
 
@@ -298,7 +306,7 @@ export function MapView({
     }
 
     map.fitBounds(bounds, 72);
-  }, [followUserLocation, isLoaded, locationStatus, map, places, userLocation, viewportCity]);
+  }, [cityCenters, followUserLocation, isLoaded, locationStatus, map, places, userLocation, viewportCity]);
 
   useEffect(() => {
     if (!map || !isLoaded || !selectedPlace) {
