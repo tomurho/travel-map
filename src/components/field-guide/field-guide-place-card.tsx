@@ -1,6 +1,7 @@
 import { formatDistance } from "@/lib/geo";
 import { getGoogleMapsHandoffUrl, getPublicNotes, type Place } from "@/lib/place";
 import type { ReactNode } from "react";
+import { compactPlaceAddress } from "@/lib/place-card-address";
 import styles from "./field-guide.module.css";
 
 function getStatusLabel(place: Place) {
@@ -85,10 +86,12 @@ export function FieldGuidePlaceDetail({
   distanceKm,
   onClose,
   place,
+  hideCategory = false,
 }: {
   distanceKm: number | null;
   onClose: () => void;
   place: Place;
+  hideCategory?: boolean;
 }) {
   const notes = getPublicNotes(place);
 
@@ -109,13 +112,17 @@ export function FieldGuidePlaceDetail({
             {getStatusLabel(place)}
           </p>
           <h2>{place.name}</h2>
-          <span>
+          <span className={hideCategory ? styles.redundantCategory : undefined}>
             {place.category}
-            {place.district ? ` · ${place.district}` : ""}
+            <span className={styles.detailDistrict}>{place.district ? ` · ${place.district}` : ""}</span>
           </span>
         </div>
       </div>
-      {place.address.trim() ? <p className={styles.detailAddress}>{place.address}</p> : null}
+      <div className={styles.detailLocation}>
+      {place.address.trim() ? <p className={styles.detailAddress}>
+        <span className={styles.fullAddress}>{place.address}</span>
+        <span className={styles.compactAddress}>{compactPlaceAddress(place)}</span>
+      </p> : null}
       <a
         className={styles.mapsHandoff}
         href={getGoogleMapsHandoffUrl(place)}
@@ -123,13 +130,15 @@ export function FieldGuidePlaceDetail({
         target="_blank"
         aria-label={`Open ${place.name} in Google Maps (new tab)`}
       >
-        Open in Google Maps ↗
+        <span className={styles.fullMapsLabel}>Open in Google Maps ↗</span>
+        <span className={styles.compactMapsLabel}>Maps ↗</span>
       </a>
+      </div>
       {distanceKm === null ? null : (
         <p className={styles.detailDistance}>{formatDistance(distanceKm)} away</p>
       )}
       {notes.length > 0 ? (
-        <div className={styles.detailNotes}>
+        <div className={`${styles.detailNotes} ${styles.fullNotes}`}>
           <h3>Your notes</h3>
           {notes.slice(0, 2).map((note, index) => <p key={index}>{note}</p>)}
           {notes.length > 2 ? <details>
@@ -138,6 +147,10 @@ export function FieldGuidePlaceDetail({
           </details> : null}
         </div>
       ) : null}
+      {notes.length > 0 ? <details className={styles.compactNotes}>
+        <summary>Your notes</summary>
+        {notes.map((note, index) => <p key={index}>{note}</p>)}
+      </details> : null}
     </aside>
   );
 }

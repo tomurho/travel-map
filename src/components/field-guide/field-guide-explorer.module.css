@@ -117,3 +117,37 @@
   .brand { gap: 6px; }
   .brand strong { font-size: 15px; }
 }
+
+/* Mobile browsing has two rows; the existing filter controls expand over the map. */
+.mobileActions, .activeFilters, .filterFooter { display: none; }
+.locationNotice { padding: 8px 12px; background: var(--fg-paper); }
+.workspace { position: relative; }
+@media (max-width: 900px) {
+  .preview { min-height: 0; }
+  .header { gap: 8px; }
+  .header .brand { display: none; }
+  .header .citySelect { max-width: calc(100% - 166px); }
+  .mobileActions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin-left: auto; }
+  .mobileActions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; min-width: 44px; padding: 8px 10px; border: 1px solid var(--fg-line); border-radius: 8px; background: var(--fg-paper); font-size: 14px; }
+  .mobileActions svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+  .mobileActions svg circle { fill: var(--fg-paper); }
+  .mobileActions button[aria-expanded="true"] { color: var(--fg-coral); border-color: var(--fg-coral); }
+  .workspace { grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "toolbar" "content"; }
+  .filters { display: none; }
+  .workspace[data-filters-expanded="true"] .filters { display: grid; position: absolute; z-index: 20; inset: 0 0 auto; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-bottom: 1px solid var(--fg-line); border-radius: 0 0 14px 14px; background: var(--fg-paper); box-shadow: 0 6px 12px #24232118; }
+  .workspace[data-filters-expanded="true"] .toolbar { visibility: hidden; }
+  .workspace[data-filters-expanded="true"] .selected { display: none; }
+  .filterFooter { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; bottom: -12px; padding: 8px 0; background: var(--fg-paper); }
+  .filterFooter button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; }
+  .filterFooter button:first-child { text-decoration: underline; text-underline-offset: 3px; }
+  .filterFooter button:last-child { background: var(--fg-coral); color: white; }
+  .toolbar { border-top: 0; padding-top: 0; padding-bottom: 8px; min-height: 52px; }
+  .toolbar .resultCount, .toolbar .clear { display: none; }
+  .activeFilters { display: flex; flex: 1; min-width: 0; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px; margin: -2px; }
+  .activeFilters button { flex: 0 0 auto; max-width: 240px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--fg-line); border-radius: 8px; background: var(--fg-paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+  .activeFilters button[data-active="true"] { background: var(--fg-coral); border-color: var(--fg-coral); color: white; }
+  .viewSwitch button { min-width: 52px; padding-inline: 10px; }
+  .selected { padding: 12px 14px; }
+  .selected > aside { position: relative; inset: auto; gap: 8px; }
+  .selected > aside h2 { font-size: 18px; }
+}

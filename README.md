@@ -13,13 +13,24 @@ A personal, map-first travel field guide built with Next.js. It turns saved plac
 
 The main guide at `/` and `/field-guide` uses the approved compact mobile layout
 for every city. Choose a city in the header, then a broad group and an optional
-specialty. The guide starts on **All places**, including types awaiting review.
+specialty. The guide starts on **All categories**, including types awaiting review.
 Specialties occupy one horizontal row; **More** opens the searchable full list.
 Counts and area choices come from the selected city. Empty groups are disabled.
+
+On mobile, the header stays at two rows: city/Search/Filters, then active filter
+chips and Map/List. Filters expands the controls over the map; selecting options
+updates results without collapsing the panel. **Show places**, Filters, or Escape
+closes it. Search opens the panel and focuses its input. Active chips can be
+removed individually; Reset clears every refinement. Desktop keeps its visible
+filter panel and local editing controls.
 
 Select a pin or place name to open one card with status, name, type, address, and
 **Open in Google Maps**. On mobile, **Map** and **List** preserve filters and
 selection; desktop shows both panes. Numbered map circles zoom into clusters.
+The mobile card uses a compact **Maps ↗** action and omits the type when its exact
+specialty is already selected. Addresses remove exact repeated city/district and
+country components while retaining street, building, and unit details; stored
+addresses and Maps links are unchanged. Notes expand within the card on demand.
 The list loads in batches, and selecting a pin reveals its entry even beyond the
 first batch. On localhost, **Edit list** retains the existing inline editor.
 

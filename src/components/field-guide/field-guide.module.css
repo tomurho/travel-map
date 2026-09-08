@@ -1167,3 +1167,22 @@
   }
   .resultsHeader { padding-top: 12px; }
 }
+
+/* Compact mobile place card; desktop keeps the full address and handoff. */
+.detailLocation { display: contents; }
+.detailHeading .detailDistrict { display: inline; }
+.compactAddress, .compactMapsLabel, .compactNotes { display: none; }
+@media (max-width: 900px) {
+  .detailClose { top: 0; right: 0; border-radius: 6px; background: transparent; }
+  .detailHeading .redundantCategory, .detailHeading .detailDistrict,
+  .fullAddress, .fullMapsLabel, .fullNotes { display: none; }
+  .compactAddress, .compactMapsLabel, .compactNotes { display: block; }
+  .detailLocation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+  .detailLocation .mapsHandoff { grid-column: 2; align-self: end; min-width: 80px; padding: 8px 12px; border-color: var(--fg-line); border-radius: 8px; background: transparent; color: var(--fg-ink); font-weight: 500; }
+  .detailLocation .mapsHandoff:hover { background: var(--fg-maple-soft); }
+  .detailAddress { font-size: 13px; line-height: 1.45; }
+  .detailDistance { padding: 0; border: 0; font-size: 12px; font-weight: 400; }
+  .compactNotes { border-top: 1px solid var(--fg-line); font-size: 13px; }
+  .compactNotes summary { display: list-item; min-height: 44px; padding: 12px 0; cursor: pointer; }
+  .compactNotes p { line-height: 1.5; }
+}
