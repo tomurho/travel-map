@@ -97,42 +97,46 @@ export function FieldGuidePlaceDetail({
 
   return (
     <aside className={styles.placeDetail} aria-label={`Selected place: ${place.name}`}>
-      <button
-        aria-label="Close selected place"
-        className={styles.detailClose}
-        onClick={onClose}
-        type="button"
-      >
-        ×
-      </button>
-      <div className={styles.detailHeading}>
-        <div>
-          <p>
-            {place.loved ? "♥ " : null}
-            {getStatusLabel(place)}
-          </p>
-          <h2>{place.name}</h2>
-          <span className={hideCategory ? styles.redundantCategory : undefined}>
-            {place.category}
-            <span className={styles.detailDistrict}>{place.district ? ` · ${place.district}` : ""}</span>
-          </span>
+      <div className={styles.detailLayout}>
+        <div className={styles.detailCopy}>
+          <div className={styles.detailHeading}>
+            <div>
+              <p>
+                {place.loved ? "♥ " : null}
+                {getStatusLabel(place)}
+              </p>
+              <h2>{place.name}</h2>
+              <span className={hideCategory ? styles.redundantCategory : undefined}>
+                {place.category}
+                <span className={styles.detailDistrict}>{place.district ? ` · ${place.district}` : ""}</span>
+              </span>
+            </div>
+          </div>
+          {place.address.trim() ? <p className={styles.detailAddress}>
+            <span className={styles.fullAddress}>{place.address}</span>
+            <span className={styles.compactAddress}>{compactPlaceAddress(place)}</span>
+          </p> : null}
         </div>
-      </div>
-      <div className={styles.detailLocation}>
-      {place.address.trim() ? <p className={styles.detailAddress}>
-        <span className={styles.fullAddress}>{place.address}</span>
-        <span className={styles.compactAddress}>{compactPlaceAddress(place)}</span>
-      </p> : null}
-      <a
-        className={styles.mapsHandoff}
-        href={getGoogleMapsHandoffUrl(place)}
-        rel="noopener noreferrer"
-        target="_blank"
-        aria-label={`Open ${place.name} in Google Maps (new tab)`}
-      >
-        <span className={styles.fullMapsLabel}>Open in Google Maps ↗</span>
-        <span className={styles.compactMapsLabel}>Maps ↗</span>
-      </a>
+        <div className={styles.detailActions}>
+          <button
+            aria-label="Close selected place"
+            className={styles.detailClose}
+            onClick={onClose}
+            type="button"
+          >
+            ×
+          </button>
+          <a
+            className={styles.mapsHandoff}
+            href={getGoogleMapsHandoffUrl(place)}
+            rel="noopener noreferrer"
+            target="_blank"
+            aria-label={`Open ${place.name} in Google Maps (new tab)`}
+          >
+            <span className={styles.fullMapsLabel}>Open in Google Maps ↗</span>
+            <span className={styles.compactMapsLabel}>Maps ↗</span>
+          </a>
+        </div>
       </div>
       {distanceKm === null ? null : (
         <p className={styles.detailDistance}>{formatDistance(distanceKm)} away</p>

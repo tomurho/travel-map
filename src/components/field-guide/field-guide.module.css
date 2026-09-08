@@ -1169,17 +1169,20 @@
 }
 
 /* Compact mobile place card; desktop keeps the full address and handoff. */
-.detailLocation { display: contents; }
+.detailLayout, .detailCopy, .detailActions { display: contents; }
 .detailHeading .detailDistrict { display: inline; }
 .compactAddress, .compactMapsLabel, .compactNotes { display: none; }
 @media (max-width: 900px) {
-  .detailClose { top: -8px; right: -6px; border: 1px solid var(--fg-line); border-radius: 8px; background: var(--fg-bg); }
+  .detailLayout { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+  .detailCopy { display: grid; align-content: start; gap: 6px; min-width: 0; }
+  .detailCopy .detailHeading { padding-right: 0; }
+  .detailActions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .detailActions .detailClose { position: static; border: 1px solid var(--fg-line); border-radius: 8px; background: var(--fg-bg); }
   .detailHeading .redundantCategory, .detailHeading .detailDistrict,
   .fullAddress, .fullMapsLabel, .fullNotes { display: none; }
   .compactAddress, .compactMapsLabel, .compactNotes { display: block; }
-  .detailLocation { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
-  .detailLocation .mapsHandoff { grid-column: 2; align-self: center; min-width: 80px; padding: 8px 12px; border-color: var(--fg-line); border-radius: 8px; background: transparent; color: var(--fg-ink); font-weight: 500; }
-  .detailLocation .mapsHandoff:hover { background: var(--fg-maple-soft); }
+  .detailActions .mapsHandoff { min-width: 80px; padding: 8px 12px; border-color: var(--fg-line); border-radius: 8px; background: transparent; color: var(--fg-ink); font-weight: 500; }
+  .detailActions .mapsHandoff:hover { background: var(--fg-maple-soft); }
   .detailAddress { font-size: 13px; line-height: 1.45; }
   .detailDistance { padding: 0; border: 0; font-size: 12px; font-weight: 400; }
   .compactNotes { border-top: 1px solid var(--fg-line); font-size: 13px; }
