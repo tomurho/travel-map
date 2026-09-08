@@ -141,7 +141,7 @@
   .filterFooter button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; }
   .filterFooter button:first-child { text-decoration: underline; text-underline-offset: 3px; }
   .filterFooter button:last-child { background: var(--fg-coral); color: white; }
-  .toolbar { border-top: 0; padding-top: 0; padding-bottom: 8px; min-height: 52px; }
+  .toolbar { border-top: 0; padding-top: 8px; padding-bottom: 8px; min-height: 60px; }
   .toolbar .resultCount, .toolbar .clear { display: none; }
   .activeFilters { display: flex; flex: 1; min-width: 0; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px; margin: -2px; }
   .activeFilters button { flex: 0 0 auto; max-width: 240px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--fg-line); border-radius: 8px; background: var(--fg-paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
