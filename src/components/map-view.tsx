@@ -113,7 +113,7 @@ function getMarkerAppearance(place: Place, isActive: boolean) {
   const isPriorityPlace = place.loved === true || place.status === "want_to_go";
 
   return {
-    scale: isActive ? 10 : isPriorityPlace ? 6.5 : 5.25,
+    scale: isActive ? 12 : isPriorityPlace ? 7.8 : 6.3,
     fillColor: getMarkerColor(place),
     fillOpacity: 1,
     strokeColor: isActive ? "#242321" : "#ffffff",
