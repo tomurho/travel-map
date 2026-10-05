@@ -177,6 +177,8 @@ select {
 }
 
 .map-canvas {
+  /* Claim gestures before the browser starts page zooming, even on a fast pinch. */
+  touch-action: none;
   position: absolute;
   inset: 0;
 }

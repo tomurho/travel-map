@@ -501,6 +501,7 @@ export function MapView({
       options={{
         clickableIcons: false,
         fullscreenControl: false,
+        gestureHandling: "greedy",
         mapTypeControl: false,
         styles: mapStyles,
         streetViewControl: false,
