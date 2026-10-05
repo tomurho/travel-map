@@ -102,10 +102,10 @@ function getMarkerColor(place: Place) {
   }
 
   if (place.status === "been") {
-    return "#9ca3af";
+    return "#48677f";
   }
 
-  return "#d1d5db";
+  return "#6f899e";
 }
 
 function getMarkerAppearance(place: Place, isActive: boolean) {
@@ -173,7 +173,7 @@ const clusterOptions: GoogleMarkerClustererProps["options"] = {
       icon: {
         path: google.maps.SymbolPath.CIRCLE,
         scale: 22,
-        fillColor: "#343330",
+        fillColor: "#48677f",
         fillOpacity: 1,
         strokeColor: "#fffdf9",
         strokeWeight: 3,

@@ -306,7 +306,7 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
             distanceKm={location ? getDistanceKm(location, selectedPlace) : null}
             onClose={() => setSelectedId(null)}
           />
-        </div> : <div className={styles.legend}><span><i style={{ background: "#ef2b68" }} />Loved</span><span><i style={{ background: "#f59e0b" }} />Want to go</span><span><i style={{ background: "#9ca3af" }} />Been</span><span><i style={{ background: "#d1d5db" }} />Saved</span></div>}
+        </div> : <div className={styles.legend}><span><i style={{ background: "#ef2b68" }} />Loved</span><span><i style={{ background: "#f59e0b" }} />Want to go</span><span><i style={{ background: "#48677f" }} />Been</span><span><i style={{ background: "#6f899e" }} />Saved</span></div>}
       </section>
       <section className={styles.results} id="field-guide-results" tabIndex={-1} inert={isMobile && filtersExpanded} aria-label={`${filters.city} places`}>
         {isLocalhost && !previewCity ? <div className={styles.editToolbar}>
