@@ -1,3 +1,5 @@
+import dayTripLabels from "@/data/place-day-trips.json";
+
 export type PlaceStatus = "been" | "want_to_go" | "location";
 export type LovedFilter = "all" | "loved" | "unrated";
 export type VerifiedStatus = "Yes" | "Review" | "No" | "Closed/Moved";
@@ -145,17 +147,11 @@ export function getGoogleMapsHandoffUrl(
   return `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`;
 }
 
-export function getPublicNotes(place: Pick<Place, "notes">) {
-  if (Array.isArray(place.notes)) {
-    return place.notes.map((note) => note.trim()).filter(Boolean);
-  }
-
-  if (typeof place.notes === "string") {
-    return place.notes
-      .split("\n")
-      .map((note) => note.trim())
-      .filter(Boolean);
-  }
-
-  return [];
+export function getPublicNotes(place: Pick<Place, "notes"> & Partial<Pick<Place, "id">>) {
+  const notes = Array.isArray(place.notes)
+    ? place.notes.map((note) => note.trim()).filter(Boolean)
+    : typeof place.notes === "string" ? place.notes.split("\n").map((note) => note.trim()).filter(Boolean) : [];
+  // Guide grouping is an owner decision. Sheet-owned venue notes cannot erase it.
+  const dayTrip = place.id ? (dayTripLabels as Record<string, string>)[place.id] : undefined;
+  return dayTrip && !notes.includes(dayTrip) ? [dayTrip, ...notes] : notes;
 }

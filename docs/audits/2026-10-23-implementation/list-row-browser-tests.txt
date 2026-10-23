@@ -1,0 +1,22 @@
+
+> travel-map@0.1.0 test:browser /Users/tomurho/projects/travel map
+> playwright test public-guide.spec.ts
+
+
+Running 11 tests using 1 worker
+
+(node:66932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/browser/public-guide.spec.ts:12:5 › The list Map action reveals street context above the card; ordinary switches preserve manual view (1.1s)
+  ✓   2 tests/browser/public-guide.spec.ts:33:5 › category selection closes filters, Escape restores focus, and Back restores the prior view (520ms)
+  ✓   3 tests/browser/public-guide.spec.ts:48:5 › map failure keeps List details available (448ms)
+  ✓   4 tests/browser/public-guide.spec.ts:58:5 › distant Nearby keeps city pins and explains the result (449ms)
+  ✓   5 tests/browser/public-guide.spec.ts:71:5 › mobile hides editing and Area without choices (410ms)
+  ✓   6 tests/browser/public-guide.spec.ts:80:5 › co-located venues remain separate keyboard choices (586ms)
+  ✓   7 tests/browser/public-guide.spec.ts:99:5 › Taipei keeps its city streets and offers every saved place (359ms)
+  ✓   8 tests/browser/public-guide.spec.ts:109:5 › desktop detail actions are readable and the public guide reflows with enlarged text (1.2s)
+  ✓   9 tests/browser/public-guide.spec.ts:137:5 › city markers update in one cluster batch when a category changes (410ms)
+  ✓  10 tests/browser/public-guide.spec.ts:151:5 › the approved Taipei day trip has a public explanation (376ms)
+  ✓  11 tests/browser/public-guide.spec.ts:161:5 › one venue name opens Google Maps; the row toggles and its Map button reveals the web map (586ms)
+
+  11 passed (8.2s)

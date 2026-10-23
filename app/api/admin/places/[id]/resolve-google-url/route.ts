@@ -32,6 +32,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   let input: {
+    expectedRecordVersion: string;
     googleMapsUrl?: string;
     place?: Partial<Pick<Place, "address" | "canonicalAddress" | "latitude" | "longitude">>;
   };
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       throw new Error("Enter a Maps link and valid location fields.");
     }
     const fields = body as Record<string, unknown>;
+    if (typeof fields.expectedRecordVersion !== "string" || !fields.expectedRecordVersion) throw new Error("Reload the place before resolving it; its original record version is required.");
     if (typeof fields.googleMapsUrl !== "string") {
       throw new Error("Google Maps URL must be text.");
     }
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         throw new Error(`${field} must be a number between -${limit} and ${limit}.`);
       }
     }
-    input = { googleMapsUrl: fields.googleMapsUrl, place: location as typeof input.place };
+    input = { expectedRecordVersion: fields.expectedRecordVersion, googleMapsUrl: fields.googleMapsUrl, place: location as typeof input.place };
   } catch (error) {
     const message = error instanceof SyntaxError ? "Enter valid JSON."
       : error instanceof Error ? error.message : "Invalid location fields.";
@@ -90,6 +92,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           maxLiveCalls: 3,
         }),
         placeOverrides: input.place,
+        expectedRecordVersion: input.expectedRecordVersion,
       },
     );
 

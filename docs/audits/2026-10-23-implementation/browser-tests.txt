@@ -1,0 +1,29 @@
+
+> travel-map@0.1.0 test:browser /Users/tomurho/projects/travel map
+> playwright test
+
+
+Running 18 tests using 1 worker
+
+(node:40173) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/browser/admin.spec.ts:9:5 › current work shows valid candidates beside invalid rows; Mark ready sends the reviewed version once (894ms)
+  ✓   2 tests/browser/admin.spec.ts:30:5 › failed refresh labels retained data and Retry preserves candidate edits (559ms)
+  ✓   3 tests/browser/admin.spec.ts:49:5 › loading, connection failure, Retry, and empty queues have readable states (633ms)
+  ✓   4 tests/browser/admin.spec.ts:77:5 › conflict correction requires a note and explicit verification, then invalidates Apply (705ms)
+  ✓   5 tests/browser/admin.spec.ts:98:5 › partial screenshot retry preserves corrections and supports keyboard original-image inspection (1.2s)
+  ✓   6 tests/browser/admin.spec.ts:144:5 › cancelled paid lookup and Apply confirmations send no mutation requests (754ms)
+  ✓   7 tests/browser/admin.spec.ts:164:5 › concurrent failures keep each error beside its own action and Retry (477ms)
+  ✓   8 tests/browser/admin.spec.ts:187:5 › admin reflows at 320 pixels with enlarged text (731ms)
+  ✓   9 tests/browser/public-guide.spec.ts:12:5 › Show on map reveals street context above the card; ordinary switches preserve manual view (704ms)
+  ✓  10 tests/browser/public-guide.spec.ts:33:5 › category selection closes filters, Escape restores focus, and Back restores the prior view (588ms)
+  ✓  11 tests/browser/public-guide.spec.ts:48:5 › map failure keeps List details available (518ms)
+  ✓  12 tests/browser/public-guide.spec.ts:58:5 › distant Nearby keeps city pins and explains the result (525ms)
+  ✓  13 tests/browser/public-guide.spec.ts:71:5 › mobile hides editing and Area without choices (366ms)
+  ✓  14 tests/browser/public-guide.spec.ts:80:5 › co-located venues remain separate keyboard choices (550ms)
+  ✓  15 tests/browser/public-guide.spec.ts:99:5 › Taipei keeps its city streets and offers every saved place (320ms)
+  ✓  16 tests/browser/public-guide.spec.ts:109:5 › desktop detail actions are readable and the public guide reflows with enlarged text (765ms)
+  ✓  17 tests/browser/public-guide.spec.ts:137:5 › city markers update in one cluster batch when a category changes (440ms)
+  ✓  18 tests/browser/public-guide.spec.ts:151:5 › the approved Taipei day trip has a public explanation (494ms)
+
+  18 passed (12.9s)

@@ -135,6 +135,7 @@ function AdminReviewCandidateCard({
       {candidate.notes ? (
         <p className="admin-review-candidate-note">{candidate.notes}</p>
       ) : null}
+      {candidate.warnings?.length ? <div className="admin-review-candidate-warning" role="status"><strong>Check before verifying</strong><ul>{candidate.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div> : null}
       {blockingIssues.length > 0 ? (
         <div className="admin-review-candidate-warning" role="status">
           <strong>Cannot verify yet</strong>

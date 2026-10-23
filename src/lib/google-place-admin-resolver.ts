@@ -1,3 +1,4 @@
+import { getPlaceRecordVersion } from "@/lib/place-record-version";
 import {
   FreeGeocodingAccess,
   type FreeGeocodeCandidate,
@@ -21,6 +22,7 @@ import type { Place, VerificationSource } from "@/lib/place";
 import { verificationFields } from "@/lib/published-place-merge";
 import { fetchSupportedProviderUrl } from "@/lib/provider-url";
 import {
+  PlacesJsonWriteConflictError,
   readPlacesJsonSnapshot,
   writePlacesJsonAtomic,
 } from "@/lib/places-json-store";
@@ -752,6 +754,7 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     access?: GooglePlacesAccess;
     fetcher?: typeof fetch;
     freeAccess?: FreeGeocodingAccess;
+    expectedRecordVersion?: string;
     placeOverrides?: ResolverPlaceOverrides;
     readSnapshot?: typeof readPlacesJsonSnapshot;
     writePlaces?: typeof writeProductionPlaces;
@@ -769,6 +772,9 @@ export async function resolveGoogleMapsUrlForProductionPlace(
   const trimmedGoogleMapsUrl = googleMapsUrl.trim();
   if (!storedPlace) {
     return { error: "Production place was not found." };
+  }
+  if (options.expectedRecordVersion !== undefined && options.expectedRecordVersion !== getPlaceRecordVersion(storedPlace)) {
+    throw new PlacesJsonWriteConflictError("This place changed. Reload before resolving it again.");
   }
   const prepared = preparePlaceForResolution(storedPlace, trimmedGoogleMapsUrl, options.placeOverrides ?? {});
   const currentPlace = prepared.place;
@@ -967,8 +973,8 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     candidateSummaries,
     counters: access.counters,
     freeCounters: freeAccess.counters,
-    place: nextPlace,
-    places: nextPlaces,
+    place: nextPlace ? { ...nextPlace, recordVersion: getPlaceRecordVersion(nextPlace) } : nextPlace,
+    places: nextPlaces.map((place) => ({ ...place, recordVersion: getPlaceRecordVersion(place) })),
     providerAttempts,
   };
 }

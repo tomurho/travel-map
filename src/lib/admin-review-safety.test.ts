@@ -55,7 +55,9 @@ test("catalog endpoint requires the configured header and forbids caching privat
     assert.match(denied.headers.get("cache-control") ?? "", /private, no-store/);
     const allowed = await getAdminPlaces(new NextRequest("http://localhost/api/admin/places", { headers: { "x-admin-password": "fixture-password" } }));
     assert.equal(allowed.status, 200);
-    assert.ok(Array.isArray((await allowed.json()).places));
+    const records = (await allowed.json()).places;
+    assert.ok(Array.isArray(records));
+    assert.match(records[0].recordVersion, /^[a-f0-9]{64}$/);
     assert.match(allowed.headers.get("cache-control") ?? "", /private, no-store/);
   } finally {
     if (priorPassword === undefined) delete process.env.ADMIN_PASSWORD; else process.env.ADMIN_PASSWORD = priorPassword;

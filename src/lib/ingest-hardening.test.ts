@@ -467,14 +467,14 @@ test("admin authorization uses the header and fails closed in production", () =>
   assert.equal(
     isAdminAuthorized(
       { headers: new Headers({ "x-admin-password": "secret" }) },
-      { adminPassword: "secret", nodeEnv: "production" },
+      { adminPassword: "secret", nodeEnv: "production", enableAdmin: "true" },
     ),
     true,
   );
   assert.equal(
     isAdminAuthorized(
       { headers: new Headers({ "x-admin-password": "wrong" }) },
-      { adminPassword: "secret", nodeEnv: "production" },
+      { adminPassword: "secret", nodeEnv: "production", enableAdmin: "true" },
     ),
     false,
   );

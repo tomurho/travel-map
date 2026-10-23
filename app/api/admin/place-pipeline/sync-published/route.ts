@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { syncPublishedToApp } from "@/lib/place-sheet-pipeline";
 import { PipelineError } from "@/lib/pipeline-preview";
+import { getGoogleSheetsErrorMessage, getGoogleSheetsErrorStatus } from "@/lib/google-sheets-errors";
+import { invalidatePlacePipelineSnapshot } from "@/lib/place-pipeline-snapshot-cache";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
@@ -42,14 +44,16 @@ export async function POST(request: NextRequest) {
       write,
     });
 
+    if ("wrote" in result ? result.wrote : true) invalidatePlacePipelineSnapshot(input.sheetId ?? "");
     return NextResponse.json(result);
   } catch (error) {
+    if (write) invalidatePlacePipelineSnapshot(input.sheetId ?? "");
     if (error instanceof PipelineError) {
       return NextResponse.json({ error: error.message, code: error.code, details: error.details }, { status: error.status });
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not sync Published rows." },
-      { status: 400 },
+      { error: getGoogleSheetsErrorMessage(error, "Could not sync Published rows.") },
+      { status: getGoogleSheetsErrorStatus(error) },
     );
   }
 }

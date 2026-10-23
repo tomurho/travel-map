@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminAuthorized } from "@/lib/admin-auth";
+import type { ScreenshotImageOutcome } from "@/lib/screenshot-intake";
 
 const MAX_SCREENSHOT_FILES = 10;
 const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
@@ -188,6 +189,7 @@ Rules:
       "Content-Type": "application/json",
     },
     method: "POST",
+    signal: AbortSignal.timeout(45_000),
   });
 
   if (!response.ok) {
@@ -288,29 +290,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    for (const image of images) {
-      if (!ACCEPTED_SCREENSHOT_TYPES.has(image.type)) {
-        throw new ScreenshotIntakeError(
-          `Unsupported image type for ${image.name}: ${image.type}`,
-          {
-            code: "unsupported_image_type",
-            stage: "validation",
-            status: 400,
-          },
-        );
-      }
-
-      if (image.size > MAX_SCREENSHOT_BYTES) {
-        throw new ScreenshotIntakeError(
-          `${image.name} exceeds the 8 MB image limit.`,
-          {
-            code: "image_too_large",
-            stage: "validation",
-            status: 400,
-          },
-        );
-      }
-    }
 
     console.info("[screenshot-intake/extract] validated images", {
       count: images.length,
@@ -321,13 +300,35 @@ export async function POST(request: NextRequest) {
       })),
     });
 
-    const extractedRows = (
-      await Promise.all(images.map((image) => extractPlacesFromImage(image, apiKey)))
-    ).flat();
-
+    const imageIds = formData.getAll("imageIds");
+    const outcomes: ScreenshotImageOutcome[] = await Promise.all(images.map(async (image, index) => {
+      const imageId = typeof imageIds[index] === "string" && imageIds[index] ? String(imageIds[index]) : String(index);
+      try {
+        if (!ACCEPTED_SCREENSHOT_TYPES.has(image.type)) {
+          throw new ScreenshotIntakeError(`Unsupported image type for ${image.name}. Choose JPEG, PNG, WebP, HEIC, or HEIF.`, {
+            code: "unsupported_image_type", stage: "validation", status: 400,
+          });
+        }
+        if (image.size > MAX_SCREENSHOT_BYTES) {
+          throw new ScreenshotIntakeError(`${image.name} exceeds the 8 MB image limit.`, {
+            code: "image_too_large", stage: "validation", status: 400,
+          });
+        }
+        const rows = await extractPlacesFromImage(image, apiKey);
+        return { imageId, fileName: image.name, status: "success" as const, rows };
+      } catch (error) {
+        logScreenshotIntakeError(error, { fileName: image.name, imageId });
+        const failure = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+          ? new ScreenshotIntakeError("Image extraction timed out. Retry this image.", { code: "provider_timeout", stage: "openai", status: 504 })
+          : error;
+        return { imageId, fileName: image.name, status: "error" as const, ...sanitizeError(failure).body };
+      }
+    }));
     return NextResponse.json({
       imagesProcessed: images.length,
-      rows: extractedRows,
+      // Retain the flattened field for older clients. Successful rows survive unrelated failures.
+      rows: outcomes.flatMap((outcome) => outcome.status === "success" ? outcome.rows.map((row) => ({ ...row, imageId: outcome.imageId })) : []),
+      results: outcomes,
     });
   } catch (error) {
     logScreenshotIntakeError(error, {

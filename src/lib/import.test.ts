@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AdminPipeline } from "@/components/admin-pipeline";
+import { AdminScreenshotIntake } from "@/components/admin-screenshot-intake";
 import { filterPlaces } from "@/lib/filtering";
 import { formatProviderAttemptSummary } from "@/lib/admin-ui";
 import { FreeGeocodingAccess } from "@/lib/free-geocoding";
@@ -2291,30 +2295,24 @@ test("admin provider attempts are summarized for the main QA view", () => {
 });
 
 test("admin place pipeline renders the active ingest controls", () => {
-  const source = readFileSync(
-    join(process.cwd(), "src/components/admin-workflow.tsx"),
-    "utf8",
-  );
+  const shell = readFileSync(join(process.cwd(), "src/components/admin-workflow.tsx"), "utf8");
+  const pipeline = renderToStaticMarkup(createElement(AdminPipeline, { adminPassword: "", categoryOptions: ["Coffee"], onSheetIdChange: () => {} }));
+  const screenshots = renderToStaticMarkup(createElement(AdminScreenshotIntake, { adminPassword: "", sheetId: "fixture-sheet", onSubmitted: () => {} }));
 
-  assert.match(source, /Places admin/);
-  assert.match(source, /screenshotIntakePanel/);
-  assert.match(source, /googleSheetsPipelinePanel/);
-  assert.match(source, /Extract Places/);
-  assert.match(source, /Coming back after a break/);
-  assert.match(source, /intakeStatus = New/);
-  assert.match(source, /intakeStatus = Ready/);
-  assert.match(source, /intakeStatus = Enriched/);
-  assert.match(source, /reviewStatus = Candidate/);
-  assert.match(source, /reviewStatus = Verified/);
-  assert.match(source, /verifiedStatus = Verified/);
-  assert.match(source, /Process Ready Rows/);
-  assert.match(source, /Publish Verified Reviews/);
-  assert.match(source, /Update Travel Map/);
+  assert.match(shell, /Places admin/);
+  assert.match(shell, /<AdminPipeline/);
+  assert.match(shell, /<AdminScreenshotIntake/);
+  assert.ok(shell.indexOf("<AdminPipeline") < shell.indexOf("<AdminScreenshotIntake"), "returning owners see current work before screenshot intake");
+  assert.match(screenshots, /Add screenshots/);
+  assert.match(screenshots, /Extract places/);
+  assert.match(pipeline, /Coming back after a break/);
+  for (const status of ["intakeStatus = New", "intakeStatus = Ready", "intakeStatus = Enriched", "reviewStatus = Candidate", "reviewStatus = Verified", "verifiedStatus = Verified"]) assert.ok(pipeline.includes(status), status);
+  for (const action of ["New captures", "Process Ready Rows", "Publish Verified Reviews", "Update Travel Map"]) assert.ok(pipeline.includes(action), action);
 });
 
 test("admin pipeline requires confirmations for paid and mutating actions", () => {
   const source = readFileSync(
-    join(process.cwd(), "src/components/admin-workflow.tsx"),
+    join(process.cwd(), "src/components/admin-pipeline.tsx"),
     "utf8",
   );
 

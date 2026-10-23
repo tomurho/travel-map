@@ -7,7 +7,7 @@ import type {
   PlaceStatus,
 } from "@/lib/place";
 import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
-import { getPlaceRecordVersion } from "@/lib/place-record-version";
+import { toPublicPlace } from "@/lib/public-place";
 
 export const dynamic = "force-dynamic";
 
@@ -31,27 +31,6 @@ function readLoved(value: string | undefined): LovedFilter {
   return value === "loved" || value === "unrated"
     ? value
     : "all";
-}
-
-function toPublicPlace(place: Place): Place {
-  return {
-    id: place.id,
-    recordVersion: getPlaceRecordVersion(place),
-    name: place.name,
-    city: place.city,
-    category: place.category,
-    status: place.status,
-    loved: place.loved,
-    district: place.district,
-    address: place.address,
-    latitude: place.latitude,
-    longitude: place.longitude,
-    tabelog: "",
-    subway: "",
-    googleMapsUrl: place.googleMapsUrl,
-    googlePlaceId: place.googlePlaceId,
-    notes: place.notes,
-  };
 }
 
 export default async function OriginalPage({ searchParams }: PageProps) {

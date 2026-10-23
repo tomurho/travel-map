@@ -5,6 +5,25 @@ import readline from "node:readline/promises";
 
 import { OAuth2Client, type Credentials } from "google-auth-library";
 
+export const GOOGLE_PROVIDER_TIMEOUT_MS = 20_000;
+export const GOOGLE_SHEETS_REPAIR_INSTRUCTIONS = "Run pnpm setup:google-sheets in the project terminal. Open the printed Google link, grant access, and paste the code there. Then retry in Admin.";
+
+export class GoogleSheetsConnectionError extends Error {
+  constructor(reason: string) {
+    super(`${reason} ${GOOGLE_SHEETS_REPAIR_INSTRUCTIONS}`);
+    this.name = "GoogleSheetsConnectionError";
+  }
+}
+
+async function withProviderTimeout<T>(request: Promise<T>, timeoutMs = GOOGLE_PROVIDER_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([request, new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("Google connection timed out. Your drafts are still available. Retry the action.")), timeoutMs);
+    })]);
+  } finally { if (timer) clearTimeout(timer); }
+}
+
 const GOOGLE_SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 const OAUTH_CLIENT_PATH = path.resolve(
   process.cwd(),
@@ -52,20 +71,33 @@ async function readJsonFile<TValue>(filePath: string) {
   return JSON.parse(await fs.readFile(filePath, "utf8")) as TValue;
 }
 
-async function writeTokenFile(tokens: Credentials) {
-  await fs.mkdir(path.dirname(OAUTH_TOKEN_PATH), { recursive: true });
-  await fs.writeFile(OAUTH_TOKEN_PATH, `${JSON.stringify(tokens, null, 2)}\n`);
+async function writeTokenFile(tokens: Credentials, tokenPath: string) {
+  await fs.mkdir(path.dirname(tokenPath), { recursive: true });
+  await fs.writeFile(tokenPath, `${JSON.stringify(tokens, null, 2)}\n`, { mode: 0o600 });
 }
 
-export async function createGoogleSheetsAuthClient() {
+type GoogleSheetsAuthPaths = { clientPath?: string; tokenPath?: string };
+
+export function createGoogleSheetsAuthClient(paths: GoogleSheetsAuthPaths = {}) {
+  return loadGoogleSheetsAuthClient(false, paths);
+}
+
+/** Explicit local setup only. HTTP handlers always use the noninteractive function above. */
+export function setupGoogleSheetsAuthClient(paths: GoogleSheetsAuthPaths = {}) {
+  return loadGoogleSheetsAuthClient(true, paths);
+}
+
+async function loadGoogleSheetsAuthClient(interactive: boolean, paths: GoogleSheetsAuthPaths) {
+  const clientPath = paths.clientPath ?? OAUTH_CLIENT_PATH;
+  const tokenPath = paths.tokenPath ?? OAUTH_TOKEN_PATH;
   let rawConfig: GoogleOAuthClientConfig;
 
   try {
-    rawConfig = await readJsonFile<GoogleOAuthClientConfig>(OAUTH_CLIENT_PATH);
+    rawConfig = await readJsonFile<GoogleOAuthClientConfig>(clientPath);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Unable to read OAuth client credentials from ${OAUTH_CLIENT_PATH}: ${message}`,
+    throw new GoogleSheetsConnectionError(
+      `Unable to read OAuth client credentials from ${clientPath}: ${message}`,
     );
   }
 
@@ -75,12 +107,16 @@ export async function createGoogleSheetsAuthClient() {
   const redirectUri = config?.redirect_uris?.[0] ?? "http://localhost";
 
   if (!clientId || !clientSecret) {
-    throw new Error(
-      `OAuth client credentials in ${OAUTH_CLIENT_PATH} must include client_id and client_secret.`,
+    throw new GoogleSheetsConnectionError(
+      `OAuth client credentials in ${clientPath} must include client_id and client_secret.`,
     );
   }
 
-  const client = new OAuth2Client(clientId, clientSecret, redirectUri);
+  const client = new OAuth2Client({ clientId, clientSecret, redirectUri, transporterOptions: { timeout: GOOGLE_PROVIDER_TIMEOUT_MS, retry: false } });
+
+  client.transporter.interceptors.request.add({
+    resolved: async (options) => ({ ...options, retry: false, timeout: GOOGLE_PROVIDER_TIMEOUT_MS, signal: AbortSignal.timeout(GOOGLE_PROVIDER_TIMEOUT_MS) }),
+  });
 
   client.on("tokens", async (tokens) => {
     if (Object.keys(tokens).length === 0) {
@@ -88,26 +124,30 @@ export async function createGoogleSheetsAuthClient() {
     }
 
     try {
-      const existingTokens = await readJsonFile<Credentials>(OAUTH_TOKEN_PATH).catch(
+      const existingTokens = await readJsonFile<Credentials>(tokenPath).catch(
         () => ({}),
       );
-      await writeTokenFile({ ...existingTokens, ...tokens });
+      await writeTokenFile({ ...existingTokens, ...tokens }, tokenPath);
     } catch (error) {
       console.warn(
-        `Google Sheets token refresh succeeded but saving ${OAUTH_TOKEN_PATH} failed: ${
+        `Google Sheets token refresh succeeded but saving ${tokenPath} failed: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
     }
   });
 
-  try {
-    const tokens = await readJsonFile<Credentials>(OAUTH_TOKEN_PATH);
-    client.setCredentials(tokens);
-    return client;
-  } catch {
-    // First run continues into the local desktop OAuth flow.
+  if (!interactive) {
+    try {
+      const tokens = await readJsonFile<Credentials>(tokenPath);
+      if (!tokens.refresh_token && !tokens.access_token) throw new Error("The token file has no access token or refresh token.");
+      client.setCredentials(tokens);
+      return client;
+    } catch {
+      throw new GoogleSheetsConnectionError("Google Sheets is not connected, or its token file cannot be read.");
+    }
   }
+
 
   const authorizationUrl = client.generateAuthUrl({
     access_type: "offline",
@@ -130,10 +170,10 @@ export async function createGoogleSheetsAuthClient() {
       throw new Error("Authorization code is required.");
     }
 
-    const { tokens } = await client.getToken(code);
+    const { tokens } = await withProviderTimeout(client.getToken(code));
     client.setCredentials(tokens);
-    await writeTokenFile(tokens);
-    console.log(`Saved Google Sheets OAuth tokens to ${OAUTH_TOKEN_PATH}.`);
+    await writeTokenFile(tokens, tokenPath);
+    console.log(`Saved Google Sheets OAuth tokens to ${tokenPath}.`);
     return client;
   } finally {
     terminal.close();
@@ -206,6 +246,7 @@ export async function sheetsFetch<TResponse>(
     body?: unknown;
     method?: "GET" | "POST" | "PUT";
     searchParams?: Record<string, string | string[]>;
+    timeoutMs?: number;
   } = {},
 ) {
   const url = new URL(`https://sheets.googleapis.com/v4/${sheetPath}`);
@@ -220,11 +261,18 @@ export async function sheetsFetch<TResponse>(
     }
   }
 
-  const accessToken = await authClient.getAccessToken();
+  let accessToken;
+  try { accessToken = await withProviderTimeout(authClient.getAccessToken(), options.timeoutMs); }
+  catch (error) {
+    if (/invalid_grant|invalid_client|unauthorized_client/i.test(error instanceof Error ? error.message : "")) {
+      throw new GoogleSheetsConnectionError("Google Sheets access has expired.");
+    }
+    throw error;
+  }
   const token = accessToken.token;
 
   if (!token) {
-    throw new Error("Unable to get a Google Sheets OAuth access token.");
+    throw new GoogleSheetsConnectionError("Unable to get a Google Sheets OAuth access token.");
   }
 
   const response = await fetch(url, {
@@ -234,6 +282,7 @@ export async function sheetsFetch<TResponse>(
       "Content-Type": "application/json",
     },
     method: options.method ?? "GET",
+    signal: AbortSignal.timeout(options.timeoutMs ?? GOOGLE_PROVIDER_TIMEOUT_MS),
   });
 
   if (!response.ok) {

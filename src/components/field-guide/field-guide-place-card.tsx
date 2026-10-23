@@ -43,36 +43,46 @@ export function FieldGuidePlaceCard({
       aria-label={`${place.name}, ${getStatusLabel(place)}`}
       className={`${styles.placeCard}${isSelected ? ` ${styles.selectedCard}` : ""}`}
       data-place-id={place.id}
+      onClick={(event) => {
+        if (isEditing || (event.target as Element).closest("a, button, input, select, textarea, summary, details, label")) return;
+        onSelect();
+      }}
     >
       <div className={`${styles.placeCopy}${isEditable && !isEditing ? ` ${styles.placeCopyEditable}` : ""}`}>
+        {details ? <p className={styles.placeStatus}>{place.loved ? "♥ " : null}{getStatusLabel(place)}</p> : null}
         <div className={styles.placeTitleRow}>
-          <button
-            aria-label={`${details ? "Hide" : "Show"} details for ${place.name}`}
-            aria-expanded={Boolean(details)}
+          <a
             className={styles.placeNameLink}
-            onClick={onSelect}
-            type="button"
+            href={getGoogleMapsHandoffUrl(place)}
+            rel="noopener noreferrer"
+            target="_blank"
+            aria-label={`Open ${place.name} in Google Maps (new tab)`}
           >
             {place.name}
-          </button>
-          {place.loved ? (
+          </a>
+          {!details && place.loved ? (
             <span className={styles.lovedMark} title="Loved">
               <span aria-hidden="true">♥</span>
               <span className={styles.srOnly}>Loved</span>
             </span>
-          ) : place.status === "want_to_go" ? (
+          ) : !details && place.status === "want_to_go" ? (
             <span className={styles.wantMark} title="Want to go">
               <span className={styles.srOnly}>Want to go</span>
             </span>
           ) : null}
         </div>
-        <small>
-          {place.category}
-          {place.district ? ` · ${place.district}` : ""}
-        </small>
-        {distanceKm === null ? null : (
-          <span className={styles.distance}>{formatDistance(distanceKm)} away</span>
-        )}
+        <button
+          aria-label={`${details ? "Hide" : "Show"} details for ${place.name}`}
+          aria-expanded={Boolean(details)}
+          aria-controls={`place-details-${place.id}`}
+          className={styles.placeRowToggle}
+          disabled={isEditing}
+          onClick={onSelect}
+          type="button"
+        >
+          <small>{place.category}{place.district ? ` · ${place.district}` : ""}</small>
+          {distanceKm === null ? null : <span className={styles.distance}>{formatDistance(distanceKm)} away</span>}
+        </button>
         {isEditable && !isEditing ? (
           <button className={styles.rowEditButton} onClick={onEdit} type="button">
             Edit
@@ -80,7 +90,7 @@ export function FieldGuidePlaceCard({
         ) : null}
       </div>
       {editor}
-      {details}
+      <div id={`place-details-${place.id}`} hidden={!details}>{details}</div>
     </article>
   );
 }
@@ -91,12 +101,14 @@ export function FieldGuidePlaceDetail({
   place,
   hideCategory = false,
   onShowMap,
+  variant = "map",
 }: {
   distanceKm: number | null;
-  onClose: () => void;
+  onClose?: () => void;
   place: Place;
   hideCategory?: boolean;
   onShowMap?: () => void;
+  variant?: "map" | "list";
 }) {
   const notes = getPublicNotes(place);
 
@@ -104,47 +116,37 @@ export function FieldGuidePlaceDetail({
     <aside className={styles.placeDetail} aria-label={`Selected place: ${place.name}`}>
       <div className={styles.detailLayout}>
         <div className={styles.detailCopy}>
-          <div className={styles.detailHeading}>
+          {variant === "map" ? <div className={styles.detailHeading}>
             <div>
               <p>
                 {place.loved ? "♥ " : null}
                 {getStatusLabel(place)}
               </p>
-              <h2>{place.name}</h2>
+              <h2><a className={styles.detailNameLink} href={getGoogleMapsHandoffUrl(place)} rel="noopener noreferrer" target="_blank" aria-label={`Open ${place.name} in Google Maps (new tab)`}>{place.name}</a></h2>
               <span className={hideCategory ? styles.redundantCategory : undefined}>
                 {place.category}
                 <span className={styles.detailDistrict}>{place.district ? ` · ${place.district}` : ""}</span>
               </span>
             </div>
-          </div>
+          </div> : null}
           {place.address.trim() ? <p className={styles.detailAddress}>
             <span className={styles.fullAddress}>{place.address}</span>
             <span className={styles.compactAddress}>{compactPlaceAddress(place)}</span>
           </p> : null}
         </div>
         <div className={styles.detailActions}>
-          <button
+          {variant === "map" ? <button
             aria-label="Close selected place"
             className={styles.detailClose}
             onClick={onClose}
             type="button"
           >
             ×
-          </button>
-          {onShowMap ? <button className={styles.mapsHandoff} type="button" onClick={onShowMap}>Show on map</button> : null}
-          <a
-            className={styles.mapsHandoff}
-            href={getGoogleMapsHandoffUrl(place)}
-            rel="noopener noreferrer"
-            target="_blank"
-            aria-label={`Open ${place.name} in Google Maps (new tab)`}
-          >
-            <span className={styles.fullMapsLabel}>Open in Google Maps ↗</span>
-            <span className={styles.compactMapsLabel}>Maps ↗</span>
-          </a>
+          </button> : null}
+          {variant === "list" && onShowMap ? <button className={styles.mapsHandoff} type="button" onClick={onShowMap}>Map</button> : null}
         </div>
       </div>
-      {distanceKm === null ? null : (
+      {variant === "list" || distanceKm === null ? null : (
         <p className={styles.detailDistance}>{formatDistance(distanceKm)} away</p>
       )}
       {notes.length > 0 ? (

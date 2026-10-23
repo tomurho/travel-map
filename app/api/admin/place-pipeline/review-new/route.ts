@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { enrichReadyRows } from "@/lib/place-sheet-pipeline";
+import { getGoogleSheetsErrorMessage, getGoogleSheetsErrorStatus } from "@/lib/google-sheets-errors";
+import { invalidatePlacePipelineSnapshot } from "@/lib/place-pipeline-snapshot-cache";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
@@ -41,16 +43,13 @@ export async function POST(request: NextRequest) {
       sheetId: input.sheetId ?? "",
     });
 
+    if ("wrote" in result ? result.wrote : true) invalidatePlacePipelineSnapshot(input.sheetId ?? "");
     return NextResponse.json(result);
   } catch (error) {
+    invalidatePlacePipelineSnapshot(input.sheetId ?? "");
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not review new places.",
-      },
-      { status: 500 },
+      { error: getGoogleSheetsErrorMessage(error, "Could not review new places.") },
+      { status: getGoogleSheetsErrorStatus(error) },
     );
   }
 }

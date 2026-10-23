@@ -1,5 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import * as xlsx from "xlsx";
 
@@ -19,6 +18,7 @@ import {
 export type AdminDraftStatus = PlaceStatus | "loved";
 
 export interface AdminStagedPlace {
+  recordVersion?: string;
   id: string;
   name: string;
   city: string;
@@ -54,6 +54,7 @@ export type AdminStagedPlaceWithDuplicates = AdminStagedPlace & {
 };
 
 export interface AdminStagedPlaceInput {
+  expectedRecordVersion?: string;
   id?: string;
   name: string;
   city: string;
@@ -74,6 +75,7 @@ export interface AdminStagedPlaceInput {
 }
 
 export interface AdminProductionPlaceVerificationInput {
+  expectedRecordVersion?: string;
   name?: string;
   city?: string;
   category?: string;
@@ -231,18 +233,36 @@ function normalizeDraftStatus(draftStatus: AdminDraftStatus) {
   };
 }
 
+function validateStagedDataset(records: unknown) {
+  if (!Array.isArray(records)) throw new Error("Staged places must be an array.");
+  const ids = new Set<string>();
+  for (const record of records) {
+    const errors = getPlaceFieldErrors({ ...record, latitude: record.latitude ?? undefined, longitude: record.longitude ?? undefined }, { partial: true });
+    if (typeof record.id !== "string" || !record.id || ids.has(record.id)) errors.push("Staged IDs must be unique text.");
+    if (errors.length) throw new Error(errors.join(" "));
+    ids.add(record.id);
+  }
+}
+
+export function getStagedRecordVersion(place: AdminStagedPlace) {
+  return getPlaceRecordVersion(place as unknown as Place);
+}
+
+export function getStagingVersion(places = readStagedPlaces()) {
+  return createHash("sha256").update(JSON.stringify(places.map((place) => [place.id, getStagedRecordVersion(place)]))).digest("hex");
+}
+
+function readStagedSnapshot() {
+  const snapshot = readPlacesJsonSnapshot(STAGING_FILE_PATH, { allowMissing: true, validate: validateStagedDataset });
+  return { ...snapshot, places: snapshot.places as unknown as AdminStagedPlace[] };
+}
+
+function writeStagedSnapshot(places: AdminStagedPlace[], expectedFileHash: string) {
+  return writePlacesJsonAtomic(places as unknown as Place[], { filePath: STAGING_FILE_PATH, expectedFileHash, validate: validateStagedDataset });
+}
+
 export function readStagedPlaces() {
-  if (!existsSync(STAGING_FILE_PATH)) {
-    return [];
-  }
-
-  const rawContent = readFileSync(STAGING_FILE_PATH, "utf8").trim();
-
-  if (!rawContent) {
-    return [];
-  }
-
-  return JSON.parse(rawContent) as AdminStagedPlace[];
+  return readStagedSnapshot().places;
 }
 
 export function getDuplicateMatchesForStagedPlace(
@@ -275,18 +295,27 @@ export function getStagedPlacesWithDuplicates() {
 
   return readStagedPlaces().map((place) => ({
     ...place,
+    recordVersion: getStagedRecordVersion(place),
     duplicateMatches: getDuplicateMatchesForStagedPlace(place, productionPlaces),
   }));
 }
 
-export function clearStagedPlaces() {
-  writeFileSync(STAGING_FILE_PATH, "[]\n");
+export function clearStagedPlaces(expectedStagingVersion: string) {
+  const snapshot = readStagedSnapshot();
+  if (!expectedStagingVersion || getStagingVersion(snapshot.places) !== expectedStagingVersion) {
+    throw new PlacesJsonWriteConflictError("Staged places changed. Reload before clearing them.");
+  }
+  writeStagedSnapshot([], snapshot.fileHash);
 }
 
-export function deleteStagedPlace(id: string) {
-  const nextPlaces = readStagedPlaces().filter((place) => place.id !== id);
-  writeFileSync(STAGING_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
-
+export function deleteStagedPlace(id: string, expectedRecordVersion: string) {
+  const snapshot = readStagedSnapshot();
+  const current = snapshot.places.find((place) => place.id === id);
+  if (!current || !expectedRecordVersion || getStagedRecordVersion(current) !== expectedRecordVersion) {
+    throw new PlacesJsonWriteConflictError("This staged place changed. Reload before deleting it.");
+  }
+  const nextPlaces = snapshot.places.filter((place) => place.id !== id);
+  writeStagedSnapshot(nextPlaces, snapshot.fileHash);
   return nextPlaces;
 }
 
@@ -299,6 +328,7 @@ export function planStagedPlace(
   if (errors.length) throw new Error(errors.join(" "));
   const previous = input.id ? currentPlaces.find((place) => place.id === input.id) : undefined;
   if (input.id && !previous) throw new Error("The staged place no longer exists. Reload the staged places before updating it.");
+  if (previous && input.expectedRecordVersion !== getStagedRecordVersion(previous)) throw new PlacesJsonWriteConflictError("This staged place changed. Reload before saving it.");
   const normalizedStatus = normalizeDraftStatus(input.draftStatus);
   const idBase = slugify(
     [
@@ -377,9 +407,10 @@ export function getStagedPlaceInputErrors(input: unknown) {
 }
 
 export function stagePlace(input: AdminStagedPlaceInput) {
-  const result = planStagedPlace(input, readStagedPlaces(), readProductionPlaces());
-  writeFileSync(STAGING_FILE_PATH, `${JSON.stringify(result.places, null, 2)}\n`);
-  return result.place;
+  const snapshot = readStagedSnapshot();
+  const result = planStagedPlace(input, snapshot.places, readProductionPlaces());
+  writeStagedSnapshot(result.places, snapshot.fileHash);
+  return { ...result.place, recordVersion: getStagedRecordVersion(result.place) };
 }
 
 export function stagedPlaceToPlace(place: AdminStagedPlace): Place {
@@ -409,7 +440,7 @@ export function stagedPlaceToPlace(place: AdminStagedPlace): Place {
 }
 
 export function publishStagedPlaces(
-  { allowDuplicates = false } = {},
+  { allowDuplicates = false, expectedStagingVersion = "" } = {},
   io = { readStagedPlaces, readPlacesJsonSnapshot, writePlacesJsonAtomic, clearStagedPlaces },
 ) {
   const stagedPlaces = io.readStagedPlaces();
@@ -458,6 +489,10 @@ export function publishStagedPlaces(
     };
   }
 
+  if (!expectedStagingVersion || getStagingVersion(stagedPlaces) !== expectedStagingVersion) {
+    return { publishedCount: 0, places: stagedPlaces, validationError: "Staged places changed. Reload and review them before publishing." };
+  }
+
   const stagedMapPlaces = stagedPlaces.map(stagedPlaceToPlace);
   const stagedIds = new Set(stagedMapPlaces.map((place) => place.id));
   const nextPlaces = [
@@ -476,7 +511,19 @@ export function publishStagedPlaces(
   io.writePlacesJsonAtomic(nextPlaces, {
     expectedFileHash: productionSnapshot.fileHash,
   });
-  io.clearStagedPlaces();
+  try {
+    io.clearStagedPlaces(expectedStagingVersion);
+  } catch (error) {
+    const unchanged = error instanceof PlacesJsonWriteConflictError;
+    return {
+      publishedCount: stagedPlaces.length,
+      places: stagedPlaces,
+      stagingCleanupPending: true,
+      error: unchanged
+        ? `Published ${stagedPlaces.length} places, but staging changed. No staged drafts were removed. Reload both lists and review before removing published drafts. Do not retry publication.`
+        : `Published ${stagedPlaces.length} places, but could not confirm staging cleanup. Reload both lists and review before removing published drafts. Do not retry publication.`,
+    };
+  }
 
   return { publishedCount: stagedPlaces.length, places: stagedPlaces };
 }
@@ -845,6 +892,9 @@ export function updateProductionPlaceVerification(
   }
 
   const currentPlace = currentPlaces[placeIndex];
+  if (currentPlace && input.expectedRecordVersion !== getPlaceRecordVersion(currentPlace)) {
+    return { error: "This place changed. Reload before verifying it.", status: 409 } as const;
+  }
   if (!currentPlace || input.latitude === null || input.longitude === null) {
     return { error: "Valid latitude and longitude are required." };
   }
@@ -900,11 +950,11 @@ export function updateProductionPlaceVerification(
     expectedFileHash: productionSnapshot.fileHash,
   });
 
-  return { place: updatedPlace, places: nextPlaces };
+  return { place: { ...updatedPlace, recordVersion: getPlaceRecordVersion(updatedPlace) }, places: nextPlaces.map((place) => ({ ...place, recordVersion: getPlaceRecordVersion(place) })) };
 }
 
-export function deleteProductionPlace(id: string) {
-  const productionSnapshot = readPlacesJsonSnapshot();
+export function deleteProductionPlace(id: string, expectedRecordVersion: string, io = { readPlacesJsonSnapshot, writePlacesJsonAtomic }) {
+  const productionSnapshot = io.readPlacesJsonSnapshot();
   const currentPlaces = productionSnapshot.places;
   const placeToDelete = currentPlaces.find((place) => place.id === id);
 
@@ -912,9 +962,12 @@ export function deleteProductionPlace(id: string) {
     return { error: "Production place was not found." };
   }
 
+  if (!expectedRecordVersion || expectedRecordVersion !== getPlaceRecordVersion(placeToDelete)) {
+    return { error: "This place changed. Reload before deleting it.", status: 409 } as const;
+  }
   const nextPlaces = currentPlaces.filter((place) => place.id !== id);
 
-  writePlacesJsonAtomic(nextPlaces, {
+  io.writePlacesJsonAtomic(nextPlaces, {
     expectedFileHash: productionSnapshot.fileHash,
   });
 

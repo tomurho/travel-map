@@ -14,3 +14,7 @@ public/exports/*.xlsx
 outputs/
 .DS_Store
 tsconfig.tsbuildinfo
+
+# Browser regression artifacts
+/test-results/
+/playwright-report/

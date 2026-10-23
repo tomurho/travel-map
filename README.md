@@ -7,7 +7,7 @@ A personal, map-first travel field guide built with Next.js. It turns saved plac
 1. Install dependencies with `pnpm install`.
 2. Add `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=...` to `.env.local`.
 3. Start the app with `pnpm dev`.
-4. Open the local URL shown in the terminal. The Field Guide is the default route at `/`; the previous interface remains available at `/original` for comparison.
+4. Open **http://localhost:3000** (use the printed port if it differs). The server listens only on this laptop. Google Maps accepts the localhost browser origin. The Field Guide is the default route at `/`; the previous interface remains available at `/original` for comparison.
 
 ## Browse the guide
 
@@ -28,12 +28,15 @@ changes. Search opens the panel and focuses its input. Active chips can be
 removed individually; Reset clears every refinement. Desktop keeps its visible
 filter panel and local editing controls.
 
-Select a pin to open its map card. Select a place name in List to expand its
-details there, including its address, notes, and **Open in Google Maps** link.
-**Show on map** moves that selection to Map. On mobile, **Map** and **List** preserve filters and
-selection; desktop shows both panes. Numbered map circles zoom into clusters.
-The mobile card uses a compact **Maps ↗** action and omits the type when its exact
-specialty is already selected. Addresses remove exact repeated city/district and
+Select a pin to open its map card. In List, tap the row background or its category
+and area to expand or collapse details. Keyboard users can focus that same toggle
+and press Enter or Space. Each row shows the place name once. The underlined name
+opens Google Maps in a new tab. The single **Map** button in expanded list details
+reveals the selected place on the web app's map. Links, Map, notes controls, and
+local editor fields keep their own actions. On mobile, **Map** and **List** preserve
+filters and selection; desktop shows both panes. Numbered circles zoom into clusters.
+The map card also links its underlined name directly to Google Maps. It omits the
+type when its exact specialty is already selected. Addresses remove exact repeated city/district and
 country components while retaining street, building, and unit details; stored
 addresses and Maps links are unchanged. Notes expand within the card on demand.
 The list loads in batches, and selecting a pin reveals its entry even beyond the
@@ -182,3 +185,44 @@ and timestamped backups under `.cache/places-backups`.
 The [implementation record](docs/audits/2026-10-22-audit-fixes.md) maps the backend
 and UI findings to their fixes, regression coverage, browser evidence, and release
 checks. It links the original audit for context. No catalog migration is needed.
+
+## October 23 admin and map fixes
+
+`pnpm dev` and `pnpm start` bind to `127.0.0.1`. Open the browser through
+`http://localhost:3000` so the configured Maps referrer works. Production admin
+pages and every admin API require `ENABLE_ADMIN=true`; production also requires
+the existing admin password. Keep hosted admin disabled unless explicitly needed.
+
+Run `pnpm setup:google-sheets` in a terminal to connect or repair Google Sheets.
+Only that command asks for a Google authorization code. HTTP requests return repair
+steps instead of waiting for terminal input. Provider calls have deadlines.
+
+The admin starts with the overview and current work. In **New captures**, inspect
+the source evidence, select the intended rows, then choose **Mark ready**. This
+permits lookup only. **Process Ready Rows**, human candidate verification, Publish,
+and the final app update remain separate actions. Changed rows require a fresh review.
+
+**Add screenshots** is below current work. Each image reports its own result.
+Retry processes failed images and retains successful text and manual corrections.
+Use **View original screenshot** to inspect the full image; Escape closes it.
+A failed refresh labels the last good snapshot with its checked time and offers Retry.
+
+Retained staging APIs still support incomplete drafts. Reads return `recordVersion`
+and `stagingVersion`; updates require `expectedRecordVersion`. Delete, clear,
+and staged Publish require the viewed version in `x-record-version`. Catalog
+verification and URL resolution also require `expectedRecordVersion`; catalog
+delete requires `x-record-version`. Missing or stale versions leave newer data intact.
+Staged writes use the same lock, backup, and atomic replacement as the catalog.
+
+Run the safe browser regressions with the local server running:
+`pnpm test:browser`. They use a Maps fixture and intercept admin APIs. They never
+write to live Sheets or call screenshot providers. For production checks, start
+with `ENABLE_ADMIN=true ADMIN_PASSWORD=browser-fixture pnpm start`; test responses
+are mocked before page navigation.
+
+The seven approved duplicate merges are recorded in `src/data/place-id-aliases.json`.
+Publish and Sync reject retired IDs and identify their retained records. Reconcile
+those Sheet rows deliberately before applying a new plan. `src/data/place-day-trips.json`
+keeps the approved Taipei day-trip label separate from Sheet-owned venue notes.
+The full [October 23 implementation report](docs/audits/2026-10-23-audit-implementation.md)
+contains evidence, measurements, backups, and the two unresolved identity pairs.

@@ -5,9 +5,11 @@ import {
   deleteStagedPlace,
   getStagedPlacesWithDuplicates,
   stagePlace,
+  getStagingVersion,
   getStagedPlaceInputErrors,
   type AdminStagedPlaceInput,
 } from "@/lib/admin-staging";
+import { PlacesJsonWriteConflictError } from "@/lib/places-json-store";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
 export async function GET(request: NextRequest) {
@@ -15,7 +17,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
-  return NextResponse.json({ places: getStagedPlacesWithDuplicates() });
+  return NextResponse.json({ places: getStagedPlacesWithDuplicates(), stagingVersion: getStagingVersion() });
 }
 
 export async function POST(request: NextRequest) {
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     place = stagePlace(input as AdminStagedPlaceInput);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not stage the place." }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not stage the place." }, { status: error instanceof PlacesJsonWriteConflictError ? 409 : 400 });
   }
 
   return NextResponse.json({ place, places: getStagedPlacesWithDuplicates() });
@@ -47,13 +49,12 @@ export async function DELETE(request: NextRequest) {
   }
 
   const id = request.nextUrl.searchParams.get("id");
-
-  if (!id) {
-    clearStagedPlaces();
-    return NextResponse.json({ places: [] });
+  const version = request.headers.get("x-record-version") ?? "";
+  try {
+    if (!id) clearStagedPlaces(version);
+    else deleteStagedPlace(id, version);
+    return NextResponse.json({ places: getStagedPlacesWithDuplicates(), stagingVersion: getStagingVersion() });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not delete staged places." }, { status: error instanceof PlacesJsonWriteConflictError ? 409 : 500 });
   }
-
-  deleteStagedPlace(id);
-
-  return NextResponse.json({ places: getStagedPlacesWithDuplicates() });
 }

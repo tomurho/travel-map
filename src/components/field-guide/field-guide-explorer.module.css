@@ -53,6 +53,7 @@
 .primary button { padding-inline: 4px; }
 .preview button[aria-pressed="true"] { background: var(--fg-coral); color: white; border-color: var(--fg-coral); }
 .selectors { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.selectors > :only-child { grid-column: 1 / -1; }
 .selectors button { display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; }
 .selectors button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selectors select { width: 100%; min-width: 0; text-overflow: ellipsis; padding-right: 20px; }
@@ -75,10 +76,10 @@
 .editToolbar button { min-height: 44px; min-width: 60px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: 0 10px 12px; }
 .listDetails { padding: 0 10px 14px; }
-.listDetails > aside { position: relative; inset: auto; width: 100%; max-height: none; overflow: visible; border: 0; border-top: 1px solid var(--fg-line); border-radius: 0; padding: 12px 0 0; box-shadow: none; background: transparent; }
+.listDetails > aside { position: relative; inset: auto; width: 100%; max-height: none; overflow: visible; border: 0; border-radius: 0; padding: 0; box-shadow: none; background: transparent; }
 .listDetails > aside h2 { font-size: 18px; }
 .listDetails > aside button { cursor: pointer; }
-.selected { position: absolute; bottom: 30px; left: 12px; right: 12px; margin-inline: auto; max-width: 430px; max-height: calc(100% - 52px); overflow-y: auto; overscroll-behavior: contain; padding: 14px; border: 1px solid var(--fg-line); border-radius: 12px; background: var(--fg-paper); box-shadow: 0 3px 16px #24232122; }
+.selected { position: absolute; bottom: 30px; left: 12px; right: 12px; margin-inline: auto; max-width: 430px; max-height: 55%; overflow-y: auto; overscroll-behavior: contain; padding: 14px; border: 1px solid var(--fg-line); border-radius: 12px; background: var(--fg-paper); box-shadow: 0 3px 16px #24232122; }
 .selected > aside { position: static; width: 100%; max-height: none; overflow: visible; gap: 10px; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 .selected > aside h2 { font-size: 18px; }
 .selected > aside > a { position: sticky; bottom: 0; z-index: 1; }
@@ -110,6 +111,7 @@
   .selectors select { font-size: 16px; }
   .viewSwitch { display: flex; flex: 0 0 auto; border: 1px solid var(--fg-line); border-radius: 8px; overflow: hidden; }
   .viewSwitch button { min-height: 44px; min-width: 60px; padding: 0 12px; border: 0; background: transparent; font-size: 14px; }
+  .editToolbar { display: none; }
   .map, .results { grid-area: content; border-left: 0; }
   .workspace[data-view="list"] .map, .workspace[data-view="map"] .results { display: none; }
   .sheet { width: 100%; max-width: none; max-height: 85dvh; margin: auto 0 0; border-radius: 18px 18px 0 0; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
@@ -125,7 +127,8 @@
 
 /* Mobile browsing has two rows; the existing filter controls expand over the map. */
 .mobileActions, .activeFilters, .filterFooter { display: none; }
-.locationNotice { padding: 8px 12px; background: var(--fg-paper); }
+.locationNotice { padding: 8px 12px; background: var(--fg-paper); color: var(--fg-muted); }
+.locationNotice[data-error="true"] { color: #9d2e24; }
 .workspace { position: relative; }
 @media (max-width: 900px) {
   .preview { min-height: 0; }

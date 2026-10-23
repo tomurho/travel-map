@@ -1,0 +1,2159 @@
+
+> travel-map@0.1.0 test /Users/tomurho/projects/travel map
+> node --import tsx --test src/lib/*.test.ts
+
+TAP version 13
+# Subtest: public admin page renders a shell with no catalog props
+ok 1 - public admin page renders a shell with no catalog props
+  ---
+  duration_ms: 11.324042
+  type: 'test'
+  ...
+# Subtest: catalog endpoint requires the configured header and forbids caching private data
+ok 2 - catalog endpoint requires the configured header and forbids caching private data
+  ---
+  duration_ms: 51.491958
+  type: 'test'
+  ...
+# Subtest: Verify and Reject refuse changed reviewed values before writing
+ok 3 - Verify and Reject refuse changed reviewed values before writing
+  ---
+  duration_ms: 41.231875
+  type: 'test'
+  ...
+# Subtest: review stamps bind the sheet, headers, row position, and source values
+ok 4 - review stamps bind the sheet, headers, row position, and source values
+  ---
+  duration_ms: 3.959292
+  type: 'test'
+  ...
+# Subtest: fresh Verify and Reject write only the explicitly reviewed decision
+ok 5 - fresh Verify and Reject write only the explicitly reviewed decision
+  ---
+  duration_ms: 2.478625
+  type: 'test'
+  ...
+# Subtest: missing review stamp rejects before Sheets access, including the HTTP route
+ok 6 - missing review stamp rejects before Sheets access, including the HTTP route
+  ---
+  duration_ms: 1.123375
+  type: 'test'
+  ...
+# Subtest: review decision route rejects malformed JSON and field types before provider access
+ok 7 - review decision route rejects malformed JSON and field types before provider access
+  ---
+  duration_ms: 12.111917
+  type: 'test'
+  ...
+# Subtest: production admin pages and APIs share the enablement rule even with a correct password
+ok 8 - production admin pages and APIs share the enablement rule even with a correct password
+  ---
+  duration_ms: 11.587334
+  type: 'test'
+  ...
+# Subtest: catalog warnings identify repeated identities and distant pins without changing records
+ok 9 - catalog warnings identify repeated identities and distant pins without changing records
+  ---
+  duration_ms: 0.633125
+  type: 'test'
+  ...
+# Subtest: legacy staged edits require the viewed version and retries preserve draft identity
+ok 10 - legacy staged edits require the viewed version and retries preserve draft identity
+  ---
+  duration_ms: 10.838333
+  type: 'test'
+  ...
+# Subtest: retained verification and deletion cannot overwrite a newer displayed record
+ok 11 - retained verification and deletion cannot overwrite a newer displayed record
+  ---
+  duration_ms: 0.97075
+  type: 'test'
+  ...
+# Subtest: atomic staging writes retain incomplete coordinates, backups, and concurrent writer checks
+ok 12 - atomic staging writes retain incomplete coordinates, backups, and concurrent writer checks
+  ---
+  duration_ms: 15.867708
+  type: 'test'
+  ...
+# Subtest: staged Publish reports committed data separately when newer drafts prevent cleanup
+ok 13 - staged Publish reports committed data separately when newer drafts prevent cleanup
+  ---
+  duration_ms: 0.96225
+  type: 'test'
+  ...
+# Subtest: approved merges retain canonical records and old Sheet IDs cannot restore duplicate cards
+ok 14 - approved merges retain canonical records and old Sheet IDs cannot restore duplicate cards
+  ---
+  duration_ms: 3.304375
+  type: 'test'
+  ...
+# Subtest: the approved day-trip label survives Sheet-owned notes being replaced
+ok 15 - the approved day-trip label survives Sheet-owned notes being replaced
+  ---
+  duration_ms: 0.404208
+  type: 'test'
+  ...
+# Subtest: category-only editing preserves all original Loved values until status changes
+ok 16 - category-only editing preserves all original Loved values until status changes
+  ---
+  duration_ms: 0.983125
+  type: 'test'
+  ...
+# Subtest: local saves reject stale records and publish a fresh version after successful edits
+ok 17 - local saves reject stale records and publish a fresh version after successful edits
+  ---
+  duration_ms: 7.257083
+  type: 'test'
+  ...
+# Subtest: inline editors cannot write hidden fields and floating inspector keeps its intended fields
+ok 18 - inline editors cannot write hidden fields and floating inspector keeps its intended fields
+  ---
+  duration_ms: 0.29775
+  type: 'test'
+  ...
+# Subtest: atomic write conflicts return 409 and unexpected failures remain failures
+ok 19 - atomic write conflicts return 409 and unexpected failures remain failures
+  ---
+  duration_ms: 0.437334
+  type: 'test'
+  ...
+# Subtest: retained verification edits can deliberately clear Loved to null
+ok 20 - retained verification edits can deliberately clear Loved to null
+  ---
+  duration_ms: 0.430042
+  type: 'test'
+  ...
+# Subtest: runtime schema accepts the current catalog and rejects malformed required and optional fields
+ok 21 - runtime schema accepts the current catalog and rejects malformed required and optional fields
+  ---
+  duration_ms: 6.83975
+  type: 'test'
+  ...
+# Subtest: staged drafts survive slug collisions and repeated creation without replacing another draft
+ok 22 - staged drafts survive slug collisions and repeated creation without replacing another draft
+  ---
+  duration_ms: 4.221125
+  type: 'test'
+  ...
+# Subtest: incomplete unverified drafts can stage but cannot publish or become verified
+ok 23 - incomplete unverified drafts can stage but cannot publish or become verified
+  ---
+  duration_ms: 2.019416
+  type: 'test'
+  ...
+# Subtest: place and staging APIs return helpful 400 responses for malformed JSON and fields
+ok 24 - place and staging APIs return helpful 400 responses for malformed JSON and fields
+  ---
+  duration_ms: 36.122458
+  type: 'test'
+  ...
+# Subtest: every city's default includes all public listings, including deferred types
+ok 25 - every city's default includes all public listings, including deferred types
+  ---
+  duration_ms: 34.490833
+  type: 'test'
+  ...
+# Subtest: specialty counts compose with Loved, wishlist, and search in every city
+ok 26 - specialty counts compose with Loved, wishlist, and search in every city
+  ---
+  duration_ms: 1037.516375
+  type: 'test'
+  ...
+# Subtest: legacy category links, city preferences, and explicit empty groups survive rollout
+ok 27 - legacy category links, city preferences, and explicit empty groups survive rollout
+  ---
+  duration_ms: 2.467417
+  type: 'test'
+  ...
+# Subtest: Kyoto ward aliases share one filter without changing source labels or other cities
+ok 28 - Kyoto ward aliases share one filter without changing source labels or other cities
+  ---
+  duration_ms: 0.228875
+  type: 'test'
+  ...
+# Subtest: Other exposes deferred types without changing their distinct specialty labels
+ok 29 - Other exposes deferred types without changing their distinct specialty labels
+  ---
+  duration_ms: 0.194708
+  type: 'test'
+  ...
+# Subtest: city aliases resolve to the canonical Field Guide cities
+ok 30 - city aliases resolve to the canonical Field Guide cities
+  ---
+  duration_ms: 1.945667
+  type: 'test'
+  ...
+# Subtest: field guide defaults to loved-first stable ordering
+ok 31 - field guide defaults to loved-first stable ordering
+  ---
+  duration_ms: 9.54475
+  type: 'test'
+  ...
+# Subtest: field guide includes every status when no status filter is active
+ok 32 - field guide includes every status when no status filter is active
+  ---
+  duration_ms: 0.202917
+  type: 'test'
+  ...
+# Subtest: field guide sorts by straight-line distance only when Nearby is active
+ok 33 - field guide sorts by straight-line distance only when Nearby is active
+  ---
+  duration_ms: 0.12325
+  type: 'test'
+  ...
+# Subtest: field guide composes search, status, category, and area filters
+ok 34 - field guide composes search, status, category, and area filters
+  ---
+  duration_ms: 0.105125
+  type: 'test'
+  ...
+# Subtest: field guide normalizes invalid cities and persists non-location filters
+ok 35 - field guide normalizes invalid cities and persists non-location filters
+  ---
+  duration_ms: 0.3385
+  type: 'test'
+  ...
+# Subtest: field guide city preference favors a valid URL city
+ok 36 - field guide city preference favors a valid URL city
+  ---
+  duration_ms: 0.113334
+  type: 'test'
+  ...
+# Subtest: field guide city preference restores a remembered city without a valid URL city
+ok 37 - field guide city preference restores a remembered city without a valid URL city
+  ---
+  duration_ms: 0.055292
+  type: 'test'
+  ...
+# Subtest: field guide city preference ignores a stale remembered city
+ok 38 - field guide city preference ignores a stale remembered city
+  ---
+  duration_ms: 0.160417
+  type: 'test'
+  ...
+# Subtest: Loved and Want to go toggle as a mutually exclusive pair
+ok 39 - Loved and Want to go toggle as a mutually exclusive pair
+  ---
+  duration_ms: 0.806958
+  type: 'test'
+  ...
+# Subtest: URL normalization preserves the exclusive filter rule
+ok 40 - URL normalization preserves the exclusive filter rule
+  ---
+  duration_ms: 0.147292
+  type: 'test'
+  ...
+# Subtest: Nearby composes independently with Loved or Want to go
+ok 41 - Nearby composes independently with Loved or Want to go
+  ---
+  duration_ms: 0.1175
+  type: 'test'
+  ...
+# Subtest: URL filters restore all controls across successive navigation entries
+ok 42 - URL filters restore all controls across successive navigation entries
+  ---
+  duration_ms: 0.529292
+  type: 'test'
+  ...
+# Subtest: URL filters normalize unavailable refinements without changing the URL
+ok 43 - URL filters normalize unavailable refinements without changing the URL
+  ---
+  duration_ms: 0.094042
+  type: 'test'
+  ...
+# Subtest: false and unrated loved values sort alphabetically regardless of input order
+ok 44 - false and unrated loved values sort alphabetically regardless of input order
+  ---
+  duration_ms: 0.163708
+  type: 'test'
+  ...
+# Subtest: runtime Maps authentication failure reaches every mounted map and preserves the existing handler
+ok 45 - runtime Maps authentication failure reaches every mounted map and preserves the existing handler
+  ---
+  duration_ms: 1.000167
+  type: 'test'
+  ...
+# Subtest: a map mounted after authentication failed receives the existing failure
+ok 46 - a map mounted after authentication failed receives the existing failure
+  ---
+  duration_ms: 0.150125
+  type: 'test'
+  ...
+# Subtest: cleanup preserves a callback installed later by another consumer
+ok 47 - cleanup preserves a callback installed later by another consumer
+  ---
+  duration_ms: 0.067417
+  type: 'test'
+  ...
+# Subtest: the app still receives failure if an existing handler throws
+ok 48 - the app still receives failure if an existing handler throws
+  ---
+  duration_ms: 0.237958
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow parses been rows with loved flag
+ok 49 - normalizePlaceRow parses been rows with loved flag
+  ---
+  duration_ms: 2.651958
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow blanks loved for want to go rows
+ok 50 - normalizePlaceRow blanks loved for want to go rows
+  ---
+  duration_ms: 1.520292
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow treats status loved it as been and loved
+ok 51 - normalizePlaceRow treats status loved it as been and loved
+  ---
+  duration_ms: 0.45375
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow imports Kyoto metadata
+ok 52 - normalizePlaceRow imports Kyoto metadata
+  ---
+  duration_ms: 0.3525
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow handles blank and nonstandard verification values
+ok 53 - normalizePlaceRow handles blank and nonstandard verification values
+  ---
+  duration_ms: 0.347292
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow supports Tokyo status values
+ok 54 - normalizePlaceRow supports Tokyo status values
+  ---
+  duration_ms: 0.295583
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow treats Tabelog resolution notes as neutral locations
+ok 55 - normalizePlaceRow treats Tabelog resolution notes as neutral locations
+  ---
+  duration_ms: 0.200833
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow treats blank status as a neutral location
+ok 56 - normalizePlaceRow treats blank status as a neutral location
+  ---
+  duration_ms: 0.609792
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow treats explicit Location status as neutral location
+ok 57 - normalizePlaceRow treats explicit Location status as neutral location
+  ---
+  duration_ms: 0.613541
+  type: 'test'
+  ...
+# Subtest: normalizePlaces skips invalid coordinates and suffixes duplicates
+ok 58 - normalizePlaces skips invalid coordinates and suffixes duplicates
+  ---
+  duration_ms: 1.757875
+  type: 'test'
+  ...
+# Subtest: normalizePlaces preserves ID when same place has reformatted address
+ok 59 - normalizePlaces preserves ID when same place has reformatted address
+  ---
+  duration_ms: 0.5945
+  type: 'test'
+  ...
+# Subtest: normalizePlaces preserves ID by unique city and name match
+ok 60 - normalizePlaces preserves ID by unique city and name match
+  ---
+  duration_ms: 0.210917
+  type: 'test'
+  ...
+# Subtest: normalizePlaces does not guess when same-name matches are duplicated
+ok 61 - normalizePlaces does not guess when same-name matches are duplicated
+  ---
+  duration_ms: 1.280541
+  type: 'test'
+  ...
+# Subtest: normalizePlaces generates a new ID for brand-new places
+ok 62 - normalizePlaces generates a new ID for brand-new places
+  ---
+  duration_ms: 0.51975
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow supports workbook headers
+ok 63 - normalizePlaceRow supports workbook headers
+  ---
+  duration_ms: 0.153125
+  type: 'test'
+  ...
+# Subtest: normalizePlaceRow preserves Google candidate verification fields
+ok 64 - normalizePlaceRow preserves Google candidate verification fields
+  ---
+  duration_ms: 0.097667
+  type: 'test'
+  ...
+# Subtest: place details lookup prefers canonical address without changing marker coordinates
+ok 65 - place details lookup prefers canonical address without changing marker coordinates
+  ---
+  duration_ms: 0.782625
+  type: 'test'
+  ...
+# Subtest: normalizeArea removes Taipei District suffix and normalizes Daan spelling
+ok 66 - normalizeArea removes Taipei District suffix and normalizes Daan spelling
+  ---
+  duration_ms: 0.0955
+  type: 'test'
+  ...
+# Subtest: filterPlaces excludes closed or moved places from the public map
+ok 67 - filterPlaces excludes closed or moved places from the public map
+  ---
+  duration_ms: 0.102375
+  type: 'test'
+  ...
+# Subtest: markVerifiedToday sets verified status and today's date
+ok 68 - markVerifiedToday sets verified status and today's date
+  ---
+  duration_ms: 4.614083
+  type: 'test'
+  ...
+# Subtest: validatePlaceVerification requires Google Maps URL when verified
+ok 69 - validatePlaceVerification requires Google Maps URL when verified
+  ---
+  duration_ms: 0.111584
+  type: 'test'
+  ...
+# Subtest: validatePlaceVerification validates latitude and longitude bounds
+ok 70 - validatePlaceVerification validates latitude and longitude bounds
+  ---
+  duration_ms: 0.050125
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates populates high-confidence Google candidate metadata
+ok 71 - verifyPlaceFromCandidates populates high-confidence Google candidate metadata
+  ---
+  duration_ms: 1.575
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates marks multiple plausible Google candidates as ambiguous
+ok 72 - verifyPlaceFromCandidates marks multiple plausible Google candidates as ambiguous
+  ---
+  duration_ms: 0.456042
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates marks large distance deltas for review
+ok 73 - verifyPlaceFromCandidates marks large distance deltas for review
+  ---
+  duration_ms: 0.194166
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates maps closed Google businesses to Closed/Moved
+ok 74 - verifyPlaceFromCandidates maps closed Google businesses to Closed/Moved
+  ---
+  duration_ms: 0.088333
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates does not overwrite stored coordinates by default
+ok 75 - verifyPlaceFromCandidates does not overwrite stored coordinates by default
+  ---
+  duration_ms: 0.077333
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates applies safe coordinate updates only with explicit flag
+ok 76 - verifyPlaceFromCandidates applies safe coordinate updates only with explicit flag
+  ---
+  duration_ms: 0.142
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates auto-verifies small deltas with auto decisions
+ok 77 - verifyPlaceFromCandidates auto-verifies small deltas with auto decisions
+  ---
+  duration_ms: 0.4255
+  type: 'test'
+  ...
+# Subtest: getTextSimilarity handles bilingual names with collapsed spacing
+ok 78 - getTextSimilarity handles bilingual names with collapsed spacing
+  ---
+  duration_ms: 1.849166
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates preserves Quince-like small-delta review candidate metadata
+ok 79 - verifyPlaceFromCandidates preserves Quince-like small-delta review candidate metadata
+  ---
+  duration_ms: 12.802417
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates auto-verifies nearby translated candidates with strong address evidence
+ok 80 - verifyPlaceFromCandidates auto-verifies nearby translated candidates with strong address evidence
+  ---
+  duration_ms: 2.66125
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates auto-verifies near bilingual expanded names
+ok 81 - verifyPlaceFromCandidates auto-verifies near bilingual expanded names
+  ---
+  duration_ms: 1.874542
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates preserves plausible review candidate metadata
+ok 82 - verifyPlaceFromCandidates preserves plausible review candidate metadata
+  ---
+  duration_ms: 0.235375
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates auto-corrects large deltas when name and address are strong
+ok 83 - verifyPlaceFromCandidates auto-corrects large deltas when name and address are strong
+  ---
+  duration_ms: 0.120167
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates auto-corrects strong large deltas from Place ID
+ok 84 - verifyPlaceFromCandidates auto-corrects strong large deltas from Place ID
+  ---
+  duration_ms: 0.186125
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates reviews untrusted machine-derived Place ID with weak evidence
+ok 85 - verifyPlaceFromCandidates reviews untrusted machine-derived Place ID with weak evidence
+  ---
+  duration_ms: 0.166666
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates downgrades previously verified rows when stricter policy only supports review
+ok 86 - verifyPlaceFromCandidates downgrades previously verified rows when stricter policy only supports review
+  ---
+  duration_ms: 0.145875
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates verifies expanded local names from Place ID
+ok 87 - verifyPlaceFromCandidates verifies expanded local names from Place ID
+  ---
+  duration_ms: 0.152625
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates verifies translated names with strong address and bounded distance
+ok 88 - verifyPlaceFromCandidates verifies translated names with strong address and bounded distance
+  ---
+  duration_ms: 0.13275
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates auto-corrects large deltas from Google Maps URL
+ok 89 - verifyPlaceFromCandidates auto-corrects large deltas from Google Maps URL
+  ---
+  duration_ms: 0.144417
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates reviews resolved Google Maps URL when row evidence is weak
+ok 90 - verifyPlaceFromCandidates reviews resolved Google Maps URL when row evidence is weak
+  ---
+  duration_ms: 0.516875
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates keeps large deltas in review when address is weak
+ok 91 - verifyPlaceFromCandidates keeps large deltas in review when address is weak
+  ---
+  duration_ms: 0.108166
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates does not auto-correct multiple plausible candidates
+ok 92 - verifyPlaceFromCandidates does not auto-correct multiple plausible candidates
+  ---
+  duration_ms: 0.106709
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates does not auto-correct wrong city or country
+ok 93 - verifyPlaceFromCandidates does not auto-correct wrong city or country
+  ---
+  duration_ms: 0.065584
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates does not auto-correct wrong city from Place ID
+ok 94 - verifyPlaceFromCandidates does not auto-correct wrong city from Place ID
+  ---
+  duration_ms: 0.072875
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates never auto-corrects closed or moved businesses
+ok 95 - verifyPlaceFromCandidates never auto-corrects closed or moved businesses
+  ---
+  duration_ms: 0.075959
+  type: 'test'
+  ...
+# Subtest: assertAutoDecisionSafetyGate blocks too many large-delta city corrections
+ok 96 - assertAutoDecisionSafetyGate blocks too many large-delta city corrections
+  ---
+  duration_ms: 0.272458
+  type: 'test'
+  ...
+# Subtest: assertCoordinateAuditFields blocks coordinate writes without audit fields
+ok 97 - assertCoordinateAuditFields blocks coordinate writes without audit fields
+  ---
+  duration_ms: 0.170917
+  type: 'test'
+  ...
+# Subtest: assertCoordinateAuditFields blocks accepted Google coordinates without audit fields
+ok 98 - assertCoordinateAuditFields blocks accepted Google coordinates without audit fields
+  ---
+  duration_ms: 0.072791
+  type: 'test'
+  ...
+# Subtest: assertCoordinateAuditFields blocks verified rows with review decisions
+ok 99 - assertCoordinateAuditFields blocks verified rows with review decisions
+  ---
+  duration_ms: 0.079417
+  type: 'test'
+  ...
+# Subtest: assertCoordinateAuditFields allows accepted Google coordinates with audit fields
+ok 100 - assertCoordinateAuditFields allows accepted Google coordinates with audit fields
+  ---
+  duration_ms: 0.080375
+  type: 'test'
+  ...
+# Subtest: assertCoordinateAuditFields allows auto-corrected verified rows
+ok 101 - assertCoordinateAuditFields allows auto-corrected verified rows
+  ---
+  duration_ms: 0.041791
+  type: 'test'
+  ...
+# Subtest: assertCoordinateAuditFields allows closed/moved rows when status is Closed/Moved
+ok 102 - assertCoordinateAuditFields allows closed/moved rows when status is Closed/Moved
+  ---
+  duration_ms: 0.040208
+  type: 'test'
+  ...
+# Subtest: acceptCandidateCoordinates copies candidate coordinates into stored coordinates
+ok 103 - acceptCandidateCoordinates copies candidate coordinates into stored coordinates
+  ---
+  duration_ms: 0.079792
+  type: 'test'
+  ...
+# Subtest: Google Maps URL resolve-style candidate metadata does not overwrite stored coordinates
+ok 104 - Google Maps URL resolve-style candidate metadata does not overwrite stored coordinates
+  ---
+  duration_ms: 0.08425
+  type: 'test'
+  ...
+# Subtest: useCanonicalAddress copies canonical address only when explicitly requested
+ok 105 - useCanonicalAddress copies canonical address only when explicitly requested
+  ---
+  duration_ms: 0.043125
+  type: 'test'
+  ...
+# Subtest: verifyPlaceFromCandidates keeps unresolvable URL rows in Review with useful notes
+ok 106 - verifyPlaceFromCandidates keeps unresolvable URL rows in Review with useful notes
+  ---
+  duration_ms: 0.052375
+  type: 'test'
+  ...
+# Subtest: admin Google Maps resolver expands maps.app.goo.gl short links
+ok 107 - admin Google Maps resolver expands maps.app.goo.gl short links
+  ---
+  duration_ms: 1.647417
+  type: 'test'
+  ...
+# Subtest: admin Google Maps resolver falls back to Text Search when Place ID is absent
+ok 108 - admin Google Maps resolver falls back to Text Search when Place ID is absent
+  ---
+  duration_ms: 4.154625
+  type: 'test'
+  ...
+# Subtest: admin resolver search attempts include saved and canonical addresses
+ok 109 - admin resolver search attempts include saved and canonical addresses
+  ---
+  duration_ms: 0.134666
+  type: 'test'
+  ...
+# Subtest: admin resolver can summarize multiple Google candidates for UI selection
+ok 110 - admin resolver can summarize multiple Google candidates for UI selection
+  ---
+  duration_ms: 0.219208
+  type: 'test'
+  ...
+# Subtest: admin candidate selection populates metadata without moving stored coordinates
+ok 111 - admin candidate selection populates metadata without moving stored coordinates
+  ---
+  duration_ms: 0.097
+  type: 'test'
+  ...
+# Subtest: accepting an admin-selected candidate is still required to move the pin
+ok 112 - accepting an admin-selected candidate is still required to move the pin
+  ---
+  duration_ms: 0.058458
+  type: 'test'
+  ...
+# Subtest: Google Places access blocks live calls without confirm flag
+ok 113 - Google Places access blocks live calls without confirm flag
+  ---
+  duration_ms: 0.165042
+  type: 'test'
+  ...
+# Subtest: Google Places access enforces max-api-calls
+ok 114 - Google Places access enforces max-api-calls
+  ---
+  duration_ms: 0.235542
+  type: 'test'
+  ...
+# Subtest: Google Places cache-only mode never calls Google
+ok 115 - Google Places cache-only mode never calls Google
+  ---
+  duration_ms: 0.161041
+  type: 'test'
+  ...
+# Subtest: Google Places cache hits avoid live calls
+ok 116 - Google Places cache hits avoid live calls
+  ---
+  duration_ms: 0.273833
+  type: 'test'
+  ...
+# Subtest: admin resolver respects per-request max call cap
+ok 117 - admin resolver respects per-request max call cap
+  ---
+  duration_ms: 0.325583
+  type: 'test'
+  ...
+# Subtest: admin resolver does not call Google when live usage is disabled
+ok 118 - admin resolver does not call Google when live usage is disabled
+  ---
+  duration_ms: 0.312
+  type: 'test'
+  ...
+# Subtest: Google Places wildcard field masks are blocked
+ok 119 - Google Places wildcard field masks are blocked
+  ---
+  duration_ms: 0.063542
+  type: 'test'
+  ...
+# Subtest: free geocoding live lookup is disabled by default
+ok 120 - free geocoding live lookup is disabled by default
+  ---
+  duration_ms: 0.740959
+  type: 'test'
+  ...
+# Subtest: free geocoding caches live results when explicitly enabled
+ok 121 - free geocoding caches live results when explicitly enabled
+  ---
+  duration_ms: 1.064666
+  type: 'test'
+  ...
+# Subtest: city-wide live Google Places runs are blocked without force
+ok 122 - city-wide live Google Places runs are blocked without force
+  ---
+  duration_ms: 0.232542
+  type: 'test'
+  ...
+# Subtest: city audit report counts verification readiness without live calls
+ok 123 - city audit report counts verification readiness without live calls
+  ---
+  duration_ms: 0.97675
+  type: 'test'
+  ...
+# Subtest: verify CLI cache-only and free-only modes keep Google cache-only
+ok 124 - verify CLI cache-only and free-only modes keep Google cache-only
+  ---
+  duration_ms: 0.352417
+  type: 'test'
+  ...
+# Subtest: verify CLI only-review limits rows processed
+ok 125 - verify CLI only-review limits rows processed
+  ---
+  duration_ms: 7.01275
+  type: 'test'
+  ...
+# Subtest: verify CLI only-unverified limits rows processed
+ok 126 - verify CLI only-unverified limits rows processed
+  ---
+  duration_ms: 0.122833
+  type: 'test'
+  ...
+# Subtest: verify CLI names-file limits rows processed
+ok 127 - verify CLI names-file limits rows processed
+  ---
+  duration_ms: 16.729334
+  type: 'test'
+  ...
+# Subtest: verify CLI report-only and no-write never write
+ok 128 - verify CLI report-only and no-write never write
+  ---
+  duration_ms: 0.1335
+  type: 'test'
+  ...
+# Subtest: verify CLI write mode only changes selected rows
+ok 129 - verify CLI write mode only changes selected rows
+  ---
+  duration_ms: 0.378542
+  type: 'test'
+  ...
+# Subtest: public map details lookup is disabled by default to avoid paid Places calls
+ok 130 - public map details lookup is disabled by default to avoid paid Places calls
+  ---
+  duration_ms: 0.134833
+  type: 'test'
+  ...
+# Subtest: admin provider attempts are summarized for the main QA view
+ok 131 - admin provider attempts are summarized for the main QA view
+  ---
+  duration_ms: 0.183417
+  type: 'test'
+  ...
+# Subtest: admin place pipeline renders the active ingest controls
+ok 132 - admin place pipeline renders the active ingest controls
+  ---
+  duration_ms: 26.542083
+  type: 'test'
+  ...
+# Subtest: admin pipeline requires confirmations for paid and mutating actions
+ok 133 - admin pipeline requires confirmations for paid and mutating actions
+  ---
+  duration_ms: 1.080542
+  type: 'test'
+  ...
+# Subtest: places store writes atomically, creates a backup, and rejects stale writers
+ok 134 - places store writes atomically, creates a backup, and rejects stale writers
+  ---
+  duration_ms: 11.276708
+  type: 'test'
+  ...
+# Subtest: places store rejects duplicate ids before touching disk
+ok 135 - places store rejects duplicate ids before touching disk
+  ---
+  duration_ms: 0.66375
+  type: 'test'
+  ...
+# Subtest: places store never removes a lock owned by another writer
+ok 136 - places store never removes a lock owned by another writer
+  ---
+  duration_ms: 1.331375
+  type: 'test'
+  ...
+# Subtest: import safety blocks empty, partial, ambiguous, and large-drop writes
+ok 137 - import safety blocks empty, partial, ambiguous, and large-drop writes
+  ---
+  duration_ms: 0.347334
+  type: 'test'
+  ...
+# Subtest: capture intake keys are stable and distinguish different source evidence
+ok 138 - capture intake keys are stable and distinguish different source evidence
+  ---
+  duration_ms: 1.468291
+  type: 'test'
+  ...
+# Subtest: Review candidate queue includes waiting rows and reports verification blockers
+ok 139 - Review candidate queue includes waiting rows and reports verification blockers
+  ---
+  duration_ms: 3.365125
+  type: 'test'
+  ...
+# Subtest: Review candidate edits reuse canonical categories and preserve status semantics
+ok 140 - Review candidate edits reuse canonical categories and preserve status semantics
+  ---
+  duration_ms: 0.565375
+  type: 'test'
+  ...
+# Subtest: Sheets batch reads retrieve multiple worksheet ranges in one request
+ok 141 - Sheets batch reads retrieve multiple worksheet ranges in one request
+  ---
+  duration_ms: 2.301
+  type: 'test'
+  ...
+# Subtest: Sheets rate-limit errors give a recoverable Admin message
+ok 142 - Sheets rate-limit errors give a recoverable Admin message
+  ---
+  duration_ms: 0.890375
+  type: 'test'
+  ...
+# Subtest: Pipeline status is derived from a shared worksheet snapshot
+ok 143 - Pipeline status is derived from a shared worksheet snapshot
+  ---
+  duration_ms: 65.019458
+  type: 'test'
+  ...
+# Subtest: Published writes fail closed unless partial sync is explicit
+ok 144 - Published writes fail closed unless partial sync is explicit
+  ---
+  duration_ms: 0.248375
+  type: 'test'
+  ...
+# Subtest: Published sync rejects every row sharing a duplicate id
+ok 145 - Published sync rejects every row sharing a duplicate id
+  ---
+  duration_ms: 0.597083
+  type: 'test'
+  ...
+# Subtest: provider URL validation rejects unsafe destinations before fetch
+ok 146 - provider URL validation rejects unsafe destinations before fetch
+  ---
+  duration_ms: 1.524666
+  type: 'test'
+  ...
+# Subtest: provider URL validation checks every redirect
+ok 147 - provider URL validation checks every redirect
+  ---
+  duration_ms: 0.629
+  type: 'test'
+  ...
+# Subtest: admin authorization uses the header and fails closed in production
+ok 148 - admin authorization uses the header and fails closed in production
+  ---
+  duration_ms: 0.370583
+  type: 'test'
+  ...
+# Subtest: place PATCH route rejects a wrong password and accepts the configured header
+ok 149 - place PATCH route rejects a wrong password and accepts the configured header
+  ---
+  duration_ms: 238.05075
+  type: 'test'
+  ...
+# Subtest: Published planning appends new ids, updates corrections, and skips unchanged rows
+ok 150 - Published planning appends new ids, updates corrections, and skips unchanged rows
+  ---
+  duration_ms: 1.134958
+  type: 'test'
+  ...
+# Subtest: Published planning rejects ambiguous duplicate ids
+ok 151 - Published planning rejects ambiguous duplicate ids
+  ---
+  duration_ms: 0.103584
+  type: 'test'
+  ...
+# Subtest: Published sync planning counts only actionable app changes
+ok 152 - Published sync planning counts only actionable app changes
+  ---
+  duration_ms: 0.994583
+  type: 'test'
+  ...
+# Subtest: Published sync preserves locally owned status, loved, and category fields
+ok 153 - Published sync preserves locally owned status, loved, and category fields
+  ---
+  duration_ms: 0.225125
+  type: 'test'
+  ...
+# Subtest: Published sync canonicalizes known city aliases
+ok 154 - Published sync canonicalizes known city aliases
+  ---
+  duration_ms: 0.347958
+  type: 'test'
+  ...
+# Subtest: Published sync planning reports invalid rows without treating them as changes
+ok 155 - Published sync planning reports invalid rows without treating them as changes
+  ---
+  duration_ms: 0.087417
+  type: 'test'
+  ...
+# Subtest: Kyoto's bars include wine and cider without modifying original labels
+ok 156 - Kyoto's bars include wine and cider without modifying original labels
+  ---
+  duration_ms: 8.289375
+  type: 'test'
+  ...
+# Subtest: All places includes ungrouped records and excludes other cities and closures
+ok 157 - All places includes ungrouped records and excludes other cities and closures
+  ---
+  duration_ms: 7.370042
+  type: 'test'
+  ...
+# Subtest: food specialties stay distinct and broad coffee browsing includes both labels
+ok 158 - food specialties stay distinct and broad coffee browsing includes both labels
+  ---
+  duration_ms: 0.301542
+  type: 'test'
+  ...
+# Subtest: refined counts match results and zero results never silently broaden a specialty
+ok 159 - refined counts match results and zero results never silently broaden a specialty
+  ---
+  duration_ms: 2.71175
+  type: 'test'
+  ...
+# Subtest: URL state restores filters and invalid combinations safely, without city preference writes
+ok 160 - URL state restores filters and invalid combinations safely, without city preference writes
+  ---
+  duration_ms: 0.791666
+  type: 'test'
+  ...
+# Subtest: reset and manual city changes ignore late location success and failure
+ok 161 - reset and manual city changes ignore late location success and failure
+  ---
+  duration_ms: 1.080083
+  type: 'test'
+  ...
+# Subtest: a replacement request accepts only its own location result
+ok 162 - a replacement request accepts only its own location result
+  ---
+  duration_ms: 0.190708
+  type: 'test'
+  ...
+# Subtest: map content identity ignores ordering and editorial fields, but includes IDs and coordinates
+ok 163 - map content identity ignores ordering and editorial fields, but includes IDs and coordinates
+  ---
+  duration_ms: 8.05
+  type: 'test'
+  ...
+# Subtest: city overview keeps its streets visible while a distant saved trip remains selectable
+ok 164 - city overview keeps its streets visible while a distant saved trip remains selectable
+  ---
+  duration_ms: 0.636542
+  type: 'test'
+  ...
+# Subtest: small and multi-city result sets retain all overview pins
+ok 165 - small and multi-city result sets retain all overview pins
+  ---
+  duration_ms: 0.080417
+  type: 'test'
+  ...
+# Subtest: distinct places sharing coordinates stay available as separate choices
+ok 166 - distinct places sharing coordinates stay available as separate choices
+  ---
+  duration_ms: 0.088792
+  type: 'test'
+  ...
+# Subtest: selected pin offsets above the measured detail card, with room on short screens
+ok 167 - selected pin offsets above the measured detail card, with room on short screens
+  ---
+  duration_ms: 0.094916
+  type: 'test'
+  ...
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 1         │
+# └──────────────────┴───────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬──────────────────────────────────────────────────────────────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors                                                                       │
+# ├─────────┼───────────┼───────┼──────────────────────────────────────────────────────────────────────────────┤
+# │ 0       │ 2         │ 'one' │ 'googleMapsUrl must be an HTTP or HTTPS URL without a username or password.' │
+# └─────────┴───────────┴───────┴──────────────────────────────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 1       │
+# │ inserted         │ 0       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 1       │
+# └──────────────────┴─────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬──────────────────────────────────────────────────────────────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors                                                                       │
+# ├─────────┼───────────┼───────┼──────────────────────────────────────────────────────────────────────────────┤
+# │ 0       │ 2         │ 'one' │ 'googleMapsUrl must be an HTTP or HTTPS URL without a username or password.' │
+# └─────────┴───────────┴───────┴──────────────────────────────────────────────────────────────────────────────┘
+# Would publish 0 new row(s) and would update 0 row(s). Skipped 0 unchanged row(s) and 0 blank id row(s).
+# Would publish 1 new row(s) and would update 0 row(s). Skipped 0 unchanged row(s) and 0 blank id row(s).
+# Subtest: invalid Published URL is a row-level preview error and a known Apply failure
+ok 168 - invalid Published URL is a row-level preview error and a known Apply failure
+  ---
+  duration_ms: 12.428584
+  type: 'test'
+  ...
+# Subtest: publish preview reports invalid fields without permitting any write
+ok 169 - publish preview reports invalid fields without permitting any write
+  ---
+  duration_ms: 3.587583
+  type: 'test'
+  ...
+# Subtest: Sheet status casing has the same meaning for counts and publish eligibility
+ok 170 - Sheet status casing has the same meaning for counts and publish eligibility
+  ---
+  duration_ms: 1.001541
+  type: 'test'
+  ...
+# Subtest: an invalid Verified row cannot hide a valid Candidate or New capture
+ok 171 - an invalid Verified row cannot hide a valid Candidate or New capture
+  ---
+  duration_ms: 1.382208
+  type: 'test'
+  ...
+# Subtest: a malformed Published header does not hide the review and capture queues
+ok 172 - a malformed Published header does not hide the review and capture queues
+  ---
+  duration_ms: 0.646416
+  type: 'test'
+  ...
+# Subtest: New captures show their source and Mark ready changes only the selected status
+ok 173 - New captures show their source and Mark ready changes only the selected status
+  ---
+  duration_ms: 0.779459
+  type: 'test'
+  ...
+# Subtest: changed capture contents, headers, row positions and Sheet invalidate Mark ready
+ok 174 - changed capture contents, headers, row positions and Sheet invalidate Mark ready
+  ---
+  duration_ms: 0.916959
+  type: 'test'
+  ...
+# Subtest: duplicate Mark ready submissions produce one write; changed batches write nothing
+ok 175 - duplicate Mark ready submissions produce one write; changed batches write nothing
+  ---
+  duration_ms: 0.544375
+  type: 'test'
+  ...
+# Subtest: missing OAuth token returns exact setup instructions without terminal input
+ok 176 - missing OAuth token returns exact setup instructions without terminal input
+  ---
+  duration_ms: 7.647625
+  type: 'test'
+  ...
+# Subtest: OAuth provider token waits stop at the configured deadline
+ok 177 - OAuth provider token waits stop at the configured deadline
+  ---
+  duration_ms: 9.834667
+  type: 'test'
+  ...
+# Subtest: Sheets provider fetch receives a deadline and never auto-retries a write
+ok 178 - Sheets provider fetch receives a deadline and never auto-retries a write
+  ---
+  duration_ms: 0.481333
+  type: 'test'
+  ...
+# Subtest: catalog identity and distant-city warnings remain advisory during candidate review
+ok 179 - catalog identity and distant-city warnings remain advisory during candidate review
+  ---
+  duration_ms: 0.531375
+  type: 'test'
+  ...
+# Subtest: invalidated in-flight snapshot cannot refill the cache with old data
+ok 180 - invalidated in-flight snapshot cannot refill the cache with old data
+  ---
+  duration_ms: 0.240167
+  type: 'test'
+  ...
+# Subtest: expired OAuth access gives the same explicit setup command
+ok 181 - expired OAuth access gives the same explicit setup command
+  ---
+  duration_ms: 0.149416
+  type: 'test'
+  ...
+# Subtest: capture-ready endpoint rejects unauthenticated and malformed requests before Sheets I/O
+ok 182 - capture-ready endpoint rejects unauthenticated and malformed requests before Sheets I/O
+  ---
+  duration_ms: 61.404875
+  type: 'test'
+  ...
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'two' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'two' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Wrote 2 place(s) to /Users/tomurho/projects/travel map/src/data/places.json.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 2         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'new' │ 'Cafe One' │ 3         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 0         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 0         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 0         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 0         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 0         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 0         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 0         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 1       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 0       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 2         │
+# │ validationErrors │ 2         │
+# └──────────────────┴───────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬────────────────────────────────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors                                         │
+# ├─────────┼───────────┼───────┼────────────────────────────────────────────────┤
+# │ 0       │ 2         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# │ 1       │ 3         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# └─────────┴───────────┴───────┴────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 0       │
+# │ updated          │ 0       │
+# │ skipped          │ 2       │
+# │ validationErrors │ 2       │
+# └──────────────────┴─────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬────────────────────────────────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors                                         │
+# ├─────────┼───────────┼───────┼────────────────────────────────────────────────┤
+# │ 0       │ 2         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# │ 1       │ 3         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# └─────────┴───────────┴───────┴────────────────────────────────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 1         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬─────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors              │
+# ├─────────┼───────────┼───────┼─────────────────────┤
+# │ 0       │ 3         │ 'bad' │ 'Invalid latitude.' │
+# └─────────┴───────────┴───────┴─────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 1       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬─────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors              │
+# ├─────────┼───────────┼───────┼─────────────────────┤
+# │ 0       │ 3         │ 'bad' │ 'Invalid latitude.' │
+# └─────────┴───────────┴───────┴─────────────────────┘
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 1         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 1         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬─────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors              │
+# ├─────────┼───────────┼───────┼─────────────────────┤
+# │ 0       │ 3         │ 'bad' │ 'Invalid latitude.' │
+# └─────────┴───────────┴───────┴─────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 1       │
+# │ updated          │ 0       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 1       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬────────────┬───────────┬─────────────────────────────────────────────────────┐
+# │ (index) │ action   │ id    │ name       │ rowNumber │ fields                                              │
+# ├─────────┼──────────┼───────┼────────────┼───────────┼─────────────────────────────────────────────────────┤
+# │ 0       │ 'insert' │ 'one' │ 'Cafe One' │ 2         │ [ [Object], [Object], [Object], ... 14 more items ] │
+# └─────────┴──────────┴───────┴────────────┴───────────┴─────────────────────────────────────────────────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬─────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors              │
+# ├─────────┼───────────┼───────┼─────────────────────┤
+# │ 0       │ 3         │ 'bad' │ 'Invalid latitude.' │
+# └─────────┴───────────┴───────┴─────────────────────┘
+# Wrote 1 place(s) to /Users/tomurho/projects/travel map/src/data/places.json.
+# Would publish 0 new row(s) and would update 0 row(s). Skipped 1 unchanged row(s) and 0 blank id row(s).
+# Would publish 0 new row(s) and would update 0 row(s). Skipped 1 unchanged row(s) and 0 blank id row(s).
+# Would publish 0 new row(s) and would update 0 row(s). Skipped 1 unchanged row(s) and 0 blank id row(s).
+# Would publish 0 new row(s) and would update 0 row(s). Skipped 1 unchanged row(s) and 0 blank id row(s).
+# Would publish 1 new row(s) and would update 1 row(s). Skipped 0 unchanged row(s) and 0 blank id row(s).
+# Would publish 1 new row(s) and would update 1 row(s). Skipped 0 unchanged row(s) and 0 blank id row(s).
+# Published 1 new row(s) and updated 1 row(s). Skipped 0 unchanged row(s) and 0 blank id row(s).
+# Would publish 0 new row(s) and would update 0 row(s). Skipped 2 unchanged row(s) and 0 blank id row(s).
+# Would publish 1 new row(s) and would update 1 row(s). Skipped 0 unchanged row(s) and 0 blank id row(s).
+# Subtest: merge retains every populated verification field, local editorial values, and app-only fields
+ok 183 - merge retains every populated verification field, local editorial values, and app-only fields
+  ---
+  duration_ms: 1.313666
+  type: 'test'
+  ...
+# Subtest: closure is retained while unrelated rows sync; repeat preview has no changes
+ok 184 - closure is retained while unrelated rows sync; repeat preview has no changes
+  ---
+  duration_ms: 29.422959
+  type: 'test'
+  ...
+# Subtest: verified venue changes block the entire write, including partial mode
+ok 185 - verified venue changes block the entire write, including partial mode
+  ---
+  duration_ms: 11.389292
+  type: 'test'
+  ...
+# Subtest: zero scores and dates protect verification; formatting and city aliases do not conflict
+ok 186 - zero scores and dates protect verification; formatting and city aliases do not conflict
+  ---
+  duration_ms: 1.194333
+  type: 'test'
+  ...
+# Subtest: unchanged verified record remains idempotent without losing evidence
+ok 187 - unchanged verified record remains idempotent without losing evidence
+  ---
+  duration_ms: 0.791459
+  type: 'test'
+  ...
+# Subtest: sync preview binds rows, headers, order, sheet, options and the local snapshot
+ok 188 - sync preview binds rows, headers, order, sheet, options and the local snapshot
+  ---
+  duration_ms: 8.059625
+  type: 'test'
+  ...
+# Subtest: atomic JSON writer catches changes after apply preflight
+ok 189 - atomic JSON writer catches changes after apply preflight
+  ---
+  duration_ms: 1.501458
+  type: 'test'
+  ...
+# Subtest: partial sync cannot bypass duplicates; ordinary invalid rows require explicit matching partial preview
+ok 190 - partial sync cannot bypass duplicates; ordinary invalid rows require explicit matching partial preview
+  ---
+  duration_ms: 9.975416
+  type: 'test'
+  ...
+# Subtest: publish defaults to preview and binds both source tabs
+ok 191 - publish defaults to preview and binds both source tabs
+  ---
+  duration_ms: 7.254375
+  type: 'test'
+  ...
+# Subtest: unchanged publish applies updates and appends, then a fresh preview is a no-op
+ok 192 - unchanged publish applies updates and appends, then a fresh preview is a no-op
+  ---
+  duration_ms: 4.843625
+  type: 'test'
+  ...
+# Subtest: an uncertain publish is not retried and the original preview becomes stale
+ok 193 - an uncertain publish is not retried and the original preview becomes stale
+  ---
+  duration_ms: 7.0915
+  type: 'test'
+  ...
+# Subtest: write calls reject missing or malformed hashes before any I/O
+ok 194 - write calls reject missing or malformed hashes before any I/O
+  ---
+  duration_ms: 0.511458
+  type: 'test'
+  ...
+# Subtest: fingerprints ignore object key order but preserve row order and operation
+ok 195 - fingerprints ignore object key order but preserve row order and operation
+  ---
+  duration_ms: 0.284375
+  type: 'test'
+  ...
+# Subtest: CLI parsers keep preview defaults and forward explicit hashes
+ok 196 - CLI parsers keep preview defaults and forward explicit hashes
+  ---
+  duration_ms: 0.376958
+  type: 'test'
+  ...
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 2         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 2         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 1         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬──────────────────┬───────────┬──────────────┐
+# │ (index) │ action   │ id    │ name             │ rowNumber │ fields       │
+# ├─────────┼──────────┼───────┼──────────────────┼───────────┼──────────────┤
+# │ 0       │ 'update' │ 'one' │ 'Corrected Cafe' │ 2         │ [ [Object] ] │
+# └─────────┴──────────┴───────┴──────────────────┴───────────┴──────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 1         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬──────────────────┬───────────┬──────────────┐
+# │ (index) │ action   │ id    │ name             │ rowNumber │ fields       │
+# ├─────────┼──────────┼───────┼──────────────────┼───────────┼──────────────┤
+# │ 0       │ 'update' │ 'one' │ 'Corrected Cafe' │ 2         │ [ [Object] ] │
+# └─────────┴──────────┴───────┴──────────────────┴───────────┴──────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 1         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬──────────────────┬───────────┬──────────────┐
+# │ (index) │ action   │ id    │ name             │ rowNumber │ fields       │
+# ├─────────┼──────────┼───────┼──────────────────┼───────────┼──────────────┤
+# │ 0       │ 'update' │ 'one' │ 'Corrected Cafe' │ 2         │ [ [Object] ] │
+# └─────────┴──────────┴───────┴──────────────────┴───────────┴──────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 1         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Rows that would change
+# ┌─────────┬──────────┬───────┬──────────────────┬───────────┬──────────────┐
+# │ (index) │ action   │ id    │ name             │ rowNumber │ fields       │
+# ├─────────┼──────────┼───────┼──────────────────┼───────────┼──────────────┤
+# │ 0       │ 'update' │ 'one' │ 'Corrected Cafe' │ 2         │ [ [Object] ] │
+# └─────────┴──────────┴───────┴──────────────────┴───────────┴──────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬─────────┐
+# │ (index)          │ Values  │
+# ├──────────────────┼─────────┤
+# │ mode             │ 'write' │
+# │ rowsRead         │ 2       │
+# │ inserted         │ 0       │
+# │ updated          │ 1       │
+# │ skipped          │ 1       │
+# │ validationErrors │ 0       │
+# └──────────────────┴─────────┘
+# Rows changed
+# ┌─────────┬──────────┬───────┬──────────────────┬───────────┬──────────────┐
+# │ (index) │ action   │ id    │ name             │ rowNumber │ fields       │
+# ├─────────┼──────────┼───────┼──────────────────┼───────────┼──────────────┤
+# │ 0       │ 'update' │ 'one' │ 'Corrected Cafe' │ 2         │ [ [Object] ] │
+# └─────────┴──────────┴───────┴──────────────────┴───────────┴──────────────┘
+# Wrote 2 place(s) to /Users/tomurho/projects/travel map/src/data/places.json.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 2         │
+# │ validationErrors │ 2         │
+# └──────────────────┴───────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬────────────────────────────────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors                                         │
+# ├─────────┼───────────┼───────┼────────────────────────────────────────────────┤
+# │ 0       │ 2         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# │ 1       │ 3         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# └─────────┴───────────┴───────┴────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 2         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 2         │
+# │ validationErrors │ 2         │
+# └──────────────────┴───────────┘
+# Validation errors
+# ┌─────────┬───────────┬───────┬────────────────────────────────────────────────┐
+# │ (index) │ rowNumber │ id    │ errors                                         │
+# ├─────────┼───────────┼───────┼────────────────────────────────────────────────┤
+# │ 0       │ 2         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# │ 1       │ 3         │ 'one' │ 'Duplicate Published id appears on rows 2, 3.' │
+# └─────────┴───────────┴───────┴────────────────────────────────────────────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Published sync summary
+# ┌──────────────────┬───────────┐
+# │ (index)          │ Values    │
+# ├──────────────────┼───────────┤
+# │ mode             │ 'dry-run' │
+# │ rowsRead         │ 1         │
+# │ inserted         │ 0         │
+# │ updated          │ 0         │
+# │ skipped          │ 1         │
+# │ validationErrors │ 0         │
+# └──────────────────┴───────────┘
+# Dry-run mode: src/data/places.json was not written.
+# Subtest: admin endpoints require preview hashes and retain authorization
+ok 197 - admin endpoints require preview hashes and retain authorization
+  ---
+  duration_ms: 27.468542
+  type: 'test'
+  ...
+# Subtest: manual correction requires a preview, confirmation, and a verification note before I/O
+ok 198 - manual correction requires a preview, confirmation, and a verification note before I/O
+  ---
+  duration_ms: 0.333
+  type: 'test'
+  ...
+# Subtest: manual correction replaces only the selected venue and evidence, keeps a backup, and requires a fresh preview
+ok 199 - manual correction replaces only the selected venue and evidence, keeps a backup, and requires a fresh preview
+  ---
+  duration_ms: 17.459791
+  type: 'test'
+  ...
+# Subtest: manual correction rejects changed sheet/local data and concurrent local writes
+ok 200 - manual correction rejects changed sheet/local data and concurrent local writes
+  ---
+  duration_ms: 7.351917
+  type: 'test'
+  ...
+# Subtest: manual correction cannot reopen a closure or select an ambiguous duplicate row
+ok 201 - manual correction cannot reopen a closure or select an ambiguous duplicate row
+  ---
+  duration_ms: 3.162209
+  type: 'test'
+  ...
+# Subtest: compact addresses remove repeated context while retaining buildings and units
+ok 202 - compact addresses remove repeated context while retaining buildings and units
+  ---
+  duration_ms: 0.797833
+  type: 'test'
+  ...
+# Subtest: ambiguous, empty and context-only addresses remain usable without guessed shortening
+ok 203 - ambiguous, empty and context-only addresses remain usable without guessed shortening
+  ---
+  duration_ms: 0.114667
+  type: 'test'
+  ...
+# Subtest: approved type migration is idempotent and preserves deferred distinctions
+ok 204 - approved type migration is idempotent and preserves deferred distinctions
+  ---
+  duration_ms: 0.598292
+  type: 'test'
+  ...
+# Subtest: old searches and bookmarked filters still find merged types
+ok 205 - old searches and bookmarked filters still find merged types
+  ---
+  duration_ms: 1.702625
+  type: 'test'
+  ...
+# Subtest: editor accepts approved old labels against current options without inventing types
+ok 206 - editor accepts approved old labels against current options without inventing types
+  ---
+  duration_ms: 0.104333
+  type: 'test'
+  ...
+# Subtest: public guides share an allowlist that removes internal evidence and retains edit versions
+ok 207 - public guides share an allowlist that removes internal evidence and retains edit versions
+  ---
+  duration_ms: 11.717667
+  type: 'test'
+  ...
+# Subtest: unchanged resolver source retains its candidate without provider calls
+ok 208 - unchanged resolver source retains its candidate without provider calls
+  ---
+  duration_ms: 15.632459
+  type: 'test'
+  ...
+# Subtest: changed Maps link discards old candidate evidence when no new lookup is available
+ok 209 - changed Maps link discards old candidate evidence when no new lookup is available
+  ---
+  duration_ms: 4.850458
+  type: 'test'
+  ...
+# Subtest: a changed address or pin invalidates existing candidate evidence
+ok 210 - a changed address or pin invalidates existing candidate evidence
+  ---
+  duration_ms: 18.086916
+  type: 'test'
+  ...
+# Subtest: changed link resolves the new Place ID and keeps the candidate for review
+ok 211 - changed link resolves the new Place ID and keeps the candidate for review
+  ---
+  duration_ms: 8.7335
+  type: 'test'
+  ...
+# Subtest: a corrected canonical address is searched after old evidence is cleared
+ok 212 - a corrected canonical address is searched after old evidence is cleared
+  ---
+  duration_ms: 4.848542
+  type: 'test'
+  ...
+# Subtest: resolving a new link does not reopen a closed place
+ok 213 - resolving a new link does not reopen a closed place
+  ---
+  duration_ms: 4.9905
+  type: 'test'
+  ...
+# Subtest: resolver rejects malformed input before accessing the catalog or providers
+ok 214 - resolver rejects malformed input before accessing the catalog or providers
+  ---
+  duration_ms: 5.399625
+  type: 'test'
+  ...
+# [screenshot-intake/extract] environment check { hasOpenAiApiKey: true, model: 'gpt-4o-mini' }
+# [screenshot-intake/extract] validated images {
+#   count: 2,
+#   files: [
+#     { name: 'same-name.png', size: 24, type: 'image/png' },
+#     { name: 'same-name.png', size: 24, type: 'image/png' }
+#   ]
+# }
+# [screenshot-intake/extract] environment check { hasOpenAiApiKey: true, model: 'gpt-4o-mini' }
+# [screenshot-intake/extract] validated images {
+#   count: 2,
+#   files: [
+#     { name: 'same-name.png', size: 24, type: 'text/plain' },
+#     { name: 'same-name.png', size: 24, type: 'image/png' }
+#   ]
+# }
+# [screenshot-intake/extract] environment check { hasOpenAiApiKey: true, model: 'gpt-4o-mini' }
+# [screenshot-intake/extract] validated images {
+#   count: 1,
+#   files: [ { name: 'same-name.png', size: 24, type: 'image/png' } ]
+# }
+# Subtest: one failed screenshot retains successful rows with independent same-name image identities
+ok 215 - one failed screenshot retains successful rows with independent same-name image identities
+  ---
+  duration_ms: 10.268584
+  type: 'test'
+  ...
+# Subtest: an invalid image does not prevent a different image from extracting
+ok 216 - an invalid image does not prevent a different image from extracting
+  ---
+  duration_ms: 2.466291
+  type: 'test'
+  ...
+# Subtest: a provider timeout is a retryable per-image failure
+ok 217 - a provider timeout is a retryable per-image failure
+  ---
+  duration_ms: 1.418583
+  type: 'test'
+  ...
+# Subtest: retry appends successful failed-image results without losing corrected or ignored drafts
+ok 218 - retry appends successful failed-image results without losing corrected or ignored drafts
+  ---
+  duration_ms: 0.11825
+  type: 'test'
+  ...
+1..218
+# tests 218
+# suites 0
+# pass 218
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1341.814583

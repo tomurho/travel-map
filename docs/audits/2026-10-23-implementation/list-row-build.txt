@@ -1,0 +1,50 @@
+
+> travel-map@0.1.0 build /Users/tomurho/projects/travel map
+> next build
+
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1582.8ms
+  Running TypeScript ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/19) ...
+  Generating static pages using 7 workers (4/19) 
+  Generating static pages using 7 workers (9/19) 
+  Generating static pages using 7 workers (14/19) 
+✓ Generating static pages using 7 workers (19/19) in 60.9ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /api/admin/place-pipeline/capture-ready
+├ ƒ /api/admin/place-pipeline/publish-approved
+├ ƒ /api/admin/place-pipeline/resolve-conflict
+├ ƒ /api/admin/place-pipeline/review-candidates
+├ ƒ /api/admin/place-pipeline/review-new
+├ ƒ /api/admin/place-pipeline/snapshot
+├ ƒ /api/admin/place-pipeline/status
+├ ƒ /api/admin/place-pipeline/sync-published
+├ ƒ /api/admin/places
+├ ƒ /api/admin/places/[id]
+├ ƒ /api/admin/places/[id]/resolve-google-url
+├ ƒ /api/admin/places/export
+├ ƒ /api/admin/places/export/local
+├ ƒ /api/admin/resolve-places
+├ ƒ /api/admin/screenshot-intake/extract
+├ ƒ /api/admin/screenshot-intake/send-to-capture
+├ ƒ /api/admin/staged-places
+├ ƒ /api/admin/staged-places/export
+├ ƒ /api/admin/staged-places/publish
+├ ƒ /concept
+├ ƒ /field-guide
+├ ƒ /original
+└ ƒ /preview/kyoto
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

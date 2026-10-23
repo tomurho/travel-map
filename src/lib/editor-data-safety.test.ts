@@ -8,7 +8,7 @@ import { getPlaceRecordVersion } from "@/lib/place-record-version";
 import { PlacesJsonWriteConflictError, validatePlacesDataset, type PlacesJsonSnapshot } from "@/lib/places-json-store";
 import {
   buildProductionPlaceFloatingEdit, getProductionPlaceVerificationInputErrors,
-  getStagedPlaceInputErrors, planStagedPlace, publishStagedPlaces, updateProductionPlaceFloatingEdit,
+  getStagedPlaceInputErrors, getStagedRecordVersion, planStagedPlace, publishStagedPlaces, updateProductionPlaceFloatingEdit,
   updateProductionPlaceVerification, stagedPlaceToPlace, type AdminFloatingPlaceEditInput,
   type AdminStagedPlaceInput,
 } from "@/lib/admin-staging";
@@ -103,7 +103,7 @@ test("atomic write conflicts return 409 and unexpected failures remain failures"
 test("retained verification edits can deliberately clear Loved to null", () => {
   const original = makePlace({ loved: true });
   const store = memoryStore([original]);
-  const saved = updateProductionPlaceVerification(original.id, { googleMapsUrl: original.googleMapsUrl!, latitude: 35, longitude: 139, verifiedStatus: "Yes", lastChecked: "2026-10-22", verificationNotes: "Checked", loved: null }, store.io);
+  const saved = updateProductionPlaceVerification(original.id, { expectedRecordVersion: getPlaceRecordVersion(original), googleMapsUrl: original.googleMapsUrl!, latitude: 35, longitude: 139, verifiedStatus: "Yes", lastChecked: "2026-10-22", verificationNotes: "Checked", loved: null }, store.io);
   assert.ok(saved.place);
   assert.equal(saved.place.loved, null);
   assert.equal(store.writes, 1);
@@ -138,13 +138,13 @@ test("staged drafts survive slug collisions and repeated creation without replac
   const retried = planStagedPlace(firstInput, second.places);
   assert.equal(retried.place.id, first.place.id);
   assert.equal(retried.places.length, 2);
-  const updated = planStagedPlace(draft({ id: first.place.id, address: "New address" }), second.places);
+  const updated = planStagedPlace(draft({ id: first.place.id, expectedRecordVersion: getStagedRecordVersion(first.place), address: "New address" }), second.places);
   assert.equal(updated.place.id, first.place.id);
   assert.equal(updated.place.createdAt, first.place.createdAt);
   assert.equal(updated.places.length, 2);
   assert.equal(updated.places.find((place) => place.id === second.place.id)?.address, "2 Street");
   assert.throws(() => planStagedPlace(draft({ id: "missing" }), second.places), /no longer exists/);
-  assert.throws(() => planStagedPlace(draft({ id: first.place.id }), first.places, [{ id: first.place.id }]), /published places/);
+  assert.throws(() => planStagedPlace(draft({ id: first.place.id, expectedRecordVersion: getStagedRecordVersion(first.place) }), first.places, [{ id: first.place.id }]), /published places/);
   assert.ok(getStagedPlaceInputErrors(draft({ notes: [123] as unknown as string[] })).length);
   assert.ok(getStagedPlaceInputErrors({ ...draft(), draftStatus: ["been"] }).some((error) => error.includes("draftStatus")));
 });

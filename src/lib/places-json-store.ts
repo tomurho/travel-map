@@ -30,9 +30,11 @@ export type PlacesJsonSnapshot = {
 
 type ReadPlacesJsonOptions = {
   allowMissing?: boolean;
+  validate?: (records: unknown) => void;
 };
 
 type WritePlacesJsonOptions = {
+  validate?: (records: unknown) => void;
   backupDirectory?: string;
   createBackup?: boolean;
   expectedFileHash?: string;
@@ -95,7 +97,7 @@ export function readPlacesJsonSnapshot(
 
   const raw = readFileSync(resolvedPath, "utf8");
   const places = JSON.parse(raw) as Place[];
-  validatePlacesDataset(places);
+  (options.validate ?? validatePlacesDataset)(places);
 
   return {
     fileHash: hashContent(raw),
@@ -109,7 +111,7 @@ export function writePlacesJsonAtomic(
   places: Place[],
   options: WritePlacesJsonOptions = {},
 ) {
-  validatePlacesDataset(places);
+  (options.validate ?? validatePlacesDataset)(places);
 
   const filePath = path.resolve(options.filePath ?? DEFAULT_PLACES_JSON_PATH);
   const directory = path.dirname(filePath);

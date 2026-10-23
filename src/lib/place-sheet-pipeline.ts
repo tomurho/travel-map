@@ -1,3 +1,4 @@
+import retiredPlaceIds from "@/data/place-id-aliases.json";
 import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -21,6 +22,8 @@ import {
   readValues,
   updateValues,
 } from "@/lib/google-sheets-oauth";
+import { getCatalogWarnings } from "@/lib/catalog-quality";
+import { getPlaceFieldErrors } from "@/lib/place-validation";
 import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
 import { mergePublishedPlace, verifyPublishedCorrection } from "@/lib/published-place-merge";
 import { findCanonicalCategory } from "@/lib/place-category";
@@ -39,7 +42,12 @@ const REVIEW_TAB = "Review";
 const API_USAGE_TAB = "API Usage";
 const PUBLISHED_TAB = "Published";
 const AUDIT_TAB = "Audit";
-const READY_INTAKE_STATUS = "Ready";
+const PROVIDER_TIMEOUT_MS = 20_000;
+
+/** Sheet workflow labels use one case-insensitive rule for counts and actions. */
+export function normalizePipelineStatus(value: string) {
+  return value.trim().toLowerCase();
+}
 const PLACES_JSON_PATH = path.resolve(process.cwd(), "src/data/places.json");
 
 const PLACES_TEXT_SEARCH_URL =
@@ -144,6 +152,30 @@ export type PlacePipelineStatus = {
     verified: number;
   };
   validationErrors: number;
+  validationIssues: PipelineValidationIssue[];
+};
+
+export type PipelineValidationIssue = {
+  section: "publish" | "sync" | "capture" | "review";
+  rowNumber: number;
+  id: string;
+  errors: string[];
+};
+
+export type CaptureQueueItem = {
+  intakeId: string;
+  captureVersion: string;
+  rowNumber: number;
+  rawName: string;
+  rawText: string;
+  cityHint: string;
+  countryHint: string;
+  sourceType: string;
+  sourceScreenshot: string;
+  sourceUrl: string;
+  notes: string;
+  status: string;
+  sheetRowUrl: string;
 };
 
 export type ReviewCandidate = {
@@ -164,6 +196,7 @@ export type ReviewCandidate = {
   reviewStamp: string;
   status: string;
   validationIssues: string[];
+  warnings: string[];
 };
 
 export type ReviewCandidateDecision = "verify" | "reject";
@@ -881,6 +914,88 @@ export function buildCaptureIntakeKey(fields: Record<string, string>) {
   return `capture_${createHash("sha256").update(identity).digest("hex").slice(0, 20)}`;
 }
 
+function captureRowVersion(sheetId: string, headers: string[], rowNumber: number, values: string[]) {
+  return createHash("sha256").update(JSON.stringify({ sheetId: sheetId.trim(), headers, rowNumber, values })).digest("hex");
+}
+
+export function buildNewCaptureQueue(captureValues: string[][], sheetId = ""): CaptureQueueItem[] {
+  const headers = (captureValues[0] ?? []).map(String);
+  requireHeaders(CAPTURE_TAB, headers, ["intakeStatus"]);
+  return captureValues.slice(1).flatMap((values, index) => {
+    const fields = mapSheetRowToObject(headers, values);
+    if (normalizePipelineStatus(readMappedSheetField(fields, ["intakeStatus"])) !== "new") return [];
+    const rowNumber = index + 2;
+    return [{
+      intakeId: buildCaptureIntakeKey(fields),
+      captureVersion: captureRowVersion(sheetId, headers, rowNumber, values),
+      rowNumber,
+      rawName: readMappedSheetField(fields, CAPTURE_NAME_HEADERS),
+      rawText: readMappedSheetField(fields, ["rawText"]),
+      cityHint: readMappedSheetField(fields, CITY_HINT_HEADERS),
+      countryHint: readMappedSheetField(fields, COUNTRY_HINT_HEADERS),
+      sourceType: readMappedSheetField(fields, ["sourceType"]),
+      sourceScreenshot: readMappedSheetField(fields, ["sourceScreenshot"]),
+      sourceUrl: readMappedSheetField(fields, ["sourceUrl", "url"]),
+      notes: readMappedSheetField(fields, ["notes"]),
+      status: readMappedSheetField(fields, ["intakeStatus"]),
+      sheetRowUrl: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/edit#range=Capture!A${rowNumber}:ZZ${rowNumber}`,
+    }];
+  });
+}
+
+const captureReadyIO = { createGoogleSheetsAuthClient, readValues, batchUpdateValues };
+// Serialize this process's status changes. Repeated requests re-read New status before writing.
+const captureReadyRequests = new Map<string, Promise<unknown>>();
+
+export async function markCapturesReady(input: {
+  sheetId: string;
+  captures: Array<{ rowNumber: number; intakeId: string; captureVersion: string }>;
+}, overrides: Partial<typeof captureReadyIO> = {}) {
+  const sheetId = input.sheetId?.trim();
+  if (!sheetId || !Array.isArray(input.captures) || input.captures.length < 1 || input.captures.length > 100) {
+    throw new PipelineError("VALIDATION_FAILED", "Select 1 to 100 New captures and provide a Sheet ID.");
+  }
+  const seen = new Set<number>();
+  for (const capture of input.captures) {
+    if (!capture || !Number.isInteger(capture.rowNumber) || capture.rowNumber < 2 ||
+        typeof capture.intakeId !== "string" || !capture.intakeId ||
+        typeof capture.captureVersion !== "string" || !/^[a-f0-9]{64}$/.test(capture.captureVersion) || seen.has(capture.rowNumber)) {
+      throw new PipelineError("VALIDATION_FAILED", "Each selected capture needs a unique row and its current version. Refresh the queue.");
+    }
+    seen.add(capture.rowNumber);
+  }
+  const previous = captureReadyRequests.get(sheetId);
+  const request = (async () => {
+    if (previous) await previous.catch(() => undefined);
+    const io = { ...captureReadyIO, ...overrides };
+    const auth = await io.createGoogleSheetsAuthClient();
+    const values = await io.readValues(auth, sheetId, `${quoteSheetName(CAPTURE_TAB)}!A1:ZZ`);
+    const headers = (values[0] ?? []).map(String);
+    const queue = buildNewCaptureQueue(values, sheetId);
+    const statusIndex = getHeaderIndex(indexHeaders(headers), ["intakeStatus"]);
+    if (statusIndex === undefined) throw new PipelineError("VALIDATION_FAILED", "Capture needs an intakeStatus column.");
+    for (const selection of input.captures) {
+      const current = queue.find((row) => row.rowNumber === selection.rowNumber && row.intakeId === selection.intakeId);
+      if (!current || current.captureVersion !== selection.captureVersion) {
+        throw new PipelineError("PREVIEW_STALE", "A selected capture changed or is no longer New. Refresh the queue and review it again.");
+      }
+      if (!current.rawName) throw new PipelineError("VALIDATION_FAILED", `Capture row ${current.rowNumber}: rawName is required before marking Ready.`);
+    }
+    try {
+      await io.batchUpdateValues(auth, sheetId, input.captures.map((capture) => ({
+        range: `${quoteSheetName(CAPTURE_TAB)}!${columnName(statusIndex)}${capture.rowNumber}`,
+        values: [["Ready"]],
+      })));
+    } catch {
+      throw new PipelineError("WRITE_OUTCOME_UNKNOWN", "Mark ready could not be confirmed. Refresh the queue before trying again.");
+    }
+    return { readyCount: input.captures.length };
+  })();
+  captureReadyRequests.set(sheetId, request);
+  try { return await request; }
+  finally { if (captureReadyRequests.get(sheetId) === request) captureReadyRequests.delete(sheetId); }
+}
+
 export function shouldReconcileCapture(
   existingReviewIntakeKeys: ReadonlySet<string>,
   fields: Record<string, string>,
@@ -922,6 +1037,7 @@ async function searchGooglePlaces(input: {
       "X-Goog-FieldMask": PLACES_FIELD_MASK,
     },
     method: "POST",
+    signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -945,6 +1061,7 @@ async function fetchGooglePlaceDetails(input: {
         "X-Goog-FieldMask": PLACES_FIELD_MASK.replace(/places\./g, ""),
       },
       method: "GET",
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     },
   );
 
@@ -1702,7 +1819,7 @@ export async function enrichReadyRows(options: EnrichReadyRowsOptions) {
     }));
   const eligibleRows = captureDataRows.filter(
     (row) =>
-      String(row.values[intakeStatusIndex] ?? "").trim() === READY_INTAKE_STATUS,
+      normalizePipelineStatus(String(row.values[intakeStatusIndex] ?? "")) === "ready",
   );
 
   if (eligibleRows.length === 0) {
@@ -1996,7 +2113,7 @@ function buildPublishedRecord(reviewRow: Record<string, string>, lastChecked: st
   };
 }
 
-export function buildReviewCandidateQueue(reviewValues: string[][], sheetId = "") {
+export function buildReviewCandidateQueue(reviewValues: string[][], sheetId = "", catalog: Place[] = []) {
   const reviewHeaders = (reviewValues[0] ?? []).map((value) =>
     String(value ?? ""),
   );
@@ -2026,7 +2143,7 @@ export function buildReviewCandidateQueue(reviewValues: string[][], sheetId = ""
     }))
     .filter(
       (row) =>
-        readMappedSheetField(row.fields, ["reviewStatus"]).toLowerCase() ===
+        normalizePipelineStatus(readMappedSheetField(row.fields, ["reviewStatus"])) ===
         "candidate",
     )
     .map((row): ReviewCandidate => {
@@ -2075,6 +2192,14 @@ export function buildReviewCandidateQueue(reviewValues: string[][], sheetId = ""
           .digest("hex"),
         status: readMappedSheetField(row.fields, ["status"]),
         validationIssues: normalized.ok ? [] : normalized.errors,
+        warnings: getCatalogWarnings({
+          id: readMappedSheetField(row.fields, ["id"]),
+          name: readMappedSheetField(row.fields, ["candidateName"]),
+          city: normalizePlaceCity(readMappedSheetField(row.fields, ["city"])),
+          latitude: readNumber(readMappedSheetField(row.fields, ["candidateLatitude"])),
+          longitude: readNumber(readMappedSheetField(row.fields, ["candidateLongitude"])),
+          googlePlaceId: readMappedSheetField(row.fields, ["candidateGooglePlaceId"]),
+        }, catalog),
       };
     });
 }
@@ -2091,7 +2216,7 @@ export async function getReviewCandidates(input: { sheetId: string }) {
     [`${quoteSheetName(REVIEW_TAB)}!A1:ZZ`],
   );
 
-  return { candidates: buildReviewCandidateQueue(reviewValues, input.sheetId) };
+  return { candidates: buildReviewCandidateQueue(reviewValues, input.sheetId, readPlacesJsonSnapshot(PLACES_JSON_PATH).places) };
 }
 
 const reviewDecisionIO = {
@@ -2260,8 +2385,16 @@ export async function decideReviewCandidate(input: {
   };
 }
 
+function getApprovedReviewRows(values: string[][], headers: string[]) {
+  return values.slice(1).map((values, index) => ({
+    fields: mapSheetRowToObject(headers, values), rowNumber: index + 2,
+  })).filter((row) => normalizePipelineStatus(readMappedSheetField(row.fields, ["reviewStatus"])) === "verified");
+}
+
 export function buildPublishedUpsertPlan(input: {
   approvedRows: Record<string, string>[];
+  approvedRowNumbers?: number[];
+  collectValidationErrors?: boolean;
   lastChecked: string;
   publishedHeaders: string[];
   publishedValues: string[][];
@@ -2290,10 +2423,15 @@ export function buildPublishedUpsertPlan(input: {
     publishedRowsById.set(id, { rowNumber: index + 2, values });
   });
 
-  if (duplicatePublishedIds.size > 0) {
+  const validationErrors: Array<{ id: string; rowNumber: number; errors: string[] }> = [];
+  if (duplicatePublishedIds.size > 0 && !input.collectValidationErrors) {
     throw new Error(
       `Published contains duplicate id(s): ${Array.from(duplicatePublishedIds).join(", ")}. Resolve them before publishing.`,
     );
+  }
+
+  for (const id of duplicatePublishedIds) {
+    validationErrors.push({ id, rowNumber: publishedRowsById.get(id)?.rowNumber ?? 0, errors: [`Published contains duplicate id ${id}. Resolve it before publishing.`] });
   }
 
   const approvedIds = new Set<string>();
@@ -2309,16 +2447,19 @@ export function buildPublishedUpsertPlan(input: {
   const unchangedIds: string[] = [];
   let blankIdRowsSkipped = 0;
 
-  for (const approvedRow of input.approvedRows) {
+  for (const [approvedIndex, approvedRow] of input.approvedRows.entries()) {
+    const rowNumber = input.approvedRowNumbers?.[approvedIndex] ?? approvedIndex + 2;
     const id = readMappedSheetField(approvedRow, ["id"]);
 
     if (!id) {
       blankIdRowsSkipped += 1;
+      validationErrors.push({ id, rowNumber, errors: ["Missing id."] });
       continue;
     }
 
     if (approvedIds.has(id)) {
       duplicateApprovedIds.add(id);
+      validationErrors.push({ id, rowNumber, errors: [`Review contains multiple Verified rows for id ${id}. Approve only one row per id.`] });
       continue;
     }
     approvedIds.add(id);
@@ -2330,14 +2471,16 @@ export function buildPublishedUpsertPlan(input: {
     );
     const normalizedCandidate = normalizePublishedRow({
       fields: mapSheetRowToObject(input.publishedHeaders, nextValues),
-      rowNumber: 0,
+      rowNumber,
       values: nextValues,
     });
 
     if (!normalizedCandidate.ok) {
-      throw new Error(
+      if (!input.collectValidationErrors) throw new Error(
         `Verified Review row ${id} is not publishable: ${normalizedCandidate.errors.join(" ")}`,
       );
+      validationErrors.push({ id, rowNumber, errors: normalizedCandidate.errors });
+      continue;
     }
     const current = publishedRowsById.get(id);
 
@@ -2377,7 +2520,7 @@ export function buildPublishedUpsertPlan(input: {
     publishableRows.push({ id, name });
   }
 
-  if (duplicateApprovedIds.size > 0) {
+  if (duplicateApprovedIds.size > 0 && !input.collectValidationErrors) {
     throw new Error(
       `Review contains multiple Verified rows for id(s): ${Array.from(duplicateApprovedIds).join(", ")}. Approve only one row per id.`,
     );
@@ -2385,6 +2528,7 @@ export function buildPublishedUpsertPlan(input: {
 
   return {
     appendRows,
+    validationErrors,
     blankIdRowsSkipped,
     publishableRows,
     unchangedIds,
@@ -2458,17 +2602,15 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions, o
     throw new PipelineError("VALIDATION_FAILED", error instanceof Error ? error.message : "Invalid sheet headers.");
   }
 
-  const approvedRows = reviewValues
-    .slice(1)
-    .map((row) => mapSheetRowToObject(reviewHeaders, row))
-    .filter(
-      (row) => readMappedSheetField(row, ["reviewStatus"]) === "Verified",
-    );
+  const approved = getApprovedReviewRows(reviewValues, reviewHeaders);
+  const approvedRows = approved.map((row) => row.fields);
   const lastChecked = new Date().toISOString();
   let plan: ReturnType<typeof buildPublishedUpsertPlan>;
   try {
     plan = buildPublishedUpsertPlan({
       approvedRows,
+      approvedRowNumbers: approved.map((row) => row.rowNumber),
+      collectValidationErrors: true,
       lastChecked,
       publishedHeaders,
       publishedValues,
@@ -2477,8 +2619,8 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions, o
   } catch (error) {
     throw new PipelineError("VALIDATION_FAILED", error instanceof Error ? error.message : "Invalid Published plan.");
   }
-  if (write && plan.blankIdRowsSkipped > 0) {
-    throw new PipelineError("VALIDATION_FAILED", "Verified Review rows are missing IDs.");
+  if (write && plan.validationErrors.length > 0) {
+    throw new PipelineError("VALIDATION_FAILED", "Fix the invalid Review rows, then preview again.", plan.validationErrors);
   }
   // Generated lastChecked is execution metadata, not a user-approved venue change.
   const publishedById = new Map(publishedValues.slice(1).map((values) => {
@@ -2492,7 +2634,7 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions, o
     const fields = describeFieldChanges(before, after).filter((change) => normalizeSheetHeader(change.field) !== normalizeSheetHeader("lastChecked"));
     return { id, name: readMappedSheetField(after, ["name"]), fields };
   });
-  const canApply = plan.blankIdRowsSkipped === 0 && fieldChanges.length > 0;
+  const canApply = plan.validationErrors.length === 0 && fieldChanges.length > 0;
 
   try {
     if (write && plan.updateRows.length > 0) {
@@ -2540,7 +2682,8 @@ export async function publishApprovedRows(options: PublishApprovedRowsOptions, o
     unchangedRows: plan.unchangedIds.length,
     updatedRows: write ? plan.updateRows.length : 0,
     rowsToUpdate: plan.updateRows.length,
-    validationIssues: plan.blankIdRowsSkipped,
+    validationIssues: plan.validationErrors.length,
+    validationErrors: plan.validationErrors,
     verifiedRowsFound: approvedRows.length,
     wouldPublishRows: plan.publishableRows,
     wrote: write,
@@ -2640,6 +2783,7 @@ function normalizePublishedRow(row: SheetRow): NormalizedPublishedRow {
   );
   const errors = [
     id ? null : "Missing id.",
+    (retiredPlaceIds as Record<string, string>)[id] ? `id ${id} was merged into ${(retiredPlaceIds as Record<string, string>)[id]}. Reconcile this Sheet row with the retained ID before publication or sync.` : null,
     name ? null : "Missing name.",
     city ? null : "Missing city.",
     category ? null : "Missing category.",
@@ -2669,9 +2813,7 @@ function normalizePublishedRow(row: SheetRow): NormalizedPublishedRow {
   const validLatitude = latitude as number;
   const validLongitude = longitude as number;
 
-  return {
-    ok: true,
-    place: {
+  const place: Place = {
       id,
       name,
       city,
@@ -2692,9 +2834,10 @@ function normalizePublishedRow(row: SheetRow): NormalizedPublishedRow {
       verifiedStatus,
       lastChecked: readMappedSheetField(fields, ["lastChecked", "last checked"]),
       notes: normalizeNotes(readMappedSheetField(fields, ["notes"])),
-    },
-    rowNumber: row.rowNumber,
   };
+  const fieldErrors = getPlaceFieldErrors(place);
+  if (fieldErrors.length > 0) return { ok: false, id, rowNumber: row.rowNumber, errors: fieldErrors };
+  return { ok: true, place, rowNumber: row.rowNumber };
 }
 
 function sortPlaces(places: Place[]) {
@@ -2907,10 +3050,10 @@ function countSheetStatuses(
     }
 
     total += 1;
-    const status = readMappedSheetField(
+    const status = normalizePipelineStatus(readMappedSheetField(
       mapSheetRowToObject(headers, valuesRow),
       [fieldName],
-    ).toLowerCase();
+    ));
     counts.set(status, (counts.get(status) ?? 0) + 1);
   }
 
@@ -2922,13 +3065,19 @@ export function buildPlacePipelineStatus(input: {
   fetchedAt?: string;
   publishedValues: string[][];
   reviewValues: string[][];
+  currentPlaces?: Place[];
 }): PlacePipelineStatus {
   const { captureValues, publishedValues, reviewValues } = input;
   const captureHeaders = (captureValues[0] ?? []).map(String);
   const reviewHeaders = (reviewValues[0] ?? []).map(String);
   const publishedHeaders = (publishedValues[0] ?? []).map(String);
-  requireHeaders(CAPTURE_TAB, captureHeaders, ["intakeStatus"]);
-  requireHeaders(REVIEW_TAB, reviewHeaders, [
+  const schemaIssues: PipelineValidationIssue[] = [];
+  function checkHeaders(tab: string, headers: string[], required: string[], section: PipelineValidationIssue["section"]) {
+    try { requireHeaders(tab, headers, required); }
+    catch (error) { schemaIssues.push({ section, rowNumber: 1, id: "", errors: [error instanceof Error ? error.message : "Invalid Sheet headers."] }); }
+  }
+  checkHeaders(CAPTURE_TAB, captureHeaders, ["intakeStatus"], "capture");
+  checkHeaders(REVIEW_TAB, reviewHeaders, [
     "id",
     "candidateName",
     "category",
@@ -2943,8 +3092,8 @@ export function buildPlacePipelineStatus(input: {
     "loved",
     "notes",
     "reviewStatus",
-  ]);
-  requireHeaders(PUBLISHED_TAB, publishedHeaders, PUBLISHED_HEADERS);
+  ], "publish");
+  checkHeaders(PUBLISHED_TAB, publishedHeaders, PUBLISHED_HEADERS, "sync");
 
   const captureStatus = countSheetStatuses(
     captureValues,
@@ -2961,29 +3110,30 @@ export function buildPlacePipelineStatus(input: {
     publishedHeaders,
     "verifiedStatus",
   );
-  const approvedRows = reviewValues
-    .slice(1)
-    .map((row) => mapSheetRowToObject(reviewHeaders, row))
-    .filter(
-      (row) =>
-        readMappedSheetField(row, ["reviewStatus"]).toLowerCase() === "verified",
-    );
+  const approved = getApprovedReviewRows(reviewValues, reviewHeaders);
   const publishPlan = buildPublishedUpsertPlan({
-    approvedRows,
+    approvedRows: approved.map((row) => row.fields),
+    approvedRowNumbers: approved.map((row) => row.rowNumber),
+    collectValidationErrors: true,
     lastChecked: new Date().toISOString(),
     publishedHeaders,
     publishedValues,
   });
-  const productionSnapshot = readPlacesJsonSnapshot(PLACES_JSON_PATH);
   const appPlan = buildPublishedSyncPlan({
-    currentPlaces: productionSnapshot.places,
+    currentPlaces: input.currentPlaces ?? readPlacesJsonSnapshot(PLACES_JSON_PATH).places,
     publishedHeaders,
     publishedValues,
   });
-  const readyToPublish =
-    publishPlan.appendRows.length + publishPlan.updateRows.length;
+  const readyToPublish = publishPlan.validationErrors.length === 0 && !schemaIssues.some((issue) => issue.section === "publish" || issue.section === "sync")
+    ? publishPlan.appendRows.length + publishPlan.updateRows.length : 0;
   const appChanges = appPlan.inserted + appPlan.updated;
-  const validationErrors = appPlan.validationErrors.length + appPlan.verificationConflicts.length;
+  const validationIssues: PipelineValidationIssue[] = [
+    ...schemaIssues,
+    ...publishPlan.validationErrors.map((issue) => ({ ...issue, section: "publish" as const })),
+    ...appPlan.validationErrors.map((issue) => ({ ...issue, section: "sync" as const })),
+    ...appPlan.verificationConflicts.map((issue) => ({ id: issue.id, rowNumber: issue.rowNumber, section: "sync" as const, errors: ["Verified venue fields conflict with the local record."] })),
+  ];
+  const validationErrors = validationIssues.length;
   const captureNew = captureStatus.counts.get("new") ?? 0;
   const captureReady = captureStatus.counts.get("ready") ?? 0;
   const captureEnriched = captureStatus.counts.get("enriched") ?? 0;
@@ -3031,18 +3181,21 @@ export function buildPlacePipelineStatus(input: {
       verified: reviewVerified,
     },
     validationErrors,
+    validationIssues,
   };
 }
 
-async function readPlacePipelineValues(sheetId: string) {
-  const sheetsAuthClient = await createGoogleSheetsAuthClient();
+const pipelineSnapshotIO = { createGoogleSheetsAuthClient, batchReadValues, readPlacesJsonSnapshot };
+
+async function readPlacePipelineValues(sheetId: string, io = pipelineSnapshotIO) {
+  const sheetsAuthClient = await io.createGoogleSheetsAuthClient();
   const ranges = [
     `${quoteSheetName(CAPTURE_TAB)}!A1:ZZ`,
     `${quoteSheetName(REVIEW_TAB)}!A1:ZZ`,
     `${quoteSheetName(PUBLISHED_TAB)}!A1:ZZ`,
   ];
   const [captureValues = [], reviewValues = [], publishedValues = []] =
-    await batchReadValues(sheetsAuthClient, sheetId, ranges);
+    await io.batchReadValues(sheetsAuthClient, sheetId, ranges);
 
   return { captureValues, publishedValues, reviewValues };
 }
@@ -3059,17 +3212,26 @@ export async function getPlacePipelineStatus(input: {
   );
 }
 
-export async function getPlacePipelineSnapshot(input: { sheetId: string }) {
-  if (!input.sheetId?.trim()) {
-    throw new Error("A Google Sheet ID is required.");
+export async function getPlacePipelineSnapshot(input: { sheetId: string }, overrides: Partial<typeof pipelineSnapshotIO> = {}) {
+  if (!input.sheetId?.trim()) throw new Error("A Google Sheet ID is required.");
+  const io = { ...pipelineSnapshotIO, ...overrides };
+  const sheetId = input.sheetId.trim();
+  const values = await readPlacePipelineValues(sheetId, io);
+  const catalog = io.readPlacesJsonSnapshot(PLACES_JSON_PATH).places;
+  const status = buildPlacePipelineStatus({ ...values, currentPlaces: catalog });
+  let captures: CaptureQueueItem[] = [];
+  let candidates: ReviewCandidate[] = [];
+  for (const section of ["capture", "review"] as const) {
+    try {
+      if (section === "capture") captures = buildNewCaptureQueue(values.captureValues, sheetId);
+      else candidates = buildReviewCandidateQueue(values.reviewValues, sheetId, catalog);
+    } catch (error) {
+      status.validationIssues.push({ section, rowNumber: 1, id: "", errors: [error instanceof Error ? error.message : "Could not build this queue."] });
+    }
   }
-
-  const values = await readPlacePipelineValues(input.sheetId.trim());
-
-  return {
-    candidates: buildReviewCandidateQueue(values.reviewValues, input.sheetId),
-    status: buildPlacePipelineStatus(values),
-  };
+  status.validationErrors = status.validationIssues.length;
+  if (status.validationErrors > 0) status.recommendedAction = "fix_errors";
+  return { captures, candidates, status };
 }
 
 export async function syncPublishedToApp(options: SyncPublishedToAppOptions, overrides: Partial<typeof pipelineIO> = {}) {
@@ -3167,6 +3329,8 @@ export async function syncPublishedToApp(options: SyncPublishedToAppOptions, ove
     validationErrorCount: validationErrors.length,
   });
 
+  const datasetErrors = nextPlaces.flatMap((place) => getPlaceFieldErrors(place).map((message) => `${place.id}: ${message}`));
+  if (datasetErrors.length > 0) throw new PipelineError("VALIDATION_FAILED", "Fix the invalid place fields, then preview again.", datasetErrors);
   if (changes.length > 0) {
     try {
       io.writePlacesJsonAtomic(nextPlaces, {

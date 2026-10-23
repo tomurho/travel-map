@@ -1,0 +1,4 @@
+
+> travel-map@0.1.0 typecheck /Users/tomurho/projects/travel map
+> tsc --noEmit
+

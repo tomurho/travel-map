@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   GoogleMap,
   GoogleMarkerClusterer,
@@ -11,13 +11,20 @@ import {
   useJsApiLoader,
   useGoogleMap,
 } from "@react-google-maps/api";
-import { getDistanceKm, type GeoPoint } from "@/lib/geo";
+import type { GeoPoint } from "@/lib/geo";
+import { findNearbyCity, getColocatedPlaces, getCoordinateKey, getMapOverviewPlaces, getMapPlacesKey, getSelectedPlacePanOffset, type CityCenter } from "@/lib/map-viewport";
+
+export type { CityCenter } from "@/lib/map-viewport";
 import type { Place } from "@/lib/place";
 import { createLocationRequestGate } from "@/lib/location-request";
 import { subscribeToGoogleMapsAuthFailure } from "@/lib/google-maps-auth";
 
 type MapViewProps = {
   places: Place[];
+  /** A hidden map stays mounted so ordinary Map/List changes preserve its view. */
+  isVisible?: boolean;
+  revealPlaceNonce?: number;
+  selectedPlaceBottomInset?: number;
   cityCenters: CityCenter[];
   mapStyles?: google.maps.MapTypeStyle[];
   selectedPlaceId: string | null;
@@ -48,13 +55,6 @@ const containerStyle = {
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 export const publicPlaceDetailsLookupEnabled = false;
-const nearbyCityRadiusKm = 80;
-
-export type CityCenter = {
-  city: string;
-  latitude: number;
-  longitude: number;
-};
 
 type StatusBadge =
   | {
@@ -195,6 +195,7 @@ function PlaceMarker({ place, isActive, onSelectPlace, clusterer }: {
 }) {
   return <MarkerF
     clusterer={clusterer}
+    noClustererRedraw={Boolean(clusterer)}
     title={`${place.name}, ${getStatusBadge(place)?.label ?? "Saved"}`}
     onClick={() => onSelectPlace(place.id)}
     position={{ lat: place.latitude, lng: place.longitude }}
@@ -210,23 +211,56 @@ function ClusteredPlaces({ clusterer, places, openPlaceId, onSelectPlace }: {
   onSelectPlace: (id: string) => void;
 }) {
   const map = useGoogleMap();
+  const placesKey = getMapPlacesKey(places);
   useEffect(() => {
     clusterer.setMap(map);
     return () => { clusterer.setMap(null); };
   }, [clusterer, map]);
+  useEffect(() => {
+    // MarkerF adds/removes each marker in its child effects. Flush once after
+    // the whole batch, instead of reclustering after every removed city pin.
+    clusterer.render();
+  }, [clusterer, placesKey, openPlaceId]);
 
   return <>{places.map((place) => (
     <PlaceMarker
       // Remount when moving into/out of the clusterer's ownership.
-      key={`${place.id}:${place.id === openPlaceId ? "selected" : "clustered"}`}
+      key={`${place.id}:${getCoordinateKey(place)}:${place.id === openPlaceId ? "selected" : "clustered"}`}
       clusterer={place.id === openPlaceId ? undefined : clusterer}
       place={place} isActive={place.id === openPlaceId} onSelectPlace={onSelectPlace}
     />
   ))}</>;
 }
 
+function ColocatedPlaceChooser({ places, onChoose, onClose }: {
+  places: Place[];
+  onChoose: (id: string) => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current!;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    dialog.showModal();
+    return () => { dialog.close(); previousFocus?.focus({ preventScroll: true }); };
+  }, []);
+  return <dialog ref={dialogRef} className="map-place-chooser" aria-labelledby="colocated-places-title"
+    onCancel={(event) => { event.preventDefault(); onClose(); }}
+    onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+    } }}>
+    <div className="map-place-chooser-header"><h2 id="colocated-places-title">Places at this location</h2><button type="button" aria-label="Close places at this location" onClick={onClose}>×</button></div>
+    <p>Choose the place you want to see.</p>
+    {places.map((place) => <button type="button" className="map-place-choice" key={place.id} onClick={() => { onChoose(place.id); onClose(); }}><strong>{place.name}</strong><span>{place.category} · {getStatusBadge(place)?.label ?? "Saved"}</span></button>)}
+  </dialog>;
+}
+
 export function MapView({
   places,
+  isVisible = true,
+  revealPlaceNonce = 0,
+  selectedPlaceBottomInset = 0,
   cityCenters,
   mapStyles,
   selectedPlaceId,
@@ -245,6 +279,20 @@ export function MapView({
   viewportCity = places[0]?.city ?? "",
   followUserLocation = true,
 }: MapViewProps) {
+  const placesKey = getMapPlacesKey(places);
+  const overviewPlaces = useMemo(() => getMapOverviewPlaces(places), [placesKey]);
+  const colocatedPlaces = useMemo(() => getColocatedPlaces(places), [places]);
+  const [chooserKey, setChooserKey] = useState<string | null>(null);
+  const chooserPlaces = chooserKey ? colocatedPlaces.get(chooserKey) ?? [] : [];
+  const [showAllPlacesKey, setShowAllPlacesKey] = useState<string | null>(null);
+  const showAllPlaces = showAllPlacesKey === placesKey;
+  const outlyingCount = places.length - overviewPlaces.length;
+  const framedResultsRef = useRef<string | null>(null);
+  const framedMapRef = useRef<google.maps.Map | null>(null);
+  const selectionRef = useRef<string | null>(null);
+  const handledRevealRef = useRef(0);
+  const bottomInsetRef = useRef(selectedPlaceBottomInset);
+  bottomInsetRef.current = selectedPlaceBottomInset;
   const locationRequests = useRef(createLocationRequestGate());
   const cancellationRef = useRef(cancelLocationNonce);
   cancellationRef.current = cancelLocationNonce;
@@ -277,10 +325,15 @@ export function MapView({
   );
 
   useEffect(() => {
-    if (!map || !isLoaded) {
+    if (!map || !isLoaded) return;
+    if (framedMapRef.current !== map) {
+      framedMapRef.current = map;
+      framedResultsRef.current = null;
       lastFramedLocationRef.current = null;
-      return;
+      selectionRef.current = null;
     }
+    if (!isVisible) return;
+    const frameKey = `${viewportCity}:${placesKey}:${showAllPlaces}`;
 
     if (followUserLocation && userLocation && locationStatus === "found" && locationCityRef.current === viewportCity) {
       // City URL changes may render after the location callback. Center only once
@@ -289,12 +342,16 @@ export function MapView({
         map.panTo(userLocation);
         map.setZoom(locationZoomRef.current);
         lastFramedLocationRef.current = userLocation;
+        framedResultsRef.current = frameKey;
       }
       return;
     }
     lastFramedLocationRef.current = null;
+    if (framedResultsRef.current === frameKey) return;
+    framedResultsRef.current = frameKey;
+    const visiblePlaces = showAllPlaces ? places : overviewPlaces;
 
-    if (places.length === 0) {
+    if (visiblePlaces.length === 0) {
       const cityCenter = cityCenters.find((center) => center.city === viewportCity);
       map.setCenter(cityCenter ? { lat: cityCenter.latitude, lng: cityCenter.longitude } : defaultCenter);
       map.setZoom(cityCenter ? 12 : 2);
@@ -302,14 +359,14 @@ export function MapView({
     }
 
     // A one-point bounds fit zooms into the building and loses street context.
-    if (places.length === 1) {
-      map.setCenter({ lat: places[0].latitude, lng: places[0].longitude });
+    if (visiblePlaces.length === 1) {
+      map.setCenter({ lat: visiblePlaces[0].latitude, lng: visiblePlaces[0].longitude });
       map.setZoom(16);
       return;
     }
 
     const bounds = new google.maps.LatLngBounds();
-    for (const place of places) {
+    for (const place of visiblePlaces) {
       bounds.extend({
         lat: place.latitude,
         lng: place.longitude,
@@ -317,19 +374,33 @@ export function MapView({
     }
 
     map.fitBounds(bounds, 72);
-  }, [cityCenters, followUserLocation, isLoaded, locationStatus, map, places, userLocation, viewportCity]);
+  }, [cityCenters, followUserLocation, isLoaded, isVisible, locationStatus, map, overviewPlaces, places, placesKey, showAllPlaces, userLocation, viewportCity]);
 
   useEffect(() => {
-    if (!map || !isLoaded || !selectedPlace) {
-      return;
-    }
-
-    map.panTo({
-      lat: selectedPlace.latitude,
-      lng: selectedPlace.longitude,
+    const selectionKey = selectedPlace ? `${selectedPlace.id}:${getCoordinateKey(selectedPlace)}` : null;
+    const selectionChanged = selectionRef.current !== selectionKey;
+    if (!selectedPlace || !isVisible) { selectionRef.current = selectionKey; return; }
+    const requestedReveal = handledRevealRef.current !== revealPlaceNonce;
+    if (!map || !isLoaded || !isVisible || !selectedPlace || (!selectionChanged && !requestedReveal)) return;
+    // Wait for the revealed map and detail card to finish their layout.
+    const frame = requestAnimationFrame(() => {
+      selectionRef.current = selectionKey;
+      handledRevealRef.current = revealPlaceNonce;
+      google.maps.event.trigger(map, "resize");
+      map.setZoom(Math.max(map.getZoom() ?? 2, clusterMarkers ? 17 : 12));
+      map.setCenter({ lat: selectedPlace.latitude, lng: selectedPlace.longitude });
+      const offset = getSelectedPlacePanOffset(map.getDiv().clientHeight, bottomInsetRef.current);
+      if (offset) map.panBy(0, offset);
     });
-    map.setZoom(Math.max(map.getZoom() ?? 2, clusterMarkers ? 15 : 12));
-  }, [clusterMarkers, isLoaded, map, selectedPlace]);
+    return () => cancelAnimationFrame(frame);
+  }, [clusterMarkers, isLoaded, isVisible, map, revealPlaceNonce, selectedPlace?.id, selectedPlace?.latitude, selectedPlace?.longitude]);
+
+  useEffect(() => {
+    if (!map || !isVisible) return;
+    // Resizing a mounted map must not fit its results again.
+    const frame = requestAnimationFrame(() => google.maps.event.trigger(map, "resize"));
+    return () => cancelAnimationFrame(frame);
+  }, [isVisible, map]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 720px)");
@@ -350,35 +421,6 @@ export function MapView({
   useEffect(() => {
     if (requestLocationNonce !== 0) handleUseMyLocation();
   }, [requestLocationNonce]);
-
-  function findNearbyCity(position: google.maps.LatLngLiteral) {
-    let nearestCity: CityCenter | null = null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-
-    for (const cityCenter of cityCenters) {
-      const distance = getDistanceKm(
-        {
-          latitude: position.lat,
-          longitude: position.lng,
-        },
-        {
-          latitude: cityCenter.latitude,
-          longitude: cityCenter.longitude,
-        },
-      );
-
-      if (distance < nearestDistance) {
-        nearestCity = cityCenter;
-        nearestDistance = distance;
-      }
-    }
-
-    if (!nearestCity || nearestDistance > nearbyCityRadiusKm) {
-      return null;
-    }
-
-    return nearestCity.city;
-  }
 
   function handleUseMyLocation() {
     const isLatestRequest = locationRequests.current.begin();
@@ -405,15 +447,15 @@ export function MapView({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
-        const nearbyCity = findNearbyCity(nextLocation);
+        const nearbyCity = findNearbyCity({ latitude: nextLocation.lat, longitude: nextLocation.lng }, cityCenters);
 
-        locationCityRef.current = nearbyCity ?? viewportCity;
+        locationCityRef.current = nearbyCity;
         locationZoomRef.current = nearbyCity ? 13 : 12;
         setUserLocation(nextLocation);
         setLocationStatus("found");
         const nextLocationMessage = nearbyCity
           ? `Centered near ${nearbyCity}.`
-          : "Centered on your location.";
+          : "No saved city is near you. The current city stays on the map.";
         setLocationMessage(nextLocationMessage);
         onLocationStatusChange?.("found", nextLocationMessage);
         onUserLocationFound({
@@ -500,9 +542,15 @@ export function MapView({
     </>
   ) : null;
 
+  function selectMarker(id: string) {
+    const place = places.find((candidate) => candidate.id === id);
+    const key = place ? getCoordinateKey(place) : null;
+    if (key && (colocatedPlaces.get(key)?.length ?? 0) > 1) setChooserKey(key);
+    else onSelectPlace(id);
+  }
+
   return (
     <GoogleMap
-      center={defaultCenter}
       mapContainerClassName="map-canvas google-map"
       mapContainerStyle={containerStyle}
       onClick={onClosePlace}
@@ -517,7 +565,6 @@ export function MapView({
         streetViewControl: false,
         zoomControl: true,
       }}
-      zoom={2}
     >
       <div
         className="map-location-control"
@@ -559,13 +606,19 @@ export function MapView({
         <GoogleMarkerClusterer options={clusterOptions}>
           {(clusterer) => (
             <ClusteredPlaces clusterer={clusterer} places={places}
-              openPlaceId={openPlaceId} onSelectPlace={onSelectPlace} />
+              openPlaceId={openPlaceId} onSelectPlace={selectMarker} />
           )}
         </GoogleMarkerClusterer>
       ) : places.map((place) => (
         <PlaceMarker key={place.id} place={place} isActive={place.id === openPlaceId}
-          onSelectPlace={onSelectPlace} />
+          onSelectPlace={selectMarker} />
       ))}
+
+      {outlyingCount && !showAllPlaces ? <div className="map-overview-notice" onClick={(event) => event.stopPropagation()}>
+        <span>{outlyingCount} saved {outlyingCount === 1 ? "place is" : "places are"} outside this city view.</span>
+        <button type="button" onClick={() => setShowAllPlacesKey(placesKey)}>Show all places</button>
+      </div> : null}
+      {chooserPlaces.length > 1 ? <ColocatedPlaceChooser places={chooserPlaces} onChoose={onSelectPlace} onClose={() => setChooserKey(null)} /> : null}
 
       {showPlaceDetails && openPlace && !isCompactPopup ? (
         <OverlayViewF

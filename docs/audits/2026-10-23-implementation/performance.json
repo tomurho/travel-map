@@ -1,0 +1,46 @@
+{
+  "measuredAt": "2026-10-23T07:21:07.018Z",
+  "conditions": {
+    "viewport": "390x844",
+    "downloadMbps": 1.6,
+    "uploadMbps": 0.75,
+    "latencyMs": 150,
+    "cpuSlowdown": 4,
+    "cache": "disabled; fresh browser context for each run",
+    "server": "local production; localhost origin",
+    "startupDefinition": "Google Maps renderer visible and Zoom in control attached; not a tile-completion or field-device metric",
+    "transferDefinition": "CDP encodedDataLength for completed network requests at startup; failed/pending requests excluded"
+  },
+  "runs": [
+    {
+      "run": 1,
+      "shellMs": 2300,
+      "mapControlsMs": 7395,
+      "filterResponseMs": 265,
+      "filterEventToFrameMs": 179,
+      "appBytes": 319312,
+      "providerBytes": 479426,
+      "totalBytes": 798738
+    },
+    {
+      "run": 2,
+      "shellMs": 2117,
+      "mapControlsMs": 8611,
+      "filterResponseMs": 418,
+      "filterEventToFrameMs": 281.60000014305115,
+      "appBytes": 319312,
+      "providerBytes": 479963,
+      "totalBytes": 799275
+    },
+    {
+      "run": 3,
+      "shellMs": 2124,
+      "mapControlsMs": 8423,
+      "filterResponseMs": 663,
+      "filterEventToFrameMs": 345.90000009536743,
+      "appBytes": 319312,
+      "providerBytes": 483352,
+      "totalBytes": 802664
+    }
+  ]
+}

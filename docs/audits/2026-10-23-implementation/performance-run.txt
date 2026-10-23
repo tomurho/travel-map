@@ -1,0 +1,12 @@
+
+> travel-map@0.1.0 test:browser /Users/tomurho/projects/travel map
+> playwright test performance.spec.ts --output /tmp/travel-map-perf-results
+
+
+Running 1 test using 1 worker
+
+(node:35253) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/browser/performance.spec.ts:7:5 › measure public startup and filtering under mobile emulation (29.7s)
+
+  1 passed (32.9s)

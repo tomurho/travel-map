@@ -2,12 +2,14 @@ import {
   getPlacePipelineSnapshot,
   type PlacePipelineStatus,
   type ReviewCandidate,
+  type CaptureQueueItem,
 } from "@/lib/place-sheet-pipeline";
 
 const SNAPSHOT_CACHE_TTL_MS = 15_000;
 
 export type PlacePipelineSnapshot = {
   candidates: ReviewCandidate[];
+  captures: CaptureQueueItem[];
   status: PlacePipelineStatus;
 };
 
@@ -18,15 +20,19 @@ type CacheEntry = {
 
 const snapshotCache = new Map<string, CacheEntry>();
 const snapshotRequests = new Map<string, Promise<PlacePipelineSnapshot>>();
+const snapshotGenerations = new Map<string, number>();
 
 export function invalidatePlacePipelineSnapshot(sheetId: string) {
-  snapshotCache.delete(sheetId.trim());
+  const key = sheetId.trim();
+  snapshotCache.delete(key);
+  snapshotRequests.delete(key);
+  snapshotGenerations.set(key, (snapshotGenerations.get(key) ?? 0) + 1);
 }
 
 export async function getCachedPlacePipelineSnapshot(input: {
   force?: boolean;
   sheetId: string;
-}) {
+}, loadSnapshot = getPlacePipelineSnapshot) {
   const sheetId = input.sheetId.trim();
 
   if (!sheetId) {
@@ -46,15 +52,18 @@ export async function getCachedPlacePipelineSnapshot(input: {
     return { cached: false, snapshot: await existingRequest };
   }
 
-  const request = getPlacePipelineSnapshot({ sheetId });
+  const generation = snapshotGenerations.get(sheetId) ?? 0;
+  const request = loadSnapshot({ sheetId });
   snapshotRequests.set(sheetId, request);
 
   try {
     const snapshot = await request;
-    snapshotCache.set(sheetId, {
-      expiresAt: Date.now() + SNAPSHOT_CACHE_TTL_MS,
-      snapshot,
-    });
+    if ((snapshotGenerations.get(sheetId) ?? 0) === generation) {
+      snapshotCache.set(sheetId, {
+        expiresAt: Date.now() + SNAPSHOT_CACHE_TTL_MS,
+        snapshot,
+      });
+    }
 
     return { cached: false, snapshot };
   } finally {

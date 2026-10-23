@@ -1,0 +1,480 @@
+{
+  "originalHash": "91be1eedc3d1923ec6bb520a33c8103fb7ee1b3895afbb5d2cf3dd3e3ce9f2f7",
+  "backupPath": "/Users/tomurho/projects/travel map/.cache/places-backups/places-2026-10-23T06-50-51-359Z.json",
+  "fileHash": "d72f2e284a3e6053c3d1c554db37ea35fa2a5add95647cfc14d874ed4bd3fcca",
+  "filePath": "/Users/tomurho/projects/travel map/src/data/places.json",
+  "changes": [
+    {
+      "id": "place_kaohsiung_formula_coffee_roaster",
+      "name": "Formula Coffee Roaster",
+      "field": "district",
+      "before": "",
+      "after": "Sanmin",
+      "evidence": "No. 117號, Chongqing St, Minxiang Village, Sanmin District, Kaohsiung City, Taiwan 807"
+    },
+    {
+      "id": "place_kaohsiung_keep_coffee",
+      "name": "KEEP Coffee Roastery",
+      "field": "district",
+      "before": "",
+      "after": "Sanmin",
+      "evidence": "No. 113號, Huaian St, Anji Village, Sanmin District, Kaohsiung City, Taiwan 807045"
+    },
+    {
+      "id": "place_kaohsiung_koou_coffee",
+      "name": "koou coffee (僅接待十二歲以上，老屋二樓空間安全考量）",
+      "field": "district",
+      "before": "",
+      "after": "Yancheng",
+      "evidence": "803007, Taiwan, Kaohsiung City, Yancheng District, Guangming Village, Sinle St, 117號2樓"
+    },
+    {
+      "id": "place_kaohsiung_shoreline_coffee",
+      "name": "Shoreline Coffee & Roaster｜海岸線咖啡_哈瑪星",
+      "field": "district",
+      "before": "",
+      "after": "Gushan",
+      "evidence": "No. 66號, Shaochuan St, Shaochuantou Village, Gushan District, Kaohsiung City, Taiwan 804"
+    },
+    {
+      "id": "place_kaohsiung_tsaubokcafe",
+      "name": "Tsaubok",
+      "field": "district",
+      "before": "",
+      "after": "Sanmin",
+      "evidence": "No. 312號, Hedi Rd, Dingtai Village, Sanmin District, Kaohsiung City, Taiwan 807"
+    },
+    {
+      "id": "place_tainan_row_122",
+      "name": "BĀN TÊ",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 357號, Section 1, Fuqian Rd, Xiaoximen Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_tcrc_the_checkered_record_club",
+      "name": "Bar TCRC",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 117號, Xinmei St, Chihkan Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_79",
+      "name": "Beef Garden restaurant (hot pot)",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 140號, Jhongjheng Rd, 建國里 West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_121",
+      "name": "Brian Black Tea",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 62-2號, Zhengxing St, Qiancao Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_chou_s_shrimp_rolls_original_store_no_125_anping_road_anping_district_tainan_taiwan_886_6229_2618",
+      "name": "Chou's Shrimp Rolls",
+      "field": "district",
+      "before": "",
+      "after": "Anping",
+      "evidence": "No. 408-1號, Anping Rd, Ping'an Village, Anping District, Tainan City, Taiwan 708"
+    },
+    {
+      "id": "place_tainan_chun",
+      "name": "Chun純薏仁",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 7號, Lane 115, You'ai St, Nanmei Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_ding_fu_fa",
+      "name": "Ding Fu Fa",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 38號, Dade St, Nanchang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_no_101_zhongzheng_road_west_central_district_tainan_taiwan_886_6220_0858",
+      "name": "Du Hsiao Yueh Restaurant Tainan Chung Cheng Flagship Store",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 101號, Jhongjheng Rd, Nanmei Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_gandan",
+      "name": "Gan Dan Cafe",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Lane 4, Section 2, Minquan Rd, 13號由中山路79巷進入"
+    },
+    {
+      "id": "place_tainan_row_82",
+      "name": "Ing Brunch",
+      "field": "district",
+      "before": "",
+      "after": "East",
+      "evidence": "No. 18號, Dongxing Rd, Dongguang Village, East District, Tainan City, Taiwan 701"
+    },
+    {
+      "id": "place_tainan_jai_mi_ba",
+      "name": "Jai Mi Ba",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Nanchang Village, 保安路159-1號"
+    },
+    {
+      "id": "place_tainan_row_93",
+      "name": "Ji Pin Shrimp Rice",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 107號, Section 1, Hai'an Rd, Nanchang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_l_herbe",
+      "name": "L'herbe 香草小餐酒",
+      "field": "district",
+      "before": "",
+      "after": "Anping",
+      "evidence": "No. 950號, Section 2, Yonghua Rd, Pingtong Village, Anping District, Tainan City, Taiwan 708"
+    },
+    {
+      "id": "place_tainan_lola",
+      "name": "LOLA蘿拉冷飲店 (訂位請用電話或Instagram)",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 110號, Xinyi St, Duiyue Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_maki_doughnut",
+      "name": "maki doughnut",
+      "field": "district",
+      "before": "",
+      "after": "East",
+      "evidence": "No. 25號, Lane 66, Section 3, Zhangrong Rd, Daxue Village, East District, Tainan City, Taiwan 701"
+    },
+    {
+      "id": "place_tainan_row_109",
+      "name": "Mudliu Teahouse",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 50號, Zhengde St, Qiancao Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_114",
+      "name": "Ninao",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 92號, Zhengxing St, Qiancao Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_ninao_gelto",
+      "name": "NINAO Gelato 蜷尾家 經典冰淇淋",
+      "field": "district",
+      "before": "",
+      "after": "Anping",
+      "evidence": "No. 720號, Anbei Rd, Jincheng Village, Anping District, Tainan City, Taiwan 708"
+    },
+    {
+      "id": "place_tainan_oh_o",
+      "name": "Oh-o米糕",
+      "field": "district",
+      "before": "",
+      "after": "East",
+      "evidence": "No. 300號, Dongning Rd, Chonghui Village, East District, Tainan City, Taiwan 701"
+    },
+    {
+      "id": "place_tainan_pankoko_yakiniku",
+      "name": "Pankoko",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 36號, Lane 317, Section 2, Minzu Rd, Nanmei Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_paripari",
+      "name": "Paripari",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 9號, Lane 158, Section 2, Zhongyi Rd, Chihkan Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_124",
+      "name": "Pharmacists Tea House",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 373號, Section 1, Fuqian Rd, Xiaoximen Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_second_bowl",
+      "name": "SECOND BOWL 第二碗 鍋燒意麵",
+      "field": "district",
+      "before": "",
+      "after": "North",
+      "evidence": "No. 133號, Changrong Rd Section 4, Zhenxing Village, North District, Tainan City, Taiwan 704"
+    },
+    {
+      "id": "place_tainan_shennong_street",
+      "name": "Shennong Street",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, 神農街"
+    },
+    {
+      "id": "place_tainan_row_117",
+      "name": "Sun Ice",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 41號, Section 1, Minquan Rd, Kaishan Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_swallow_bar",
+      "name": "SWALLOW TAINAN",
+      "field": "district",
+      "before": "",
+      "after": "North",
+      "evidence": "No. 27號, Chongan St, 北區 North District, Tainan City, Taiwan 704"
+    },
+    {
+      "id": "place_tainan_row_116",
+      "name": "Taicheng Fruit Shop",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 80號, Zhengxing St, Qiancao Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_tin_drum",
+      "name": "Ten Drum Cultural Village",
+      "field": "district",
+      "before": "",
+      "after": "Rende",
+      "evidence": "No. 326號, Section 2, Wenhua Rd, Chenggong Village, Rende District, Tainan City, Taiwan 71755"
+    },
+    {
+      "id": "place_tainan_the_cargo",
+      "name": "THE CARGO茶屋",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 76號, Zhengxing St, Qiancao Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_92",
+      "name": "Xiluodian Beef Soup",
+      "field": "district",
+      "before": "",
+      "after": "North",
+      "evidence": "No. 98號, Gongyuan S Rd, Zhangxing Village, North District, Tainan City, Taiwan 704"
+    },
+    {
+      "id": "place_tainan_row_119",
+      "name": "修安扁擔豆花 Xiu'an Douhua",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 157號, Section 3, Guohua St, Wutiaogang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_84",
+      "name": "公園路無名陽春麵 （滷味當天新鮮現滷，賣完就收）",
+      "field": "district",
+      "before": "",
+      "after": "North",
+      "evidence": "No. 996-2, Gongyuan Rd, Beimen Village, North District, Tainan City, Taiwan 704"
+    },
+    {
+      "id": "place_tainan_row_115",
+      "name": "冰鄉",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 160號, Section 1, Minsheng Rd, Nanmei Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_85",
+      "name": "劉家汕頭麵",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 184號之1, Section 3, Minquan Rd, Yaowang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_97",
+      "name": "劉家粽子 西門店",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 439號, Section 2, Ximen Rd, Wutiaogang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_zyuu_tsubo",
+      "name": "十平",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 22號, Lane 158, Section 2, Zhongyi Rd, Chihkan Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_tshu_coffee",
+      "name": "厝珈啡(厝咖啡) 招牌冰沖/商業合作",
+      "field": "district",
+      "before": "",
+      "after": "North",
+      "evidence": "No. 132號, Ziqiang St, Beihua Village, North District, Tainan City, Taiwan 704"
+    },
+    {
+      "id": "place_tainan_cafe_chamber",
+      "name": "台南-秘氏咖啡",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Wutiaogang Village, Section 3, Guohua St, 123-160號, YongLe Market, 2樓"
+    },
+    {
+      "id": "place_tainan_lu_s_spanish_mackerel_soup",
+      "name": "呂記𩵚魠魚羹",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 47, Junxi Rd, Nanchang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_120",
+      "name": "德記古早味汕頭豆花",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 76號, Heyi Rd, Xiaoximen Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_91",
+      "name": "樑記正老店牛肉湯",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 10號, Junxi Rd, Nanchang Village, West Central District, Tainan City, Taiwan 70095"
+    },
+    {
+      "id": "place_tainan_row_89",
+      "name": "水仙宮粽葉米糕",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 44號, Section 3, Minquan Rd, Wutiaogang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_drifter_cafe_room",
+      "name": "浮木_咖啡專門",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 16號, Lane 217, Zhongzheng Rd, Fuqian Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_95",
+      "name": "王氏魚皮外帶預定線上點餐免排隊food panda Ubereats同步營業中",
+      "field": "district",
+      "before": "",
+      "after": "Anping",
+      "evidence": "No. 612號, Anping Rd, Ping'an Village, Anping District, Tainan City, Taiwan 708"
+    },
+    {
+      "id": "place_tainan_row_123",
+      "name": "甜又鮮飲料",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 367號, Section 1, Fuqian Rd, Xiaoximen Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_99",
+      "name": "石頭鄉燜烤香味玉米",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Fuqian Village, 保安路98號"
+    },
+    {
+      "id": "place_tainan_row_98",
+      "name": "邱家小卷米粉",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 251號, Section 3, Guohua St, Wutiaogang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_86",
+      "name": "鄭記蔥肉餅/彤露おかわり（蔥肉餅12：20開始）5/25（ㄧ）店休",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Fuqian Village, Section 2, Fuqian Rd, 240-4號環河街上"
+    },
+    {
+      "id": "place_tainan_row_83",
+      "name": "醇涎坊古早味鍋燒意麵",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Nanchang Village, 保安路53號"
+    },
+    {
+      "id": "place_tainan_row_87",
+      "name": "阿娟肉粽魯麵",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 87, Section 3, Guohua St, Wutiaogang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_94",
+      "name": "阿鳳浮水虱目魚羹",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Nanchang Village, 保安路59號"
+    },
+    {
+      "id": "place_tainan_row_90",
+      "name": "鬍鬚忠牛肉湯",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 91號, Section 3, Minzu Rd, Yaowang Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_row_100",
+      "name": "鳳姐鴨肉飯",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "No. 190號, Section 3, Minzu Rd, Duiyue Village, West Central District, Tainan City, Taiwan 700"
+    },
+    {
+      "id": "place_tainan_bue_mi_lab",
+      "name": "麥謎食驗室 Bue mi .Lab",
+      "field": "district",
+      "before": "",
+      "after": "West Central",
+      "evidence": "700, Taiwan, Tainan City, West Central District, Chenghuang Village, Qingnian Rd, 90號1樓"
+    }
+  ]
+}

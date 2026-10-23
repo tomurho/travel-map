@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { isAdminAuthorized } from "@/lib/admin-auth";
+import { getGoogleSheetsErrorMessage, getGoogleSheetsErrorStatus } from "@/lib/google-sheets-errors";
 import { getPlacePipelineStatus } from "@/lib/place-sheet-pipeline";
 
 export async function GET(request: NextRequest) {
@@ -13,15 +14,9 @@ export async function GET(request: NextRequest) {
   try {
     return NextResponse.json(await getPlacePipelineStatus({ sheetId }));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-
     return NextResponse.json(
-      {
-        error: /invalid_grant/i.test(message)
-          ? "Google Sheets access has expired. Reconnect Google Sheets, then refresh status."
-          : message || "Could not read the Google Sheets pipeline status.",
-      },
-      { status: 400 },
+      { error: getGoogleSheetsErrorMessage(error, "Could not read the Google Sheets pipeline status.") },
+      { status: getGoogleSheetsErrorStatus(error) },
     );
   }
 }

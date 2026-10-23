@@ -1,0 +1,1227 @@
+{
+  "duplicates": [
+    {
+      "googlePlaceId": "ChIJKa5zWIMIAWARkLzRgMFz_Go",
+      "decision": "PENDING",
+      "recommendation": "Merge to the proposed retained record after owner approval.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "bar-k-297",
+          "name": "Bar K家",
+          "city": "Kyoto",
+          "category": "Bar",
+          "status": "been",
+          "loved": false,
+          "district": "Nakagyo Ward",
+          "address": "105 Yaoyachō, Nakagyo Ward, Kyoto, 604-8072, Japan",
+          "latitude": 35.0072329,
+          "longitude": 135.7660619,
+          "tabelog": "3.62",
+          "subway": "Kyoto Shiyakusho-mae Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=7709163937078557840&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJKa5zWIMIAWARkLzRgMFz_Go"
+        },
+        {
+          "id": "bar-k-main-building-103",
+          "name": "Bar K家 (Main Building)",
+          "city": "Kyoto",
+          "category": "Bar",
+          "status": "been",
+          "loved": true,
+          "district": "Nakagyo Ward",
+          "address": "105 Yaoyachō, Nakagyo Ward, Kyoto, 604-8072, Japan",
+          "latitude": 35.0072329,
+          "longitude": 135.7660619,
+          "tabelog": "3.7",
+          "subway": "Kyoto-kawaramachi Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=7709163937078557840&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJKa5zWIMIAWARkLzRgMFz_Go"
+        }
+      ],
+      "differences": {
+        "id": [
+          "bar-k-297",
+          "bar-k-main-building-103"
+        ],
+        "loved": [
+          false,
+          true
+        ],
+        "name": [
+          "Bar K家",
+          "Bar K家 (Main Building)"
+        ],
+        "subway": [
+          "Kyoto Shiyakusho-mae Sta.",
+          "Kyoto-kawaramachi Sta."
+        ],
+        "tabelog": [
+          "3.62",
+          "3.7"
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "bar-k-main-building-103",
+          "name": "Bar K家 (Main Building)",
+          "city": "Kyoto",
+          "category": "Bar",
+          "status": "been",
+          "loved": true,
+          "district": "Nakagyo Ward",
+          "address": "105 Yaoyachō, Nakagyo Ward, Kyoto, 604-8072, Japan",
+          "latitude": 35.0072329,
+          "longitude": 135.7660619,
+          "tabelog": "3.7",
+          "subway": "Kyoto-kawaramachi Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=7709163937078557840&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJKa5zWIMIAWARkLzRgMFz_Go"
+        }
+      ],
+      "proposedIdMapping": {
+        "bar-k-297": "bar-k-main-building-103"
+      }
+    },
+    {
+      "googlePlaceId": "ChIJvxV_Q5AIAWARDi0ttHJ1MKM",
+      "decision": "PENDING",
+      "recommendation": "Keep both until the owner confirms whether these are distinct venues.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "120",
+          "name": "大極殿本舗 六角店",
+          "city": "Kyoto",
+          "category": "Desserts",
+          "status": "location",
+          "loved": null,
+          "district": "Nakagyo Ward",
+          "address": "120 Horinouechō, Nakagyo Ward, Kyoto, 604-8117, Japan",
+          "latitude": 35.0072744,
+          "longitude": 135.7629501,
+          "tabelog": "3.77",
+          "subway": "Karasuma Oike Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=11759027762573946126&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJvxV_Q5AIAWARDi0ttHJ1MKM"
+        },
+        {
+          "id": "120-2",
+          "name": "栖園 （せいえん)",
+          "city": "Kyoto",
+          "category": "Desserts",
+          "status": "location",
+          "loved": null,
+          "district": "Nakagyo Ward",
+          "address": "120 Horinouechō, Nakagyo Ward, Kyoto, 604-8117, Japan",
+          "latitude": 35.0072744,
+          "longitude": 135.7629501,
+          "tabelog": "3.77",
+          "subway": "Karasuma Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=11759027762573946126&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJvxV_Q5AIAWARDi0ttHJ1MKM"
+        }
+      ],
+      "differences": {
+        "id": [
+          "120",
+          "120-2"
+        ],
+        "name": [
+          "大極殿本舗 六角店",
+          "栖園 （せいえん)"
+        ],
+        "subway": [
+          "Karasuma Oike Sta.",
+          "Karasuma Sta."
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "120",
+          "name": "大極殿本舗 六角店",
+          "city": "Kyoto",
+          "category": "Desserts",
+          "status": "location",
+          "loved": null,
+          "district": "Nakagyo Ward",
+          "address": "120 Horinouechō, Nakagyo Ward, Kyoto, 604-8117, Japan",
+          "latitude": 35.0072744,
+          "longitude": 135.7629501,
+          "tabelog": "3.77",
+          "subway": "Karasuma Oike Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=11759027762573946126&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJvxV_Q5AIAWARDi0ttHJ1MKM"
+        },
+        {
+          "id": "120-2",
+          "name": "栖園 （せいえん)",
+          "city": "Kyoto",
+          "category": "Desserts",
+          "status": "location",
+          "loved": null,
+          "district": "Nakagyo Ward",
+          "address": "120 Horinouechō, Nakagyo Ward, Kyoto, 604-8117, Japan",
+          "latitude": 35.0072744,
+          "longitude": 135.7629501,
+          "tabelog": "3.77",
+          "subway": "Karasuma Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=11759027762573946126&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJvxV_Q5AIAWARDi0ttHJ1MKM"
+        }
+      ],
+      "proposedIdMapping": {}
+    },
+    {
+      "googlePlaceId": "ChIJCfjEouIJAWARTnEricoddZc",
+      "decision": "PENDING",
+      "recommendation": "Merge to the proposed retained record after owner approval.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "bunshitsu-ikehan-143-11",
+          "name": "池半 (Bunshitsu ikehan)",
+          "city": "Kyoto",
+          "category": "Tea house",
+          "status": "want_to_go",
+          "loved": null,
+          "district": "Shimogyo Ward",
+          "address": "143-11 Toichichō, Shimogyo Ward, Kyoto, 600-8111, Japan",
+          "latitude": 34.9946093,
+          "longitude": 135.7672408,
+          "tabelog": "3.05",
+          "subway": "Kiyomizu-gojo Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=10913662027724190030&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJCfjEouIJAWARTnEricoddZc"
+        },
+        {
+          "id": "ikehan-tea-299",
+          "name": "茶室 Ikehan (tea)",
+          "city": "Kyoto",
+          "category": "Tea house",
+          "status": "location",
+          "loved": null,
+          "district": "Nakagyo Ward",
+          "address": "143-11 Toichichō, Shimogyo Ward, Kyoto, 600-8111, Japan",
+          "latitude": 34.9946093,
+          "longitude": 135.7672408,
+          "tabelog": "",
+          "subway": "Omiyakoen Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=10913662027724190030&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJCfjEouIJAWARTnEricoddZc"
+        }
+      ],
+      "differences": {
+        "district": [
+          "Shimogyo Ward",
+          "Nakagyo Ward"
+        ],
+        "id": [
+          "bunshitsu-ikehan-143-11",
+          "ikehan-tea-299"
+        ],
+        "name": [
+          "池半 (Bunshitsu ikehan)",
+          "茶室 Ikehan (tea)"
+        ],
+        "status": [
+          "want_to_go",
+          "location"
+        ],
+        "subway": [
+          "Kiyomizu-gojo Sta.",
+          "Omiyakoen Sta."
+        ],
+        "tabelog": [
+          "3.05",
+          ""
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "bunshitsu-ikehan-143-11",
+          "name": "池半 (Bunshitsu ikehan)",
+          "city": "Kyoto",
+          "category": "Tea house",
+          "status": "want_to_go",
+          "loved": null,
+          "district": "Shimogyo Ward",
+          "address": "143-11 Toichichō, Shimogyo Ward, Kyoto, 600-8111, Japan",
+          "latitude": 34.9946093,
+          "longitude": 135.7672408,
+          "tabelog": "3.05",
+          "subway": "Kiyomizu-gojo Sta.",
+          "googleMapsUrl": "https://maps.google.com/?cid=10913662027724190030&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:04:14.459Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJCfjEouIJAWARTnEricoddZc"
+        }
+      ],
+      "proposedIdMapping": {
+        "ikehan-tea-299": "bunshitsu-ikehan-143-11"
+      }
+    },
+    {
+      "googlePlaceId": "ChIJoYR-zZwFVzURfF2jNlX5pOc",
+      "decision": "PENDING",
+      "recommendation": "Merge to the proposed retained record after owner approval.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "place_matsue_saeki",
+          "name": "Saeki",
+          "city": "Matsue",
+          "category": "Restaurant",
+          "status": "been",
+          "loved": true,
+          "district": "",
+          "address": "132-2 Teramachi, Matsue, Shimane 690-0063, Japan",
+          "latitude": 35.464197,
+          "longitude": 133.0569746,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=16691740263326113148&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJoYR-zZwFVzURfF2jNlX5pOc",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-10T12:53:52.771Z",
+          "notes": []
+        },
+        {
+          "id": "place_matsue_unknown_place",
+          "name": "Saeki",
+          "city": "Matsue",
+          "category": "Restaurant",
+          "status": "want_to_go",
+          "loved": false,
+          "district": "",
+          "address": "132-2 Teramachi, Matsue, Shimane 690-0063, Japan",
+          "latitude": 35.464197,
+          "longitude": 133.0569746,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=16691740263326113148&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJoYR-zZwFVzURfF2jNlX5pOc",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-10T12:53:52.771Z",
+          "notes": []
+        }
+      ],
+      "differences": {
+        "id": [
+          "place_matsue_saeki",
+          "place_matsue_unknown_place"
+        ],
+        "loved": [
+          true,
+          false
+        ],
+        "status": [
+          "been",
+          "want_to_go"
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "place_matsue_saeki",
+          "name": "Saeki",
+          "city": "Matsue",
+          "category": "Restaurant",
+          "status": "been",
+          "loved": true,
+          "district": "",
+          "address": "132-2 Teramachi, Matsue, Shimane 690-0063, Japan",
+          "latitude": 35.464197,
+          "longitude": 133.0569746,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=16691740263326113148&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJoYR-zZwFVzURfF2jNlX5pOc",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-10T12:53:52.771Z",
+          "notes": []
+        }
+      ],
+      "proposedIdMapping": {
+        "place_matsue_unknown_place": "place_matsue_saeki"
+      }
+    },
+    {
+      "googlePlaceId": "ChIJP1Ftx1-pQjQRj1jxNrNocNM",
+      "decision": "PENDING",
+      "recommendation": "Merge to the proposed retained record after owner approval.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "no-20-lane-11-taiyuan-rd-datong-district-taipei-city-103",
+          "name": "光生",
+          "city": "Taipei",
+          "category": "Coffee",
+          "status": "location",
+          "loved": null,
+          "district": "Datong",
+          "address": "No. 20, Lane 11, Taiyuan Rd, Datong District, Taipei City 103",
+          "latitude": 25.0494399,
+          "longitude": 121.51575380000001,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=15235792658324609167&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-05-10",
+          "verificationNotes": "Candidate metadata captured, but same-place decision remained unsure.\nAuto-corrected coordinates from resolved Google Maps listing.",
+          "addressScore": 0.846,
+          "ambiguityScore": 1,
+          "businessStatus": "OPERATIONAL",
+          "canonicalAddress": "No. 20號, Lane 11, Taiyuan Rd, Datong District, Taipei City, Taiwan 103",
+          "canonicalName": "光生 MITSUO",
+          "cityScore": 1,
+          "countryScore": 1,
+          "distanceDeltaMeters": 556.5,
+          "districtScore": 1,
+          "googlePlaceId": "ChIJP1Ftx1-pQjQRj1jxNrNocNM",
+          "matchConfidence": 0.687,
+          "nameScore": 0.75,
+          "verifiedLatitude": 25.0494399,
+          "verifiedLongitude": 121.51575380000001,
+          "samePlaceDecision": "Yes",
+          "samePlaceReason": "Google candidate matched with nameScore 0.75, addressScore 0.846, cityScore 1, countryScore 1, and distance 557m. The candidate came from Google Place ID, so stored coordinates are treated as derived data.",
+          "verificationDecision": "auto_corrected_from_place_id",
+          "verificationSource": "place_id"
+        },
+        {
+          "id": "place_taipei_mitsuo_coffee",
+          "name": "光生 MITSUO",
+          "city": "Taipei",
+          "category": "Café",
+          "status": "location",
+          "loved": null,
+          "district": "Datong",
+          "address": "No. 20號, Lane 11, Taiyuan Rd, Jianming Village, Datong District, Taipei City, Taiwan 103",
+          "latitude": 25.0494399,
+          "longitude": 121.5157538,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=15235792658324609167&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJP1Ftx1-pQjQRj1jxNrNocNM",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-09-29T11:14:01.549Z",
+          "notes": []
+        }
+      ],
+      "differences": {
+        "address": [
+          "No. 20, Lane 11, Taiyuan Rd, Datong District, Taipei City 103",
+          "No. 20號, Lane 11, Taiyuan Rd, Jianming Village, Datong District, Taipei City, Taiwan 103"
+        ],
+        "addressScore": [
+          0.846,
+          null
+        ],
+        "ambiguityScore": [
+          1,
+          null
+        ],
+        "businessStatus": [
+          "OPERATIONAL",
+          null
+        ],
+        "canonicalAddress": [
+          "No. 20號, Lane 11, Taiyuan Rd, Datong District, Taipei City, Taiwan 103",
+          null
+        ],
+        "canonicalName": [
+          "光生 MITSUO",
+          null
+        ],
+        "category": [
+          "Coffee",
+          "Café"
+        ],
+        "cityScore": [
+          1,
+          null
+        ],
+        "countryScore": [
+          1,
+          null
+        ],
+        "distanceDeltaMeters": [
+          556.5,
+          null
+        ],
+        "districtScore": [
+          1,
+          null
+        ],
+        "id": [
+          "no-20-lane-11-taiyuan-rd-datong-district-taipei-city-103",
+          "place_taipei_mitsuo_coffee"
+        ],
+        "lastChecked": [
+          "2026-05-10",
+          "2026-09-29T11:14:01.549Z"
+        ],
+        "longitude": [
+          121.51575380000001,
+          121.5157538
+        ],
+        "matchConfidence": [
+          0.687,
+          null
+        ],
+        "name": [
+          "光生",
+          "光生 MITSUO"
+        ],
+        "nameScore": [
+          0.75,
+          null
+        ],
+        "notes": [
+          null,
+          []
+        ],
+        "samePlaceDecision": [
+          "Yes",
+          null
+        ],
+        "samePlaceReason": [
+          "Google candidate matched with nameScore 0.75, addressScore 0.846, cityScore 1, countryScore 1, and distance 557m. The candidate came from Google Place ID, so stored coordinates are treated as derived data.",
+          null
+        ],
+        "verificationDecision": [
+          "auto_corrected_from_place_id",
+          null
+        ],
+        "verificationNotes": [
+          "Candidate metadata captured, but same-place decision remained unsure.\nAuto-corrected coordinates from resolved Google Maps listing.",
+          null
+        ],
+        "verificationSource": [
+          "place_id",
+          null
+        ],
+        "verifiedLatitude": [
+          25.0494399,
+          null
+        ],
+        "verifiedLongitude": [
+          121.51575380000001,
+          null
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "place_taipei_mitsuo_coffee",
+          "name": "光生 MITSUO",
+          "city": "Taipei",
+          "category": "Café",
+          "status": "location",
+          "loved": null,
+          "district": "Datong",
+          "address": "No. 20號, Lane 11, Taiyuan Rd, Jianming Village, Datong District, Taipei City, Taiwan 103",
+          "latitude": 25.0494399,
+          "longitude": 121.5157538,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=15235792658324609167&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJP1Ftx1-pQjQRj1jxNrNocNM",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-09-29T11:14:01.549Z",
+          "notes": []
+        }
+      ],
+      "proposedIdMapping": {
+        "no-20-lane-11-taiyuan-rd-datong-district-taipei-city-103": "place_taipei_mitsuo_coffee"
+      }
+    },
+    {
+      "googlePlaceId": "ChIJD7h_kgKrQjQRZD0m5LSv70k",
+      "decision": "PENDING",
+      "recommendation": "Keep both until the owner confirms whether these are distinct venues.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "no-36-1-songde-rd-xinyi-district-taipei-city-110",
+          "name": "小隱茶庵 信義店",
+          "city": "Taipei",
+          "category": "Tea house",
+          "status": "location",
+          "loved": null,
+          "district": "Xinyi",
+          "address": "110, Taiwan, Taipei City, Xinyi District, Sanli Village, Alley 14, Lane 150, Section 5, Xinyi Rd, 8號1樓",
+          "latitude": 25.028386,
+          "longitude": 121.5694865,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=5327670075659271524&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T07:34:59.001Z",
+          "verificationNotes": "Google Places verification did not find a high-confidence active match.",
+          "samePlaceDecision": "Unsure",
+          "samePlaceReason": "Google Places candidates were too weak, ambiguous, or mismatched for automatic verification.",
+          "verificationDecision": "candidate_only_review",
+          "verificationSource": "text_search",
+          "googlePlaceId": "ChIJD7h_kgKrQjQRZD0m5LSv70k"
+        },
+        {
+          "id": "kino-1f-no-8-alley-14-lane-150-section-5-xinyi-rd-xinyi-district-taipei-city-110",
+          "name": "木下庵 Kino",
+          "city": "Taipei",
+          "category": "Tea house",
+          "status": "location",
+          "loved": null,
+          "district": "Xinyi",
+          "address": "1F, No. 8, Alley 14, Lane 150, Section 5, Xinyi Rd, Xinyi District, Taipei City 110",
+          "latitude": 25.028385999999998,
+          "longitude": 121.56948649999998,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=5327670075659271524&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-05-10",
+          "verificationNotes": "Candidate metadata captured, but same-place decision remained unsure.\nAuto-corrected coordinates from resolved Google Maps listing.",
+          "addressScore": 0.684,
+          "ambiguityScore": 1,
+          "businessStatus": "OPERATIONAL",
+          "canonicalAddress": "110, Taiwan, Taipei City, Xinyi District, Alley 14, Lane 150, Section 5, Xinyi Rd, 8號1樓",
+          "canonicalName": "木下庵 Kino",
+          "cityScore": 1,
+          "countryScore": 1,
+          "distanceDeltaMeters": 886.6,
+          "districtScore": 1,
+          "googlePlaceId": "ChIJD7h_kgKrQjQRZD0m5LSv70k",
+          "matchConfidence": 0.727,
+          "nameScore": 1,
+          "verifiedLatitude": 25.028385999999998,
+          "verifiedLongitude": 121.56948649999998,
+          "samePlaceDecision": "Yes",
+          "samePlaceReason": "Google candidate matched with nameScore 1, addressScore 0.684, cityScore 1, countryScore 1, and distance 887m. The candidate came from Google Place ID, so stored coordinates are treated as derived data.",
+          "verificationDecision": "auto_corrected_from_place_id",
+          "verificationSource": "place_id"
+        }
+      ],
+      "differences": {
+        "address": [
+          "110, Taiwan, Taipei City, Xinyi District, Sanli Village, Alley 14, Lane 150, Section 5, Xinyi Rd, 8號1樓",
+          "1F, No. 8, Alley 14, Lane 150, Section 5, Xinyi Rd, Xinyi District, Taipei City 110"
+        ],
+        "addressScore": [
+          null,
+          0.684
+        ],
+        "ambiguityScore": [
+          null,
+          1
+        ],
+        "businessStatus": [
+          null,
+          "OPERATIONAL"
+        ],
+        "canonicalAddress": [
+          null,
+          "110, Taiwan, Taipei City, Xinyi District, Alley 14, Lane 150, Section 5, Xinyi Rd, 8號1樓"
+        ],
+        "canonicalName": [
+          null,
+          "木下庵 Kino"
+        ],
+        "cityScore": [
+          null,
+          1
+        ],
+        "countryScore": [
+          null,
+          1
+        ],
+        "distanceDeltaMeters": [
+          null,
+          886.6
+        ],
+        "districtScore": [
+          null,
+          1
+        ],
+        "id": [
+          "no-36-1-songde-rd-xinyi-district-taipei-city-110",
+          "kino-1f-no-8-alley-14-lane-150-section-5-xinyi-rd-xinyi-district-taipei-city-110"
+        ],
+        "lastChecked": [
+          "2026-06-11T07:34:59.001Z",
+          "2026-05-10"
+        ],
+        "latitude": [
+          25.028386,
+          25.028385999999998
+        ],
+        "longitude": [
+          121.5694865,
+          121.56948649999998
+        ],
+        "matchConfidence": [
+          null,
+          0.727
+        ],
+        "name": [
+          "小隱茶庵 信義店",
+          "木下庵 Kino"
+        ],
+        "nameScore": [
+          null,
+          1
+        ],
+        "samePlaceDecision": [
+          "Unsure",
+          "Yes"
+        ],
+        "samePlaceReason": [
+          "Google Places candidates were too weak, ambiguous, or mismatched for automatic verification.",
+          "Google candidate matched with nameScore 1, addressScore 0.684, cityScore 1, countryScore 1, and distance 887m. The candidate came from Google Place ID, so stored coordinates are treated as derived data."
+        ],
+        "verificationDecision": [
+          "candidate_only_review",
+          "auto_corrected_from_place_id"
+        ],
+        "verificationNotes": [
+          "Google Places verification did not find a high-confidence active match.",
+          "Candidate metadata captured, but same-place decision remained unsure.\nAuto-corrected coordinates from resolved Google Maps listing."
+        ],
+        "verificationSource": [
+          "text_search",
+          "place_id"
+        ],
+        "verifiedLatitude": [
+          null,
+          25.028385999999998
+        ],
+        "verifiedLongitude": [
+          null,
+          121.56948649999998
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "no-36-1-songde-rd-xinyi-district-taipei-city-110",
+          "name": "小隱茶庵 信義店",
+          "city": "Taipei",
+          "category": "Tea house",
+          "status": "location",
+          "loved": null,
+          "district": "Xinyi",
+          "address": "110, Taiwan, Taipei City, Xinyi District, Sanli Village, Alley 14, Lane 150, Section 5, Xinyi Rd, 8號1樓",
+          "latitude": 25.028386,
+          "longitude": 121.5694865,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=5327670075659271524&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T07:34:59.001Z",
+          "verificationNotes": "Google Places verification did not find a high-confidence active match.",
+          "samePlaceDecision": "Unsure",
+          "samePlaceReason": "Google Places candidates were too weak, ambiguous, or mismatched for automatic verification.",
+          "verificationDecision": "candidate_only_review",
+          "verificationSource": "text_search",
+          "googlePlaceId": "ChIJD7h_kgKrQjQRZD0m5LSv70k"
+        },
+        {
+          "id": "kino-1f-no-8-alley-14-lane-150-section-5-xinyi-rd-xinyi-district-taipei-city-110",
+          "name": "木下庵 Kino",
+          "city": "Taipei",
+          "category": "Tea house",
+          "status": "location",
+          "loved": null,
+          "district": "Xinyi",
+          "address": "1F, No. 8, Alley 14, Lane 150, Section 5, Xinyi Rd, Xinyi District, Taipei City 110",
+          "latitude": 25.028385999999998,
+          "longitude": 121.56948649999998,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=5327670075659271524&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-05-10",
+          "verificationNotes": "Candidate metadata captured, but same-place decision remained unsure.\nAuto-corrected coordinates from resolved Google Maps listing.",
+          "addressScore": 0.684,
+          "ambiguityScore": 1,
+          "businessStatus": "OPERATIONAL",
+          "canonicalAddress": "110, Taiwan, Taipei City, Xinyi District, Alley 14, Lane 150, Section 5, Xinyi Rd, 8號1樓",
+          "canonicalName": "木下庵 Kino",
+          "cityScore": 1,
+          "countryScore": 1,
+          "distanceDeltaMeters": 886.6,
+          "districtScore": 1,
+          "googlePlaceId": "ChIJD7h_kgKrQjQRZD0m5LSv70k",
+          "matchConfidence": 0.727,
+          "nameScore": 1,
+          "verifiedLatitude": 25.028385999999998,
+          "verifiedLongitude": 121.56948649999998,
+          "samePlaceDecision": "Yes",
+          "samePlaceReason": "Google candidate matched with nameScore 1, addressScore 0.684, cityScore 1, countryScore 1, and distance 887m. The candidate came from Google Place ID, so stored coordinates are treated as derived data.",
+          "verificationDecision": "auto_corrected_from_place_id",
+          "verificationSource": "place_id"
+        }
+      ],
+      "proposedIdMapping": {}
+    },
+    {
+      "googlePlaceId": "ChIJ5e8BNgCrQjQR_ftkevAjUZQ",
+      "decision": "PENDING",
+      "recommendation": "Merge to the proposed retained record after owner approval.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "no-1-lane-14-siwei-rd-daan-district-taipei-city-taiwan-106",
+          "name": "廟東 食肆",
+          "city": "Taipei",
+          "category": "Wine bar",
+          "status": "want_to_go",
+          "loved": null,
+          "district": "Da’an",
+          "address": "No. 1, Lane 14, Siwei Rd, Da’an District, Taipei City, Taiwan 106",
+          "latitude": 25.0368911,
+          "longitude": 121.54805959999999,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=10687362906479459325&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-05-09",
+          "verificationNotes": "Auto-verified stored coordinates based on strong Google Places name/address match.",
+          "addressScore": 0.923,
+          "ambiguityScore": 1,
+          "businessStatus": "OPERATIONAL",
+          "canonicalAddress": "No. 1, Lane 14, Siwei Rd, Da’an District, Taipei City, 106",
+          "canonicalName": "廟東 食肆",
+          "cityScore": 1,
+          "countryScore": 1,
+          "distanceDeltaMeters": 0,
+          "districtScore": 1,
+          "googlePlaceId": "ChIJ5e8BNgCrQjQR_ftkevAjUZQ",
+          "matchConfidence": 0.974,
+          "nameScore": 1,
+          "verifiedLatitude": 25.0368911,
+          "verifiedLongitude": 121.54805959999999,
+          "samePlaceDecision": "Yes",
+          "samePlaceReason": "Google candidate matched with nameScore 1, addressScore 0.923, cityScore 1, countryScore 1, and distance 0m. Distance is under 30m with a reasonable name and city match, so imperfect address/name formatting did not block verification.",
+          "verificationDecision": "auto_verified_small_delta",
+          "verificationSource": "text_search"
+        },
+        {
+          "id": "place_taipei_miaodong",
+          "name": "廟東 食肆",
+          "city": "Taipei",
+          "category": "Wine bar",
+          "status": "location",
+          "loved": null,
+          "district": "Da’an",
+          "address": "No. 1, Lane 14, Siwei Rd, De'an Village, Da’an District, Taipei City, Taiwan 106",
+          "latitude": 25.0368911,
+          "longitude": 121.5480596,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=10687362906479459325&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJ5e8BNgCrQjQR_ftkevAjUZQ",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-09-29T11:14:01.549Z",
+          "notes": []
+        }
+      ],
+      "differences": {
+        "address": [
+          "No. 1, Lane 14, Siwei Rd, Da’an District, Taipei City, Taiwan 106",
+          "No. 1, Lane 14, Siwei Rd, De'an Village, Da’an District, Taipei City, Taiwan 106"
+        ],
+        "addressScore": [
+          0.923,
+          null
+        ],
+        "ambiguityScore": [
+          1,
+          null
+        ],
+        "businessStatus": [
+          "OPERATIONAL",
+          null
+        ],
+        "canonicalAddress": [
+          "No. 1, Lane 14, Siwei Rd, Da’an District, Taipei City, 106",
+          null
+        ],
+        "canonicalName": [
+          "廟東 食肆",
+          null
+        ],
+        "cityScore": [
+          1,
+          null
+        ],
+        "countryScore": [
+          1,
+          null
+        ],
+        "distanceDeltaMeters": [
+          0,
+          null
+        ],
+        "districtScore": [
+          1,
+          null
+        ],
+        "id": [
+          "no-1-lane-14-siwei-rd-daan-district-taipei-city-taiwan-106",
+          "place_taipei_miaodong"
+        ],
+        "lastChecked": [
+          "2026-05-09",
+          "2026-09-29T11:14:01.549Z"
+        ],
+        "longitude": [
+          121.54805959999999,
+          121.5480596
+        ],
+        "matchConfidence": [
+          0.974,
+          null
+        ],
+        "nameScore": [
+          1,
+          null
+        ],
+        "notes": [
+          null,
+          []
+        ],
+        "samePlaceDecision": [
+          "Yes",
+          null
+        ],
+        "samePlaceReason": [
+          "Google candidate matched with nameScore 1, addressScore 0.923, cityScore 1, countryScore 1, and distance 0m. Distance is under 30m with a reasonable name and city match, so imperfect address/name formatting did not block verification.",
+          null
+        ],
+        "status": [
+          "want_to_go",
+          "location"
+        ],
+        "verificationDecision": [
+          "auto_verified_small_delta",
+          null
+        ],
+        "verificationNotes": [
+          "Auto-verified stored coordinates based on strong Google Places name/address match.",
+          null
+        ],
+        "verificationSource": [
+          "text_search",
+          null
+        ],
+        "verifiedLatitude": [
+          25.0368911,
+          null
+        ],
+        "verifiedLongitude": [
+          121.54805959999999,
+          null
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "place_taipei_miaodong",
+          "name": "廟東 食肆",
+          "city": "Taipei",
+          "category": "Wine bar",
+          "status": "want_to_go",
+          "loved": null,
+          "district": "Da’an",
+          "address": "No. 1, Lane 14, Siwei Rd, De'an Village, Da’an District, Taipei City, Taiwan 106",
+          "latitude": 25.0368911,
+          "longitude": 121.5480596,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=10687362906479459325&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJ5e8BNgCrQjQR_ftkevAjUZQ",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-09-29T11:14:01.549Z",
+          "notes": []
+        }
+      ],
+      "proposedIdMapping": {
+        "no-1-lane-14-siwei-rd-daan-district-taipei-city-taiwan-106": "place_taipei_miaodong"
+      }
+    },
+    {
+      "googlePlaceId": "ChIJ_Qw_QQCNGGARIqcxkPIzWbI",
+      "decision": "PENDING",
+      "recommendation": "Merge to the proposed retained record after owner approval.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "chiune-1-3-3f",
+          "name": "CHIUnE",
+          "city": "Tokyo",
+          "category": "Fusion",
+          "status": "location",
+          "loved": null,
+          "district": "Chiyoda",
+          "address": "Japan, 〒102-0094 Tokyo, Chiyoda City, Kioichō, 1−３ Kioi Tower, 東京ガーデンテラス",
+          "latitude": 35.6793808,
+          "longitude": 139.7376471,
+          "tabelog": "4.51",
+          "subway": "Nagatacho",
+          "googleMapsUrl": "https://maps.google.com/?cid=12851360128572696354&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:25:39.496Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJ_Qw_QQCNGGARIqcxkPIzWbI"
+        },
+        {
+          "id": "chiune-1-22-12",
+          "name": "チウネ (CHIUnE)",
+          "city": "Tokyo",
+          "category": "Fusion",
+          "status": "location",
+          "loved": null,
+          "district": "Chuo",
+          "address": "Japan, 〒102-0094 Tokyo, Chiyoda City, Kioichō, 1−３ Kioi Tower, 東京ガーデンテラス",
+          "latitude": 35.6793808,
+          "longitude": 139.7376471,
+          "tabelog": "4.2",
+          "subway": "Shintomicho",
+          "googleMapsUrl": "https://maps.google.com/?cid=12851360128572696354&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:25:39.496Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJ_Qw_QQCNGGARIqcxkPIzWbI"
+        }
+      ],
+      "differences": {
+        "district": [
+          "Chiyoda",
+          "Chuo"
+        ],
+        "id": [
+          "chiune-1-3-3f",
+          "chiune-1-22-12"
+        ],
+        "name": [
+          "CHIUnE",
+          "チウネ (CHIUnE)"
+        ],
+        "subway": [
+          "Nagatacho",
+          "Shintomicho"
+        ],
+        "tabelog": [
+          "4.51",
+          "4.2"
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "chiune-1-3-3f",
+          "name": "CHIUnE",
+          "city": "Tokyo",
+          "category": "Fusion",
+          "status": "location",
+          "loved": null,
+          "district": "Chiyoda",
+          "address": "Japan, 〒102-0094 Tokyo, Chiyoda City, Kioichō, 1−３ Kioi Tower, 東京ガーデンテラス",
+          "latitude": 35.6793808,
+          "longitude": 139.7376471,
+          "tabelog": "4.51",
+          "subway": "Nagatacho",
+          "googleMapsUrl": "https://maps.google.com/?cid=12851360128572696354&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:25:39.496Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJ_Qw_QQCNGGARIqcxkPIzWbI"
+        }
+      ],
+      "proposedIdMapping": {
+        "chiune-1-22-12": "chiune-1-3-3f"
+      }
+    },
+    {
+      "googlePlaceId": "ChIJ8fbyNgCLGGAR5P-fltwTkzk",
+      "decision": "PENDING",
+      "recommendation": "Merge to the proposed retained record after owner approval.",
+      "evidence": "Same saved Google Place ID and Maps URL. Compare names, address, coordinates, and editorial values below. This is catalog evidence; identity has not been independently verified.",
+      "before": [
+        {
+          "id": "place_tokyo_edoyakiniku",
+          "name": "江戸焼肉",
+          "city": "Tokyo",
+          "category": "Restaurant",
+          "status": "want_to_go",
+          "loved": null,
+          "district": "Chuo",
+          "address": "Japan, 〒104-0061 Tokyo, Chuo City, Ginza, 6-chōme−6−５ HULIC & New GINZA NAMIKI ６ ４階 B",
+          "latitude": 35.6709513,
+          "longitude": 139.7624876,
+          "tabelog": "",
+          "subway": "",
+          "googleMapsUrl": "https://maps.google.com/?cid=4148681519879159780&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "googlePlaceId": "ChIJ8fbyNgCLGGAR5P-fltwTkzk",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-08-11T10:57:54.600Z",
+          "notes": []
+        },
+        {
+          "id": "edo-yakiniku-6-6-5-hulic-new-ginza-namiki-6-4f-b",
+          "name": "江戸焼肉 (Edo Yakiniku)",
+          "city": "Tokyo",
+          "category": "Yakiniku",
+          "status": "want_to_go",
+          "loved": null,
+          "district": "Chuo",
+          "address": "Japan, 〒104-0061 Tokyo, Chuo City, Ginza, 6-chōme−6−５ HULIC & New GINZA NAMIKI ６ ４階 B",
+          "latitude": 35.6709513,
+          "longitude": 139.7624876,
+          "tabelog": "4.08",
+          "subway": "Ginza",
+          "googleMapsUrl": "https://maps.google.com/?cid=4148681519879159780&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:25:39.496Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJ8fbyNgCLGGAR5P-fltwTkzk"
+        }
+      ],
+      "differences": {
+        "category": [
+          "Restaurant",
+          "Yakiniku"
+        ],
+        "id": [
+          "place_tokyo_edoyakiniku",
+          "edo-yakiniku-6-6-5-hulic-new-ginza-namiki-6-4f-b"
+        ],
+        "lastChecked": [
+          "2026-08-11T10:57:54.600Z",
+          "2026-06-11T08:25:39.496Z"
+        ],
+        "name": [
+          "江戸焼肉",
+          "江戸焼肉 (Edo Yakiniku)"
+        ],
+        "notes": [
+          [],
+          null
+        ],
+        "subway": [
+          "",
+          "Ginza"
+        ],
+        "tabelog": [
+          "",
+          "4.08"
+        ],
+        "verificationNotes": [
+          null,
+          ""
+        ]
+      },
+      "proposedAfter": [
+        {
+          "id": "edo-yakiniku-6-6-5-hulic-new-ginza-namiki-6-4f-b",
+          "name": "江戸焼肉 (Edo Yakiniku)",
+          "city": "Tokyo",
+          "category": "Yakiniku",
+          "status": "want_to_go",
+          "loved": null,
+          "district": "Chuo",
+          "address": "Japan, 〒104-0061 Tokyo, Chuo City, Ginza, 6-chōme−6−５ HULIC & New GINZA NAMIKI ６ ４階 B",
+          "latitude": 35.6709513,
+          "longitude": 139.7624876,
+          "tabelog": "4.08",
+          "subway": "Ginza",
+          "googleMapsUrl": "https://maps.google.com/?cid=4148681519879159780&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+          "verifiedStatus": "Yes",
+          "lastChecked": "2026-06-11T08:25:39.496Z",
+          "verificationNotes": "",
+          "googlePlaceId": "ChIJ8fbyNgCLGGAR5P-fltwTkzk"
+        }
+      ],
+      "proposedIdMapping": {
+        "place_tokyo_edoyakiniku": "edo-yakiniku-6-6-5-hulic-new-ginza-namiki-6-4f-b"
+      }
+    }
+  ],
+  "proposedIdMappings": {
+    "bar-k-297": "bar-k-main-building-103",
+    "ikehan-tea-299": "bunshitsu-ikehan-143-11",
+    "place_matsue_unknown_place": "place_matsue_saeki",
+    "no-20-lane-11-taiyuan-rd-datong-district-taipei-city-103": "place_taipei_mitsuo_coffee",
+    "no-1-lane-14-siwei-rd-daan-district-taipei-city-taiwan-106": "place_taipei_miaodong",
+    "chiune-1-22-12": "chiune-1-3-3f",
+    "place_tokyo_edoyakiniku": "edo-yakiniku-6-6-5-hulic-new-ginza-namiki-6-4f-b"
+  },
+  "outlier": {
+    "decision": "PENDING",
+    "before": {
+      "id": "place_taipei_anan_sushi",
+      "name": "鮨安",
+      "city": "Taipei",
+      "category": "Sushi",
+      "status": "location",
+      "loved": null,
+      "district": "",
+      "address": "No. 62號, Section 1, Jiafeng S Rd, Zhongxing Village, Zhubei City, Hsinchu County, Taiwan 302",
+      "latitude": 24.8110488,
+      "longitude": 121.0340877,
+      "tabelog": "",
+      "subway": "",
+      "googleMapsUrl": "https://maps.google.com/?cid=16038388016698522430&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "googlePlaceId": "ChIJf8vex9A3aDQRPnsyGe3Mk94",
+      "verifiedStatus": "Yes",
+      "lastChecked": "2026-09-29T11:14:01.549Z",
+      "notes": []
+    },
+    "evidence": "Saved address explicitly says Zhubei City, Hsinchu County. The pin is about 57.7 km from the Taipei median.",
+    "recommendedAfter": {
+      "id": "place_taipei_anan_sushi",
+      "name": "鮨安",
+      "city": "Hsinchu",
+      "category": "Sushi",
+      "status": "location",
+      "loved": null,
+      "district": "Zhubei",
+      "address": "No. 62號, Section 1, Jiafeng S Rd, Zhongxing Village, Zhubei City, Hsinchu County, Taiwan 302",
+      "latitude": 24.8110488,
+      "longitude": 121.0340877,
+      "tabelog": "",
+      "subway": "",
+      "googleMapsUrl": "https://maps.google.com/?cid=16038388016698522430&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+      "googlePlaceId": "ChIJf8vex9A3aDQRPnsyGe3Mk94",
+      "verifiedStatus": "Yes",
+      "lastChecked": "2026-09-29T11:14:01.549Z",
+      "notes": []
+    },
+    "alternative": "Keep city Taipei as a day trip; the UI now labels distant places and starts near the central results."
+  },
+  "appliedMerges": []
+}

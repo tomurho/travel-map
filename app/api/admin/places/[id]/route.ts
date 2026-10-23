@@ -8,6 +8,7 @@ import {
   updateProductionPlaceVerification,
   getProductionPlaceVerificationInputErrors,
 } from "@/lib/admin-staging";
+import { PlacesJsonWriteConflictError } from "@/lib/places-json-store";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
 function isLocalhostRequest(request: NextRequest) {
@@ -72,10 +73,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const errors = getProductionPlaceVerificationInputErrors(input);
   if (errors.length) return NextResponse.json({ error: errors.join(" ") }, { status: 400 });
-  const result = updateProductionPlaceVerification(id, input as AdminProductionPlaceVerificationInput);
+  let result;
+  try {
+    result = updateProductionPlaceVerification(id, input as AdminProductionPlaceVerificationInput);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof PlacesJsonWriteConflictError ? error.message : "Could not confirm the save. Reload before retrying." }, { status: error instanceof PlacesJsonWriteConflictError ? 409 : 500 });
+  }
 
   if ("error" in result) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ error: result.error }, { status: result.status ?? 400 });
   }
 
   return NextResponse.json(result);
@@ -87,10 +93,15 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const result = deleteProductionPlace(id);
+  let result;
+  try {
+    result = deleteProductionPlace(id, request.headers.get("x-record-version") ?? "");
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof PlacesJsonWriteConflictError ? error.message : "Could not confirm deletion. Reload before retrying." }, { status: error instanceof PlacesJsonWriteConflictError ? 409 : 500 });
+  }
 
   if ("error" in result) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ error: result.error }, { status: result.status ?? 400 });
   }
 
   return NextResponse.json(result);
