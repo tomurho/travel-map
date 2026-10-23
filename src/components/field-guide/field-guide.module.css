@@ -464,7 +464,7 @@
   display: grid;
   min-width: 0;
   gap: 0;
-  align-content: center;
+  align-content: start;
   min-height: 76px;
   padding: 6px 4px 12px;
 }
@@ -646,8 +646,8 @@
 .page .placeNameLink {
   display: block;
   min-width: 0;
-  min-height: 44px;
-  padding: 8px 0;
+  min-height: 0;
+  padding: 8px 0 0;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -1195,5 +1195,5 @@
 
 /* The row toggles details. Venue links and Map have their own actions. */
 .placeStatus { margin: 5px 0 0; color: var(--fg-coral); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.page .placeRowToggle { display: grid; width: 100%; min-height: 32px; gap: 4px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit; }
+.page .placeRowToggle { display: grid; align-content: start; width: 100%; min-height: 24px; gap: 4px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit; line-height: 1.4; }
 .placeCard:has(.placeRowToggle:focus-visible) { outline: 2px solid var(--fg-charcoal); outline-offset: -2px; }

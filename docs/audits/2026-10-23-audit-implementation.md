@@ -171,3 +171,18 @@ Desktop, 390-pixel, 320-pixel, and enlarged-text checks passed. Physical-phone b
 
 [Updated wine-bar list](2026-10-23-implementation/list-row-wine-mobile.png), [320-pixel layout](2026-10-23-implementation/list-row-wine-320.png), and [browser results](2026-10-23-implementation/list-row-browser-tests.txt).
 The follow-up is local and has not been deployed.
+
+## Follow-up: list spacing and alignment
+
+The category and district now sit directly below the underlined place name.
+The address starts at the same left edge, with a small gap above it.
+The name keeps its existing text style and Google Maps link.
+The row toggle retains a 24-pixel minimum height, and the Map button retains its 44-pixel height.
+
+Visual inspection covered the selected beef-noodle venue at 390 × 844 and 320 × 568.
+The name, category, and address share the same measured left edge.
+The production build, all 11 public browser checks, and `git diff --check` passed.
+The browser checks include keyboard toggling, external links, the in-app Map action, and enlarged text.
+Physical-phone behavior remains untested. This change is local and has not been deployed.
+
+[390-pixel layout](2026-10-23-implementation/list-row-alignment-mobile.png) and [320-pixel layout](2026-10-23-implementation/list-row-alignment-320.png).

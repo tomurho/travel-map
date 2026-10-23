@@ -75,7 +75,7 @@
 .editToolbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid var(--fg-line); font-size: 13px; }
 .editToolbar button { min-height: 44px; min-width: 60px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: 0 10px 12px; }
-.listDetails { padding: 0 10px 14px; }
+.listDetails { padding: 4px 4px 14px; }
 .listDetails > aside { position: relative; inset: auto; width: 100%; max-height: none; overflow: visible; border: 0; border-radius: 0; padding: 0; box-shadow: none; background: transparent; }
 .listDetails > aside h2 { font-size: 18px; }
 .listDetails > aside button { cursor: pointer; }
