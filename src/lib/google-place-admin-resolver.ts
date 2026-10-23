@@ -18,6 +18,7 @@ import {
   type GooglePlacesCounters,
 } from "@/lib/google-places-access";
 import type { Place, VerificationSource } from "@/lib/place";
+import { verificationFields } from "@/lib/published-place-merge";
 import { fetchSupportedProviderUrl } from "@/lib/provider-url";
 import {
   readPlacesJsonSnapshot,
@@ -460,9 +461,43 @@ export function writeProductionPlaces(
 
 function hasVerifiedCandidateCoordinates(place: Place) {
   return (
-    typeof place.verifiedLatitude === "number" &&
-    typeof place.verifiedLongitude === "number"
+    typeof place.verifiedLatitude === "number" && Number.isFinite(place.verifiedLatitude) &&
+    typeof place.verifiedLongitude === "number" && Number.isFinite(place.verifiedLongitude)
   );
+}
+
+type ResolverPlaceOverrides = Partial<Pick<Place,
+  "address" | "canonicalAddress" | "googleMapsUrl" | "latitude" | "longitude"
+>>;
+
+function preparePlaceForResolution(stored: Place, googleMapsUrl: string, overrides: ResolverPlaceOverrides) {
+  // Only location inputs may be supplied by the caller. Verification evidence
+  // describes the stored source and must never be injected through overrides.
+  const proposed: Place = { ...stored, googleMapsUrl };
+  for (const field of ["address", "canonicalAddress", "latitude", "longitude"] as const) {
+    if (overrides[field] !== undefined) Object.assign(proposed, { [field]: overrides[field] });
+  }
+  const urlChanged = googleMapsUrl !== (stored.googleMapsUrl?.trim() ?? "");
+  const locationChanged = (["address", "canonicalAddress", "latitude", "longitude"] as const)
+    .some((field) => {
+      const before = stored[field];
+      const after = proposed[field];
+      return (typeof before === "string" ? before.trim() : before) !==
+        (typeof after === "string" ? after.trim() : after);
+    });
+  if (urlChanged || locationChanged) {
+    // The atomic store preserves the previous evidence in its backup.
+    for (const field of verificationFields) delete proposed[field];
+    delete proposed.googlePlaceId;
+    // A newly supplied correction is input for the next lookup, not old evidence.
+    if (overrides.canonicalAddress !== undefined &&
+      overrides.canonicalAddress.trim() !== (stored.canonicalAddress?.trim() ?? "")) {
+      proposed.canonicalAddress = overrides.canonicalAddress.trim();
+    }
+    proposed.verifiedStatus = stored.verifiedStatus === "Closed/Moved" ? "Closed/Moved" : "Review";
+    proposed.verificationNotes = "Previous candidate evidence was cleared because the venue source or location changed. Review the new result.";
+  }
+  return { place: proposed, urlChanged };
 }
 
 function getFreeGeocodingQueries(place: Place) {
@@ -717,21 +752,12 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     access?: GooglePlacesAccess;
     fetcher?: typeof fetch;
     freeAccess?: FreeGeocodingAccess;
-    placeOverrides?: Partial<
-      Pick<
-        Place,
-        | "address"
-        | "canonicalAddress"
-        | "googleMapsUrl"
-        | "latitude"
-        | "longitude"
-        | "verifiedStatus"
-        | "verificationNotes"
-      >
-    >;
+    placeOverrides?: ResolverPlaceOverrides;
+    readSnapshot?: typeof readPlacesJsonSnapshot;
+    writePlaces?: typeof writeProductionPlaces;
   } = {},
 ) {
-  const productionSnapshot = readPlacesJsonSnapshot();
+  const productionSnapshot = (options.readSnapshot ?? readPlacesJsonSnapshot)();
   const currentPlaces = productionSnapshot.places;
   const placeIndex = currentPlaces.findIndex((place) => place.id === id);
 
@@ -739,15 +765,13 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     return { error: "Production place was not found." };
   }
 
-  const currentPlace = {
-    ...currentPlaces[placeIndex],
-    ...options.placeOverrides,
-  } as Place;
+  const storedPlace = currentPlaces[placeIndex];
   const trimmedGoogleMapsUrl = googleMapsUrl.trim();
-
-  if (!currentPlace) {
+  if (!storedPlace) {
     return { error: "Production place was not found." };
   }
+  const prepared = preparePlaceForResolution(storedPlace, trimmedGoogleMapsUrl, options.placeOverrides ?? {});
+  const currentPlace = prepared.place;
 
   const placeForResolution: Place = {
     ...currentPlace,
@@ -778,7 +802,8 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     };
   }
 
-  if (!nextPlace) {
+  // A new Maps link is stronger input than an old address-based cache result.
+  if (!nextPlace && !prepared.urlChanged) {
     const freeCandidate = await resolveFreeGeocodingCandidate(
       placeForResolution,
       providerAttempts,
@@ -929,11 +954,14 @@ export async function resolveGoogleMapsUrlForProductionPlace(
     }
   }
 
+  if (storedPlace.verifiedStatus === "Closed/Moved" && nextPlace) {
+    nextPlace.verifiedStatus = "Closed/Moved";
+  }
   const nextPlaces = currentPlaces.map((place) =>
     place.id === id ? (nextPlace as Place) : place,
   );
 
-  writeProductionPlaces(nextPlaces, productionSnapshot.fileHash);
+  (options.writePlaces ?? writeProductionPlaces)(nextPlaces, productionSnapshot.fileHash);
 
   return {
     candidateSummaries,

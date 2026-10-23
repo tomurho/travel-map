@@ -161,6 +161,7 @@ export type ReviewCandidate = {
   notes: string;
   rawName: string;
   rowNumber: number;
+  reviewStamp: string;
   status: string;
   validationIssues: string[];
 };
@@ -1995,7 +1996,7 @@ function buildPublishedRecord(reviewRow: Record<string, string>, lastChecked: st
   };
 }
 
-export function buildReviewCandidateQueue(reviewValues: string[][]) {
+export function buildReviewCandidateQueue(reviewValues: string[][], sheetId = "") {
   const reviewHeaders = (reviewValues[0] ?? []).map((value) =>
     String(value ?? ""),
   );
@@ -2069,6 +2070,9 @@ export function buildReviewCandidateQueue(reviewValues: string[][]) {
         notes: readMappedSheetField(row.fields, ["notes"]),
         rawName: readMappedSheetField(row.fields, ["rawName"]),
         rowNumber: row.rowNumber,
+        reviewStamp: createHash("sha256")
+          .update(JSON.stringify({ sheetId: sheetId.trim(), headers: reviewHeaders, rowNumber: row.rowNumber, values: row.values }))
+          .digest("hex"),
         status: readMappedSheetField(row.fields, ["status"]),
         validationIssues: normalized.ok ? [] : normalized.errors,
       };
@@ -2087,16 +2091,24 @@ export async function getReviewCandidates(input: { sheetId: string }) {
     [`${quoteSheetName(REVIEW_TAB)}!A1:ZZ`],
   );
 
-  return { candidates: buildReviewCandidateQueue(reviewValues) };
+  return { candidates: buildReviewCandidateQueue(reviewValues, input.sheetId) };
 }
+
+const reviewDecisionIO = {
+  createGoogleSheetsAuthClient,
+  batchReadValues,
+  batchUpdateValues,
+  readPlacesJsonSnapshot,
+};
 
 export async function decideReviewCandidate(input: {
   edits?: ReviewCandidateEdits;
   decision: ReviewCandidateDecision;
   id: string;
   rowNumber: number;
+  expectedReviewStamp?: string;
   sheetId: string;
-}) {
+}, overrides: Partial<typeof reviewDecisionIO> = {}) {
   if (!input.sheetId?.trim()) {
     throw new Error("A Google Sheet ID is required.");
   }
@@ -2109,8 +2121,10 @@ export async function decideReviewCandidate(input: {
     throw new Error("Decision must be verify or reject.");
   }
 
-  const sheetsAuthClient = await createGoogleSheetsAuthClient();
-  const [reviewValues = []] = await batchReadValues(
+  requirePreviewHash(input.expectedReviewStamp);
+  const io = { ...reviewDecisionIO, ...overrides };
+  const sheetsAuthClient = await io.createGoogleSheetsAuthClient();
+  const [reviewValues = []] = await io.batchReadValues(
     sheetsAuthClient,
     input.sheetId,
     [`${quoteSheetName(REVIEW_TAB)}!A1:ZZ`],
@@ -2118,14 +2132,21 @@ export async function decideReviewCandidate(input: {
   const reviewHeaders = (reviewValues[0] ?? []).map((value) =>
     String(value ?? ""),
   );
-  const candidates = buildReviewCandidateQueue(reviewValues);
+  const candidates = buildReviewCandidateQueue(reviewValues, input.sheetId);
   const candidate = candidates.find(
     (row) => row.rowNumber === input.rowNumber && row.id === input.id,
   );
 
   if (!candidate) {
-    throw new Error(
-      "This Candidate row changed or is no longer waiting. Refresh Admin and try again.",
+    throw new PipelineError(
+      "PREVIEW_STALE",
+      "This candidate changed or is no longer waiting. Refresh data and review it again.",
+    );
+  }
+  if (candidate.reviewStamp !== input.expectedReviewStamp) {
+    throw new PipelineError(
+      "PREVIEW_STALE",
+      "This candidate changed since you reviewed it. Refresh data and review it again.",
     );
   }
 
@@ -2162,7 +2183,7 @@ export async function decideReviewCandidate(input: {
 
     const categoryOptions = Array.from(
       new Set(
-        readPlacesJsonSnapshot().places
+        io.readPlacesJsonSnapshot().places
           .map((place) => place.category.trim())
           .filter(Boolean),
       ),
@@ -2226,7 +2247,7 @@ export async function decideReviewCandidate(input: {
     };
   }
 
-  await batchUpdateValues(
+  await io.batchUpdateValues(
     sheetsAuthClient,
     input.sheetId,
     updates,
@@ -3046,7 +3067,7 @@ export async function getPlacePipelineSnapshot(input: { sheetId: string }) {
   const values = await readPlacePipelineValues(input.sheetId.trim());
 
   return {
-    candidates: buildReviewCandidateQueue(values.reviewValues),
+    candidates: buildReviewCandidateQueue(values.reviewValues, input.sheetId),
     status: buildPlacePipelineStatus(values),
   };
 }

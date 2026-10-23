@@ -6,6 +6,7 @@ import {
   type AdminProductionPlaceVerificationInput,
   updateProductionPlaceFloatingEdit,
   updateProductionPlaceVerification,
+  getProductionPlaceVerificationInputErrors,
 } from "@/lib/admin-staging";
 import { isAdminAuthorized } from "@/lib/admin-auth";
 
@@ -37,9 +38,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const input = (await request.json()) as
-    | AdminFloatingPlaceEditInput
-    | AdminProductionPlaceVerificationInput;
+  let input: unknown;
+  try {
+    input = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Send a valid JSON object." }, { status: 400 });
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return NextResponse.json({ error: "Send a JSON object containing the place fields." }, { status: 400 });
+  }
 
   if (isFloatingPlaceEditInput(input)) {
     if (!isLocalhostRequest(request)) {
@@ -49,16 +56,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const result = updateProductionPlaceFloatingEdit(decodeURIComponent(id), input);
+    let result;
+    try {
+      result = updateProductionPlaceFloatingEdit(id, input);
+    } catch {
+      return NextResponse.json({ error: "Could not confirm the save. Reload the page before trying again." }, { status: 500 });
+    }
 
     if ("error" in result) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
     return NextResponse.json(result);
   }
 
-  const result = updateProductionPlaceVerification(decodeURIComponent(id), input);
+  const errors = getProductionPlaceVerificationInputErrors(input);
+  if (errors.length) return NextResponse.json({ error: errors.join(" ") }, { status: 400 });
+  const result = updateProductionPlaceVerification(id, input as AdminProductionPlaceVerificationInput);
 
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });
@@ -73,7 +87,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const result = deleteProductionPlace(decodeURIComponent(id));
+  const result = deleteProductionPlace(id);
 
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: 400 });

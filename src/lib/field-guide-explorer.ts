@@ -22,6 +22,7 @@ export const explorerGroups = [
   { id: "bars", label: "Bars", categories: ["Wine bar", "Cider Bar", "Bar"] },
   { id: "shopping", label: "Shopping", categories: ["Grocery"] },
   { id: "sights", label: "Sights & culture", categories: [] },
+  { id: "other", label: "Other", categories: [] },
 ] as const;
 
 export type ExplorerGroup = (typeof explorerGroups)[number]["id"];
@@ -31,8 +32,26 @@ export function getExplorerGroup(group: ExplorerGroup) {
   return explorerGroups.find((option) => option.id === group)!;
 }
 
-export function matchesExplorerGroup(place: Place, group: ExplorerGroup) {
+export function matchesExplorerGroup(place: Place, group: ExplorerGroup): boolean {
+  if (group === "other") {
+    return !explorerGroups.some((option) => option.id !== "all" && option.id !== "other" && matchesExplorerGroup(place, option.id));
+  }
   return group === "all" || getPlaceTypeGroup(place.category) === group || (getExplorerGroup(group).categories as readonly string[]).includes(place.category);
+}
+
+// These paired labels describe the same Kyoto wards. Keep source addresses intact.
+const kyotoAreaAliases: Record<string, string> = {
+  Kamigyo: "Kamigyo Ward", Kita: "Kita Ward", Nakagyo: "Nakagyo Ward",
+  Sakyo: "Sakyo Ward", Shimogyo: "Shimogyo Ward",
+};
+
+export function normalizeExplorerArea(city: string, area: string) {
+  return normalizePlaceCity(city) === "Kyoto" ? kyotoAreaAliases[area] ?? area : area;
+}
+
+export function getExplorerAreas(places: Place[], filters: Pick<ExplorerFilters, "city" | "group">) {
+  return [...new Set(places.filter((place) => isPublicPlace(place) && normalizePlaceCity(place.city) === filters.city && matchesExplorerGroup(place, filters.group))
+    .map((place) => normalizeExplorerArea(filters.city, place.district)).filter(Boolean))].sort();
 }
 
 export function specialtyLabel(category: string) {
@@ -54,12 +73,12 @@ export function readExplorerFilters(
     : undefined;
   const group = explorerGroups.find((option) => option.id === params.get("group"))?.id ?? legacyGroup ?? options.defaultGroup ?? "all";
   const groupPlaces = cityPlaces.filter((place) => matchesExplorerGroup(place, group));
-  const area = params.get("area") ?? "all";
+  const area = normalizeExplorerArea(city, params.get("area") ?? "all");
   const lovedOnly = ["1", "loved"].includes(params.get("loved") ?? "");
   return {
     city, group,
     category: groupPlaces.some((place) => place.category === category) ? category : "all",
-    area: groupPlaces.some((place) => place.district === area) ? area : "all",
+    area: groupPlaces.some((place) => normalizeExplorerArea(city, place.district) === area) ? area : "all",
     status: params.get("status") === "want_to_go" && !lovedOnly ? "want_to_go" : "all",
     lovedOnly, query: params.get("q") ?? "",
   };
@@ -84,10 +103,11 @@ export function filterExplorerPlaces(
   const query = normalizePlaceSearch(filters.query.trim());
   const candidates = places.filter((place) => {
     if (!isPublicPlace(place) || normalizePlaceCity(place.city) !== filters.city || !matchesExplorerGroup(place, filters.group)) return false;
+    if (filters.area !== "all" && normalizeExplorerArea(filters.city, place.district) !== normalizeExplorerArea(filters.city, filters.area)) return false;
     const labels = explorerGroups.filter((group) => group.id !== "all" && matchesExplorerGroup(place, group.id)).map((group) => group.label);
     return !query || normalizePlaceSearch([place.name, place.category, place.district, ...labels, ...getPlaceTypeAliases(place.category)].join(" ")).includes(query);
   });
-  return filterAndSortFieldGuidePlaces(candidates, { ...filters, query: "" }, nearby);
+  return filterAndSortFieldGuidePlaces(candidates, { ...filters, area: "all", query: "" }, nearby);
 }
 
 export function getExplorerSpecialties(places: Place[], filters: ExplorerFilters) {

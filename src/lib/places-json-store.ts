@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 
 import type { Place } from "@/lib/place";
+import { getPlaceFieldErrors } from "@/lib/place-validation";
 
 export const DEFAULT_PLACES_JSON_PATH = path.resolve(
   process.cwd(),
@@ -38,63 +39,23 @@ type WritePlacesJsonOptions = {
   filePath?: string;
 };
 
+export class PlacesJsonWriteConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlacesJsonWriteConflictError";
+  }
+}
+
 function hashContent(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-function validatePlace(place: Place, index: number) {
-  const label = place?.id?.trim() || `row ${index + 1}`;
-
-  if (!place || typeof place !== "object") {
-    throw new Error(`Invalid place at row ${index + 1}.`);
-  }
-  if (!place.id?.trim()) {
-    throw new Error(`Place at row ${index + 1} is missing id.`);
-  }
-  if (!place.name?.trim()) {
-    throw new Error(`Place ${label} is missing name.`);
-  }
-  if (!place.city?.trim()) {
-    throw new Error(`Place ${label} is missing city.`);
-  }
-  if (!place.category?.trim()) {
-    throw new Error(`Place ${label} is missing category.`);
-  }
-  if (!place.address && place.address !== "") {
-    throw new Error(`Place ${label} has an invalid address.`);
-  }
-  if (!place.district && place.district !== "") {
-    throw new Error(`Place ${label} has an invalid district.`);
-  }
-  if (!place.tabelog && place.tabelog !== "") {
-    throw new Error(`Place ${label} has an invalid tabelog value.`);
-  }
-  if (!place.subway && place.subway !== "") {
-    throw new Error(`Place ${label} has an invalid subway value.`);
-  }
-  if (!(["location", "been", "want_to_go"] as const).includes(place.status)) {
-    throw new Error(`Place ${label} has invalid status ${String(place.status)}.`);
-  }
-  if (place.loved !== null && typeof place.loved !== "boolean") {
-    throw new Error(`Place ${label} has an invalid loved value.`);
-  }
-  if (
-    !Number.isFinite(place.latitude) ||
-    place.latitude < -90 ||
-    place.latitude > 90
-  ) {
-    throw new Error(`Place ${label} has invalid latitude.`);
-  }
-  if (
-    !Number.isFinite(place.longitude) ||
-    place.longitude < -180 ||
-    place.longitude > 180
-  ) {
-    throw new Error(`Place ${label} has invalid longitude.`);
-  }
+function validatePlace(place: unknown, index: number) {
+  const errors = getPlaceFieldErrors(place);
+  if (errors.length) throw new Error(`Invalid place at row ${index + 1}: ${errors.join(" ")}`);
 }
 
-export function validatePlacesDataset(places: Place[]) {
+export function validatePlacesDataset(places: unknown): asserts places is Place[] {
   if (!Array.isArray(places)) {
     throw new Error("Places dataset must be an array.");
   }
@@ -173,7 +134,7 @@ export function writePlacesJsonAtomic(
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "EEXIST") {
-        throw new Error(
+        throw new PlacesJsonWriteConflictError(
           `Another places.json write is in progress (${lockPath}). Remove the lock only after confirming no writer is running.`,
         );
       }
@@ -187,7 +148,7 @@ export function writePlacesJsonAtomic(
       options.expectedFileHash &&
       currentHash !== options.expectedFileHash
     ) {
-      throw new Error(
+      throw new PlacesJsonWriteConflictError(
         "places.json changed after it was read. Reload the data and retry instead of overwriting newer changes.",
       );
     }

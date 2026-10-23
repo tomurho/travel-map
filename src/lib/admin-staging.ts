@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import * as xlsx from "xlsx";
 
@@ -6,10 +7,13 @@ import { getDistanceKm } from "@/lib/geo";
 import type { Place, PlaceStatus, PlaceVerifiedStatus } from "@/lib/place";
 import { findCanonicalCategory } from "@/lib/place-category";
 import { normalizePlaceCity } from "@/lib/place-city";
-import { validatePlaceVerification } from "@/lib/place-verification";
+import { isValidLatitude, isValidLongitude, validatePlaceVerification } from "@/lib/place-verification";
+import { getPlaceRecordVersion } from "@/lib/place-record-version";
+import { getPlaceFieldErrors } from "@/lib/place-validation";
 import {
   readPlacesJsonSnapshot,
   writePlacesJsonAtomic,
+  PlacesJsonWriteConflictError,
 } from "@/lib/places-json-store";
 
 export type AdminDraftStatus = PlaceStatus | "loved";
@@ -50,6 +54,7 @@ export type AdminStagedPlaceWithDuplicates = AdminStagedPlace & {
 };
 
 export interface AdminStagedPlaceInput {
+  id?: string;
   name: string;
   city: string;
   category: string;
@@ -106,14 +111,16 @@ export interface AdminProductionPlaceVerificationInput {
   verificationNotes: string;
 }
 
-export interface AdminFloatingPlaceEditInput {
-  editMode: "field-guide-inline" | "floating-inspector";
-  name: string;
+type LocalPlaceEditFields = {
+  expectedRecordVersion: string;
   category: string;
-  district: string;
   status: PlaceStatus;
   loved: boolean | null;
-}
+};
+export type AdminFloatingPlaceEditInput = LocalPlaceEditFields & (
+  | { editMode: "field-guide-inline" }
+  | { editMode: "floating-inspector"; name: string; district: string }
+);
 
 const STAGING_FILE_PATH = join(process.cwd(), "src/data/admin-staged-places.json");
 
@@ -283,8 +290,15 @@ export function deleteStagedPlace(id: string) {
   return nextPlaces;
 }
 
-export function stagePlace(input: AdminStagedPlaceInput) {
-  const currentPlaces = readStagedPlaces();
+export function planStagedPlace(
+  input: AdminStagedPlaceInput,
+  currentPlaces: AdminStagedPlace[],
+  productionPlaces: Pick<Place, "id">[] = [],
+) {
+  const errors = getStagedPlaceInputErrors(input);
+  if (errors.length) throw new Error(errors.join(" "));
+  const previous = input.id ? currentPlaces.find((place) => place.id === input.id) : undefined;
+  if (input.id && !previous) throw new Error("The staged place no longer exists. Reload the staged places before updating it.");
   const normalizedStatus = normalizeDraftStatus(input.draftStatus);
   const idBase = slugify(
     [
@@ -299,7 +313,7 @@ export function stagePlace(input: AdminStagedPlaceInput) {
   );
 
   const stagedPlace: AdminStagedPlace = {
-    id: idBase || `staged-${Date.now()}`,
+    id: previous?.id ?? `${idBase || "staged"}-${randomUUID()}`,
     name: input.name.trim(),
     city: normalizePlaceCity(input.city) || "Unknown",
     category: input.category.trim(),
@@ -319,20 +333,56 @@ export function stagePlace(input: AdminStagedPlaceInput) {
     verificationNotes: (input.verificationNotes ?? "").trim(),
     sourceLabel: input.sourceLabel.trim(),
     notes: input.notes,
-    createdAt: new Date().toISOString(),
+    createdAt: previous?.createdAt ?? new Date().toISOString(),
   };
 
+  // A retried create must not add a second copy. Different drafts get distinct IDs,
+  // even when their long or non-Latin names produce the same display slug.
+  const content = (place: AdminStagedPlace) => JSON.stringify(Object.entries(place)
+    .filter(([key]) => !["id", "createdAt"].includes(key))
+    .sort(([first], [second]) => first.localeCompare(second)));
+  const repeated = !input.id && currentPlaces.find((place) => content(place) === content(stagedPlace));
+  if (repeated) return { place: repeated, places: currentPlaces };
+  if (productionPlaces.some((place) => place.id === stagedPlace.id)) {
+    throw new Error("The staged place ID already exists in published places. Create a new draft instead of replacing the published place.");
+  }
   const nextPlaces = [
     ...currentPlaces.filter((place) => place.id !== stagedPlace.id),
     stagedPlace,
   ];
 
-  writeFileSync(STAGING_FILE_PATH, `${JSON.stringify(nextPlaces, null, 2)}\n`);
-
-  return stagedPlace;
+  return { place: stagedPlace, places: nextPlaces };
 }
 
-function stagedPlaceToPlace(place: AdminStagedPlace): Place {
+export function getStagedPlaceInputErrors(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return ["Place must be a JSON object."];
+  const value = input as Record<string, unknown>;
+  const errors: string[] = [];
+  for (const field of ["name", "city", "category", "area", "address", "tabelog", "subway", "googleMapsUrl", "verifiedStatus", "lastChecked", "verificationNotes", "sourceLabel"]) {
+    if (typeof value[field] !== "string") errors.push(`${field} must be a string.`);
+  }
+  if (value.id !== undefined && (typeof value.id !== "string" || !value.id.trim())) errors.push("id must be a non-empty string.");
+  if (typeof value.name === "string" && !value.name.trim()) errors.push("Place name is required.");
+  if (typeof value.draftStatus !== "string" || !["location", "want_to_go", "been", "loved"].includes(value.draftStatus)) errors.push("draftStatus has an invalid value.");
+  errors.push(...getPlaceFieldErrors({
+    ...value, id: undefined, status: undefined,
+    latitude: value.latitude === null ? undefined : value.latitude,
+    longitude: value.longitude === null ? undefined : value.longitude,
+  }, { partial: true }));
+  if (value.latitude === undefined || value.longitude === undefined) errors.push("Latitude and longitude are required before staging.");
+  if (!Array.isArray(value.notes) || !value.notes.every((note) => typeof note === "string")) errors.push("notes must be an array of strings.");
+  if (value.verifiedStatus === "Yes" && (typeof value.googleMapsUrl !== "string" || !value.googleMapsUrl.trim())) errors.push("Google Maps URL is required when a place is marked verified.");
+  if (value.verifiedStatus === "Yes" && (typeof value.latitude !== "number" || typeof value.longitude !== "number" || !isValidLatitude(value.latitude) || !isValidLongitude(value.longitude))) errors.push("Valid latitude and longitude are required when a place is marked verified.");
+  return errors;
+}
+
+export function stagePlace(input: AdminStagedPlaceInput) {
+  const result = planStagedPlace(input, readStagedPlaces(), readProductionPlaces());
+  writeFileSync(STAGING_FILE_PATH, `${JSON.stringify(result.places, null, 2)}\n`);
+  return result.place;
+}
+
+export function stagedPlaceToPlace(place: AdminStagedPlace): Place {
   if (place.latitude === null || place.longitude === null) {
     throw new Error(`Cannot publish ${place.name} without coordinates.`);
   }
@@ -354,14 +404,23 @@ function stagedPlaceToPlace(place: AdminStagedPlace): Place {
     verifiedStatus: place.verifiedStatus,
     lastChecked: place.lastChecked,
     verificationNotes: place.verificationNotes,
+    notes: place.notes,
   };
 }
 
-export function publishStagedPlaces({ allowDuplicates = false } = {}) {
-  const stagedPlaces = readStagedPlaces();
+export function publishStagedPlaces(
+  { allowDuplicates = false } = {},
+  io = { readStagedPlaces, readPlacesJsonSnapshot, writePlacesJsonAtomic, clearStagedPlaces },
+) {
+  const stagedPlaces = io.readStagedPlaces();
 
   if (stagedPlaces.length === 0) {
     return { publishedCount: 0, places: [] as AdminStagedPlace[] };
+  }
+
+  const incompletePlaces = stagedPlaces.filter((place) => !isValidLatitude(place.latitude) || !isValidLongitude(place.longitude));
+  if (incompletePlaces.length) {
+    return { publishedCount: 0, places: stagedPlaces, validationError: `Add valid coordinates to ${incompletePlaces.length} staged place${incompletePlaces.length === 1 ? "" : "s"} before publishing.` };
   }
 
   const verifiedPlacesMissingUrls = stagedPlaces.filter(
@@ -378,8 +437,11 @@ export function publishStagedPlaces({ allowDuplicates = false } = {}) {
     };
   }
 
-  const productionSnapshot = readPlacesJsonSnapshot();
+  const productionSnapshot = io.readPlacesJsonSnapshot();
   const currentPlaces = productionSnapshot.places;
+  if (stagedPlaces.some((stagedPlace) => currentPlaces.some((place) => place.id === stagedPlace.id))) {
+    return { publishedCount: 0, places: stagedPlaces, validationError: "A staged place ID already exists in published places. Create a new draft to avoid replacing published data." };
+  }
   const duplicatePlaces = stagedPlaces
     .map((place) => ({
       place,
@@ -411,10 +473,10 @@ export function publishStagedPlaces({ allowDuplicates = false } = {}) {
     return firstPlace.name.localeCompare(secondPlace.name);
   });
 
-  writePlacesJsonAtomic(nextPlaces, {
+  io.writePlacesJsonAtomic(nextPlaces, {
     expectedFileHash: productionSnapshot.fileHash,
   });
-  clearStagedPlaces();
+  io.clearStagedPlaces();
 
   return { publishedCount: stagedPlaces.length, places: stagedPlaces };
 }
@@ -672,89 +734,103 @@ export function readProductionPlaces() {
   return readPlacesJsonSnapshot().places;
 }
 
-function isPlaceStatus(value: unknown): value is PlaceStatus {
-  return value === "location" || value === "want_to_go" || value === "been";
+export function buildProductionPlaceFloatingEdit(
+  currentPlace: Place,
+  input: AdminFloatingPlaceEditInput,
+  categories: string[],
+) {
+  if (!input || typeof input !== "object" || !["field-guide-inline", "floating-inspector"].includes(input.editMode)) {
+    return { error: "Choose a valid local edit mode.", status: 400 } as const;
+  }
+  const errors = getPlaceFieldErrors(input, { partial: true });
+  for (const field of ["category", "status", "loved"] as const) {
+    if (input[field] === undefined) errors.push(`${field} is required.`);
+  }
+  if (input.editMode === "floating-inspector") {
+    if (typeof input.name !== "string" || !input.name.trim()) errors.push("Place name is required.");
+    if (typeof input.district !== "string") errors.push("district must be a string.");
+  } else {
+    const allowed = ["editMode", "expectedRecordVersion", "category", "status", "loved"];
+    if (Object.keys(input).some((field) => !allowed.includes(field))) errors.push("The Field Guide editor can change only category and status.");
+  }
+  if (errors.length) return { error: errors.join(" "), status: 400 } as const;
+  if (typeof input.expectedRecordVersion !== "string" || input.expectedRecordVersion !== getPlaceRecordVersion(currentPlace)) {
+    return { error: "This place changed after you opened the editor. Reload the page before saving again. Your draft has not been saved.", status: 409 } as const;
+  }
+  const requestedCategory = input.category.trim();
+  const category =
+    input.editMode === "field-guide-inline"
+      ? findCanonicalCategory(requestedCategory, categories)
+      : requestedCategory;
+
+  if (!category) {
+    return { error: "Choose an existing category.", status: 400 } as const;
+  }
+
+  if (input.loved === true && input.status !== "been") {
+    return { error: "Loved places must also have Been status.", status: 400 } as const;
+  }
+
+  const updatedPlace: Place = {
+    ...currentPlace,
+    ...(input.editMode === "floating-inspector" ? { name: input.name.trim(), district: input.district.trim() } : {}),
+    category,
+    status: input.status,
+    loved: input.loved,
+  };
+  return { place: updatedPlace };
 }
 
 export function updateProductionPlaceFloatingEdit(
   id: string,
   input: AdminFloatingPlaceEditInput,
+  io = { readPlacesJsonSnapshot, writePlacesJsonAtomic },
 ) {
-  const productionSnapshot = readPlacesJsonSnapshot();
+  const productionSnapshot = io.readPlacesJsonSnapshot();
   const currentPlaces = productionSnapshot.places;
-  const placeIndex = currentPlaces.findIndex((place) => place.id === id);
-
-  if (placeIndex === -1) {
-    return { error: "Production place was not found." };
-  }
-
-  const name = input.name.trim();
-  const requestedCategory = input.category.trim();
-  const district = input.district.trim();
-
-  if (!name) {
-    return { error: "Place name is required." };
-  }
-
-  if (!requestedCategory) {
-    return { error: "Category is required." };
-  }
-
-  const category =
-    input.editMode === "field-guide-inline"
-      ? findCanonicalCategory(
-          requestedCategory,
-          Array.from(
-            new Set(currentPlaces.map((place) => place.category.trim()).filter(Boolean)),
-          ),
-        )
-      : requestedCategory;
-
-  if (!category) {
-    return { error: "Choose an existing category." };
-  }
-
-  if (!isPlaceStatus(input.status)) {
-    return { error: "Valid status is required." };
-  }
-
-  if (typeof input.loved !== "boolean" && input.loved !== null) {
-    return { error: "Loved must be true, false, or null." };
-  }
-
-  if (input.loved === true && input.status !== "been") {
-    return { error: "Loved places must also have Been status." };
-  }
-
-  const currentPlace = currentPlaces[placeIndex];
-  if (!currentPlace) {
-    return { error: "Production place was not found." };
-  }
-
-  const updatedPlace: Place = {
-    ...currentPlace,
-    name,
-    category,
-    district,
-    status: input.status,
-    loved: input.loved,
-  };
+  const currentPlace = currentPlaces.find((place) => place.id === id);
+  if (!currentPlace) return { error: "Production place was not found.", status: 400 } as const;
+  const result = buildProductionPlaceFloatingEdit(currentPlace, input, [...new Set(currentPlaces.map((place) => place.category))]);
+  if ("error" in result) return result;
+  const updatedPlace = result.place;
   const nextPlaces = currentPlaces.map((place) =>
     place.id === id ? updatedPlace : place,
   );
 
-  writePlacesJsonAtomic(nextPlaces, {
-    expectedFileHash: productionSnapshot.fileHash,
-  });
+  try {
+    io.writePlacesJsonAtomic(nextPlaces, {
+      expectedFileHash: productionSnapshot.fileHash,
+    });
+  } catch (error) {
+    if (error instanceof PlacesJsonWriteConflictError) {
+      return { error: "Another edit changed the data while this save was in progress. Reload the page before saving again. Your draft has not been saved.", status: 409 } as const;
+    }
+    throw error;
+  }
 
-  return { place: updatedPlace, places: nextPlaces };
+  return { place: { ...updatedPlace, recordVersion: getPlaceRecordVersion(updatedPlace) }, places: nextPlaces };
+}
+
+export function getProductionPlaceVerificationInputErrors(input: unknown) {
+  const errors = getPlaceFieldErrors(input, { partial: true });
+  if (!input || typeof input !== "object" || Array.isArray(input)) return errors;
+  const value = input as Record<string, unknown>;
+  for (const field of ["googleMapsUrl", "latitude", "longitude", "verifiedStatus", "lastChecked", "verificationNotes"]) {
+    if (value[field] === undefined) errors.push(`${field} is required.`);
+  }
+  if (value.notes !== undefined && !Array.isArray(value.notes)) errors.push("notes must be an array of strings.");
+  if ("editMode" in value) errors.push("Choose a valid local edit mode.");
+  return errors;
 }
 
 export function updateProductionPlaceVerification(
   id: string,
   input: AdminProductionPlaceVerificationInput,
+  io = { readPlacesJsonSnapshot, writePlacesJsonAtomic },
 ) {
-  const productionSnapshot = readPlacesJsonSnapshot();
+  const inputErrors = getProductionPlaceVerificationInputErrors(input);
+  if (inputErrors.length) return { error: inputErrors.join(" ") };
+  const productionSnapshot = io.readPlacesJsonSnapshot();
   const currentPlaces = productionSnapshot.places;
   const placeIndex = currentPlaces.findIndex((place) => place.id === id);
 
@@ -779,7 +855,7 @@ export function updateProductionPlaceVerification(
     city: normalizePlaceCity(input.city ?? currentPlace.city),
     category: input.category?.trim() || currentPlace.category,
     status: input.status ?? currentPlace.status,
-    loved: input.loved ?? currentPlace.loved,
+    loved: input.loved === undefined ? currentPlace.loved : input.loved,
     district: input.district?.trim() || currentPlace.district,
     address: input.address?.trim() || currentPlace.address,
     googleMapsUrl: input.googleMapsUrl.trim(),
@@ -820,7 +896,7 @@ export function updateProductionPlaceVerification(
     place.id === id ? updatedPlace : place,
   );
 
-  writePlacesJsonAtomic(nextPlaces, {
+  io.writePlacesJsonAtomic(nextPlaces, {
     expectedFileHash: productionSnapshot.fileHash,
   });
 

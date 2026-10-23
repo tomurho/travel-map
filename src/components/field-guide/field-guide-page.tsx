@@ -3,10 +3,12 @@ import { isPublicPlace } from "@/lib/filtering";
 import type { Place } from "@/lib/place";
 import { normalizePlaceCity } from "@/lib/place-city";
 import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
+import { getPlaceRecordVersion } from "@/lib/place-record-version";
 
 export function toPublicPlace(place: Place): Place {
   return {
     id: place.id,
+    recordVersion: getPlaceRecordVersion(place),
     name: place.name,
     city: normalizePlaceCity(place.city),
     category: place.category,

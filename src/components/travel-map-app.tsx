@@ -42,11 +42,12 @@ type FilterOption = {
 };
 
 type InspectorDraft = {
+  recordVersion?: string;
   name: string;
   category: string;
   district: string;
   status: PlaceStatus;
-  loved: boolean;
+  loved: boolean | null;
 };
 
 type StatusBadge =
@@ -81,11 +82,12 @@ function isLocalhostHostname(hostname: string) {
 
 function getInspectorDraft(place: Place): InspectorDraft {
   return {
+    recordVersion: place.recordVersion,
     name: place.name,
     category: place.category,
     district: place.district,
     status: place.status,
-    loved: place.loved === true,
+    loved: place.loved,
   };
 }
 
@@ -708,6 +710,7 @@ export function TravelMapApp({
           },
           body: JSON.stringify({
             editMode: "floating-inspector",
+            expectedRecordVersion: inspectorDraft.recordVersion,
             name,
             category,
             district,
@@ -1199,7 +1202,7 @@ export function TravelMapApp({
 
               <label className="floating-inspector-toggle">
                 <input
-                  checked={inspectorDraft.loved}
+                  checked={inspectorDraft.loved === true}
                   onChange={(event) =>
                     updateInspectorLoved(event.target.checked)
                   }

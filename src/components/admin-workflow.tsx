@@ -91,12 +91,6 @@ type ResolveResponse = {
   warnings: string[];
 };
 
-type AdminWorkflowProps = {
-  categoryOptions: string[];
-  cityOptions: string[];
-  productionPlaces: Place[];
-};
-
 type ProductionPlaceEdit = {
   name: string;
   city: string;
@@ -447,11 +441,7 @@ function normalizeSearchValue(value: string) {
     .trim();
 }
 
-export function AdminWorkflow({
-  categoryOptions,
-  cityOptions,
-  productionPlaces: initialProductionPlaces,
-}: AdminWorkflowProps) {
+export function AdminWorkflow() {
   const capturePanelRef = useRef<HTMLDetailsElement | null>(null);
   const lastPipelineResumeRefreshAtRef = useRef(0);
   const pipelineSnapshotRequestRef = useRef<Promise<void> | null>(null);
@@ -460,7 +450,9 @@ export function AdminWorkflow({
   const [placeUrl, setPlaceUrl] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [productionPlaces, setProductionPlaces] = useState(initialProductionPlaces);
+  const [productionPlaces, setProductionPlaces] = useState<Place[]>([]);
+  const [isLoadingAdminData, setIsLoadingAdminData] = useState(false);
+  const [hasLoadedAdminData, setHasLoadedAdminData] = useState(false);
   const [productionFilter, setProductionFilter] =
     useState<AdminVerificationFilter>("all");
   const [productionSearch, setProductionSearch] = useState("");
@@ -475,13 +467,7 @@ export function AdminWorkflow({
     useState<Place | null>(null);
   const [selectedProductionPlaceId, setSelectedProductionPlaceId] = useState<
     string | null
-  >(
-    initialProductionPlaces.find((place) =>
-      ["", "No", "Review"].includes(place.verifiedStatus ?? ""),
-    )?.id ??
-      initialProductionPlaces[0]?.id ??
-      null,
-  );
+  >(null);
   const [productionEdits, setProductionEdits] = useState<
     Record<string, ProductionPlaceEdit>
   >({});
@@ -582,7 +568,7 @@ export function AdminWorkflow({
   ).length;
 
   useEffect(() => {
-    void refreshPipelineSnapshot(DEFAULT_PIPELINE_SHEET_ID);
+    void refreshAdminData(DEFAULT_PIPELINE_SHEET_ID);
     // The initial status is intentionally loaded once for the default Sheet.
     // A changed Sheet ID is refreshed explicitly to avoid requests on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -593,6 +579,7 @@ export function AdminWorkflow({
       if (document.visibilityState === "hidden") {
         return;
       }
+      if (!hasLoadedAdminData) return;
 
       const now = Date.now();
       if (now - lastPipelineResumeRefreshAtRef.current < 60_000) {
@@ -616,7 +603,7 @@ export function AdminWorkflow({
     };
     // The handlers intentionally use the latest Sheet ID and admin credential.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminPassword, pipelineSheetId]);
+  }, [adminPassword, pipelineSheetId, hasLoadedAdminData]);
   const stagedCityNames = Array.from(
     new Set(stagedPlaces.map((place) => place.city).filter(Boolean)),
   ).sort((firstCity, secondCity) => firstCity.localeCompare(secondCity));
@@ -639,6 +626,7 @@ export function AdminWorkflow({
   ).sort((firstCategory, secondCategory) =>
     firstCategory.localeCompare(secondCategory),
   );
+  const categoryOptions = productionCategoryOptions;
   const visibleProductionPlaces = productionPlaces
     .filter((place) => {
       const searchValue = normalizeSearchValue(productionSearch);
@@ -1212,6 +1200,32 @@ export function AdminWorkflow({
     }
   }
 
+  async function refreshAdminData(sheetId = pipelineSheetId.trim()) {
+    setIsLoadingAdminData(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/places", {
+        headers: authHeaders(),
+        cache: "no-store",
+      });
+      const payload = (await response.json()) as { error?: string; places?: Place[] };
+      if (!response.ok || !Array.isArray(payload.places)) {
+        throw new Error(response.status === 401
+          ? "Enter the admin password, then select Load admin data."
+          : payload.error ?? "Could not load admin data.");
+      }
+      const places = payload.places;
+      setProductionPlaces(places);
+      setSelectedProductionPlaceId((current) => current ?? places[0]?.id ?? null);
+      setHasLoadedAdminData(true);
+      await refreshPipelineSnapshot(sheetId, { force: true });
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load admin data.");
+    } finally {
+      setIsLoadingAdminData(false);
+    }
+  }
+
   function refreshPipelineSnapshot(
     sheetId = pipelineSheetId.trim(),
     options: { force?: boolean } = {},
@@ -1303,6 +1317,7 @@ export function AdminWorkflow({
             confirmWrite: true,
             decision,
             edits,
+            expectedReviewStamp: candidate.reviewStamp,
             id: candidate.id,
             rowNumber: candidate.rowNumber,
             sheetId: pipelineSheetId.trim(),
@@ -1319,6 +1334,13 @@ export function AdminWorkflow({
       };
 
       if (!response.ok) {
+        if (response.status === 409) {
+          // Clear the previous intent. A changed row must be reviewed afresh.
+          setReviewCandidates([]);
+          setPipelinePublishResult(null);
+          setPipelineResult(null);
+          await refreshPipelineSnapshot(undefined, { force: true });
+        }
         throw new Error(payload.error ?? "Could not update the Review candidate.");
       }
 
@@ -2413,13 +2435,13 @@ export function AdminWorkflow({
             </div>
             <div className="admin-pipeline-guide-actions">
               <button
-                disabled={isLoadingPipelineSnapshot}
+                disabled={isLoadingPipelineSnapshot || isLoadingAdminData}
                 onClick={() => {
-                  void refreshPipelineSnapshot(undefined, { force: true });
+                  void refreshAdminData();
                 }}
                 type="button"
               >
-                {isLoadingPipelineSnapshot ? "Checking…" : "Refresh data"}
+                {isLoadingPipelineSnapshot || isLoadingAdminData ? "Checking…" : "Refresh data"}
               </button>
               <a
                 href={`https://docs.google.com/spreadsheets/d/${pipelineSheetId.trim()}/edit`}
@@ -2870,18 +2892,28 @@ export function AdminWorkflow({
           <h1>Places admin</h1>
           <p>Capture finds, review places, and update your Field Guide.</p>
         </div>
-        <label className="admin-credential">
-          <span>Admin password</span>
-          <input className="admin-draft-input" type="password" autoComplete="off"
-            value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
+        <form className="admin-credential" onSubmit={(event) => {
+          event.preventDefault();
+          void refreshAdminData();
+        }}>
+          <label>
+            <span>Admin password</span>
+            <input className="admin-draft-input" type="password" autoComplete="off"
+              value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
+          </label>
           <small>Required when admin access is protected. Kept only for this page session.</small>
-        </label>
+          <button className="admin-pipeline-action is-primary" type="submit" disabled={isLoadingAdminData}>
+            {isLoadingAdminData ? "Loading…" : "Load admin data"}
+          </button>
+        </form>
       </section>
 
-      <section className="admin-workflow-grid" aria-label="Current admin workflows">
+      {error ? <p className="admin-error" role="alert">{error}</p> : null}
+
+      {hasLoadedAdminData ? <section className="admin-workflow-grid" aria-label="Current admin workflows">
         {screenshotIntakePanel}
         {googleSheetsPipelinePanel}
-      </section>
+      </section> : <p role="status">Load admin data to open the workflows.</p>}
     </main>
   );
 }

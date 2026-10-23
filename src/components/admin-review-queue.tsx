@@ -257,8 +257,8 @@ export function AdminReviewQueue({
               <AdminReviewCandidateCard
                 candidate={candidate}
                 categoryOptions={categoryOptions}
-                isUpdating={updatingKey === candidateKey}
-                key={candidateKey}
+                isUpdating={isLoading || updatingKey !== null}
+                key={`${candidateKey}:${candidate.reviewStamp}`}
                 onDecision={onDecision}
               />
             );

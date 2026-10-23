@@ -5,6 +5,7 @@ import {
   deleteStagedPlace,
   getStagedPlacesWithDuplicates,
   stagePlace,
+  getStagedPlaceInputErrors,
   type AdminStagedPlaceInput,
 } from "@/lib/admin-staging";
 import { isAdminAuthorized } from "@/lib/admin-auth";
@@ -22,27 +23,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Admin access required." }, { status: 401 });
   }
 
-  const input = (await request.json()) as AdminStagedPlaceInput;
-
-  if (!input.name?.trim()) {
-    return NextResponse.json({ error: "Place name is required." }, { status: 400 });
+  let input: unknown;
+  try {
+    input = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Send a valid JSON object." }, { status: 400 });
   }
-
-  if (input.latitude === null || input.longitude === null) {
-    return NextResponse.json(
-      { error: "Latitude and longitude are required before staging." },
-      { status: 400 },
-    );
+  const errors = getStagedPlaceInputErrors(input);
+  if (errors.length) return NextResponse.json({ error: errors.join(" ") }, { status: 400 });
+  let place;
+  try {
+    place = stagePlace(input as AdminStagedPlaceInput);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not stage the place." }, { status: 400 });
   }
-
-  if (input.verifiedStatus === "Yes" && !input.googleMapsUrl?.trim()) {
-    return NextResponse.json(
-      { error: "Google Maps URL is required when a place is marked verified." },
-      { status: 400 },
-    );
-  }
-
-  const place = stagePlace(input);
 
   return NextResponse.json({ place, places: getStagedPlacesWithDuplicates() });
 }

@@ -18,14 +18,19 @@ Specialties occupy one horizontal row; **More** opens the searchable full list.
 Counts and area choices come from the selected city. Empty groups are disabled.
 
 On mobile, the header stays at two rows: city/Search/Filters, then active filter
-chips and Map/List. Filters expands the controls over the map; selecting options
-updates results without collapsing the panel. **Show places**, Filters, or Escape
-closes it. Search opens the panel and focuses its input. Active chips can be
+chips and one button for the opposite view. Map shows **List**; List shows **Map**.
+Filters expands the controls over the current view. Selecting a specific category,
+such as Bakery, updates that view and closes the panel. This also works from
+**More**. Broad groups remain open so you can choose a specialty. Other refinements
+update results while the panel stays open. The footer shows the count and the
+same opposite-view action. Filters or Escape closes the panel while retaining its
+changes. Search opens the panel and focuses its input. Active chips can be
 removed individually; Reset clears every refinement. Desktop keeps its visible
 filter panel and local editing controls.
 
-Select a pin or place name to open one card with status, name, type, address, and
-**Open in Google Maps**. On mobile, **Map** and **List** preserve filters and
+Select a pin to open its map card. Select a place name in List to expand its
+details there, including its address, notes, and **Open in Google Maps** link.
+**Show on map** moves that selection to Map. On mobile, **Map** and **List** preserve filters and
 selection; desktop shows both panes. Numbered map circles zoom into clusters.
 The mobile card uses a compact **Maps ↗** action and omits the type when its exact
 specialty is already selected. Addresses remove exact repeated city/district and
@@ -34,10 +39,17 @@ addresses and Maps links are unchanged. Notes expand within the card on demand.
 The list loads in batches, and selecting a pin reveals its entry even beyond the
 first batch. On localhost, **Edit list** retains the existing inline editor.
 
+If Google Maps cannot load, **View list** keeps places and their details available.
+Result counts remain available to assistive technology while filters are open.
+Cancelling Nearby or choosing a city ignores any outstanding location response.
+Kyoto ward aliases share one area filter. **Other** contains types without an
+approved group, retaining their original specialty labels and saved data.
+
 The last city is remembered when storage is available. An explicit city in a URL
 takes priority. Nearby can switch to the city near your location; choosing a city
 manually turns Nearby off. Group, specialty, area, Loved/Want to go, search, and
-Map/List state persist in the URL. Old `category` links resolve approved aliases
+Map/List state persist in the URL. Deliberate choices add browser history entries;
+typing a search updates the current entry. Old `category` links resolve approved aliases
 and choose the corresponding group. Labels awaiting review remain unchanged.
 
 ### Kyoto type preview
@@ -133,8 +145,17 @@ reconciled. City aliases and whitespace-only differences are equivalent.
 Verification evidence stays together; sync does not guess which source is newer.
 Places absent from Published remain in the app.
 
-In Admin, enter the admin password if one is configured, then select **Preview
-Update**. Each verification conflict shows local and Published values with direct
+In Admin, enter the admin password if one is configured, then select **Load admin
+data**. The page opens without private catalog records; an authenticated request
+loads them without caching. Workflows appear after that request succeeds. On
+unprotected localhost, the initial data load can proceed automatically.
+
+Verify and Reject require the candidate version shown in the review queue. If a
+Sheet row changes, refresh the data and review it again. Local editors also check
+the original record version. A stale save leaves the newer data intact and asks
+for a page reload. Category-only edits preserve the original unrated value.
+
+Select **Preview Update** to inspect Published changes. Each verification conflict shows local and Published values with direct
 Sheet and Maps links. If the local record is correct, fix Published and preview
 again. If Published is correct, select **Review correction**, check the venue and
 pin, enter a verification note, and explicitly confirm **Verify and save
@@ -155,3 +176,9 @@ Sheets transaction. Concurrent external writers can still race after the final
 read. A failed publish may have partially completed, so inspect a fresh preview
 before retrying. JSON writes retain their atomic replacement, stale-writer check,
 and timestamped backups under `.cache/places-backups`.
+
+## October 22 audit fixes
+
+The [implementation record](docs/audits/2026-10-22-audit-fixes.md) maps the backend
+and UI findings to their fixes, regression coverage, browser evidence, and release
+checks. It links the original audit for context. No catalog migration is needed.

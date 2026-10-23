@@ -2,10 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { findCanonicalCategory } from "@/lib/place-category";
-import type { Place, PlaceStatus } from "@/lib/place";
+import type { Place } from "@/lib/place";
+import { getEditorialState, getStoredEditorialStatus, type EditorialState } from "@/lib/field-guide-editor-state";
 import styles from "./field-guide.module.css";
-
-type EditorialState = "saved" | "want_to_go" | "been" | "loved";
 
 const statusOptions: Array<{ label: string; value: EditorialState }> = [
   { label: "Saved", value: "saved" },
@@ -13,23 +12,6 @@ const statusOptions: Array<{ label: string; value: EditorialState }> = [
   { label: "Been", value: "been" },
   { label: "Loved", value: "loved" },
 ];
-
-function getEditorialState(place: Place): EditorialState {
-  if (place.loved) return "loved";
-  if (place.status === "want_to_go") return "want_to_go";
-  if (place.status === "been") return "been";
-  return "saved";
-}
-
-function getStoredStatus(state: EditorialState): {
-  loved: boolean | null;
-  status: PlaceStatus;
-} {
-  if (state === "loved") return { loved: true, status: "been" };
-  if (state === "been") return { loved: false, status: "been" };
-  if (state === "want_to_go") return { loved: null, status: "want_to_go" };
-  return { loved: null, status: "location" };
-}
 
 export function FieldGuidePlaceEditor({
   adminPassword,
@@ -46,10 +28,12 @@ export function FieldGuidePlaceEditor({
   onSaved: (place: Place) => void;
   place: Place;
 }) {
+  const [originalPlace, setOriginalPlace] = useState(place);
   const [category, setCategory] = useState(place.category);
   const [editorialState, setEditorialState] = useState(() =>
     getEditorialState(place),
   );
+  const [statusChanged, setStatusChanged] = useState(false);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -71,7 +55,7 @@ export function FieldGuidePlaceEditor({
     setIsSaving(true);
 
     try {
-      const storedStatus = getStoredStatus(editorialState);
+      const storedStatus = getStoredEditorialStatus(editorialState, originalPlace, statusChanged);
       const response = await fetch(
         `/api/admin/places/${encodeURIComponent(place.id)}`,
         {
@@ -82,9 +66,8 @@ export function FieldGuidePlaceEditor({
           },
           body: JSON.stringify({
             editMode: "field-guide-inline",
-            name: place.name,
+            expectedRecordVersion: originalPlace.recordVersion,
             category: canonicalCategory,
-            district: place.district,
             ...storedStatus,
           }),
         },
@@ -100,6 +83,8 @@ export function FieldGuidePlaceEditor({
         throw new Error(payload.error ?? "Could not save this place.");
       }
 
+      setOriginalPlace(payload.place);
+      setStatusChanged(false);
       onSaved(payload.place);
     } catch (saveError) {
       setError(
@@ -120,7 +105,7 @@ export function FieldGuidePlaceEditor({
               <input
                 checked={editorialState === option.value}
                 name={`status-${place.id}`}
-                onChange={() => setEditorialState(option.value)}
+                onChange={() => { setEditorialState(option.value); setStatusChanged(true); }}
                 type="radio"
                 value={option.value}
               />

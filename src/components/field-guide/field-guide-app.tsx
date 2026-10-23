@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type CityCenter, MapView } from "@/components/map-view";
 import { toggleFieldGuideLoved, toggleFieldGuideWantToGo } from "@/lib/field-guide";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
 import {
-  buildExplorerQuery, filterExplorerPlaces, getExplorerGroup,
+  buildExplorerQuery, filterExplorerPlaces, getExplorerAreas, getExplorerGroup,
   getExplorerSpecialties, matchesExplorerGroup, explorerGroups, readExplorerFilters, specialtyLabel,
   type ExplorerFilters, type ExplorerGroup,
 } from "@/lib/field-guide-explorer";
@@ -44,7 +44,7 @@ function getCityCenters(places: Place[]): CityCenter[] {
 
 function ExplorerSheet({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = dialogRef.current!;
     const previousFocus = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
@@ -91,6 +91,8 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
   }), [publicPlaces, queryString, previewCity, rememberedCity]);
   const cityPlaces = useMemo(() => publicPlaces.filter((place) => normalizePlaceCity(place.city) === filters.city), [publicPlaces, filters.city]);
   const view = searchParams.get("view") === "list" ? "list" : "map";
+  const oppositeView = view === "map" ? "list" : "map";
+  const oppositeViewLabel = oppositeView === "map" ? "Map" : "List";
   const [sheet, setSheet] = useState<"groups" | "specialties" | null>(null);
   const [specialtyQuery, setSpecialtyQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -99,6 +101,7 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
   const [locationStatus, setLocationStatus] = useState<"idle" | "locating" | "found" | "error">("idle");
   const [locationMessage, setLocationMessage] = useState("");
   const [requestLocationNonce, setRequestLocationNonce] = useState(0);
+  const [cancelLocationNonce, setCancelLocationNonce] = useState(0);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const filterToggleRef = useRef<HTMLButtonElement>(null);
@@ -107,13 +110,15 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
   const stripRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLElement>(null);
+  const resultsRef = useRef<HTMLElement>(null);
+  const previousCityRef = useRef(filters.city);
 
   const group = getExplorerGroup(filters.group);
   const matches = useMemo(() => filterExplorerPlaces(publicPlaces, filters, { nearbyActive, userLocation: location }), [publicPlaces, filters, nearbyActive, location]);
   const specialties = useMemo(() => getExplorerSpecialties(publicPlaces, filters), [publicPlaces, filters]);
   const totalInGroup = useMemo(() => filterExplorerPlaces(publicPlaces, { ...filters, category: "all" }).length, [publicPlaces, filters]);
   const groupCounts = useMemo(() => new Map(explorerGroups.map((option) => [option.id, cityPlaces.filter((place) => matchesExplorerGroup(place, option.id)).length])), [cityPlaces]);
-  const areas = useMemo(() => [...new Set(cityPlaces.filter((place) => matchesExplorerGroup(place, filters.group)).map((place) => place.district).filter(Boolean))].sort(), [cityPlaces, filters.group]);
+  const areas = useMemo(() => getExplorerAreas(publicPlaces, filters), [publicPlaces, filters]);
   const selectedPlace = matches.find((place) => place.id === selectedId) ?? null;
   const cityCenters = useMemo(() => getCityCenters(publicPlaces), [publicPlaces]);
   const hasRefinements = filters.category !== "all" || filters.area !== "all" || filters.status !== "all" || filters.lovedOnly || !!filters.query;
@@ -131,21 +136,22 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
     else { focusSearchOnOpen.current = true; setFiltersExpanded(true); }
   }
   function resetFilters() {
-    setNearbyActive(false);
-    setLocationMessage("");
+    cancelNearby();
     updateFilters({ ...filters, group: "all", category: "all", area: "all", query: "", status: "all", lovedOnly: false });
   }
 
-  function navigate(next: ExplorerFilters, nextView: "map" | "list" = view) {
-    window.history.replaceState(null, "", `${pathname}?${buildExplorerQuery(next, nextView, !previewCity)}`);
+  function navigate(next: ExplorerFilters, nextView: "map" | "list" = view, history: "push" | "replace" = "push") {
+    const url = `${pathname}?${buildExplorerQuery(next, nextView, !previewCity)}`;
+    if (url === `${window.location.pathname}${window.location.search}`) return;
+    if (history === "replace") window.history.replaceState(null, "", url);
+    else window.history.pushState(null, "", url);
   }
-  function updateFilters(next: ExplorerFilters) {
-    setSelectedId(null);
+  function updateFilters(next: ExplorerFilters, history: "push" | "replace" = "push") {
     setEditingPlaceId(null);
-    navigate(next);
+    navigate(next, view, history);
   }
   function changeCity(city: string, fromNearby = false) {
-    if (!fromNearby) { setNearbyActive(false); setLocationMessage(""); }
+    if (!fromNearby) cancelNearby();
     updateFilters({ ...filters, city, group: "all", category: "all", area: "all", query: "" });
     setSheet(null);
   }
@@ -160,23 +166,48 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
   function selectSpecialty(category: string) {
     updateFilters({ ...filters, category });
     setSheet(null);
+    if (isMobile) {
+      setFiltersExpanded(false);
+      focusView(view);
+    }
   }
   function clearFilters() {
     updateFilters({ ...filters, group: groupCounts.get(filters.group) ? filters.group : "all", category: "all", area: "all", query: "", status: "all", lovedOnly: false });
   }
   function openSpecialties() { setSpecialtyQuery(""); setSheet("specialties"); }
+  function cancelNearby() {
+    setCancelLocationNonce((current) => current + 1);
+    setNearbyActive(false);
+    setLocationStatus("idle");
+    setLocationMessage("");
+  }
   function toggleNearby() {
-    if (nearbyActive) { setNearbyActive(false); setLocationMessage(""); return; }
+    if (nearbyActive) { cancelNearby(); return; }
     setNearbyActive(true);
     setRequestLocationNonce((current) => current + 1);
   }
   function selectFromList(id: string) {
-    selectPlace(id);
-    navigate(filters, "map");
-    requestAnimationFrame(() => mapRef.current?.focus({ preventScroll: true }));
+    selectPlace(selectedId === id ? null : id);
+  }
+  function showView(nextView: "map" | "list") {
+    setFiltersExpanded(false);
+    navigate(filters, nextView);
+    focusView(nextView);
+  }
+  function focusView(nextView: "map" | "list") {
+    requestAnimationFrame(() => (nextView === "map" ? mapRef : resultsRef).current?.focus({ preventScroll: true }));
+  }
+  function closeListDetails(id: string) {
+    setSelectedId(null);
+    const card = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-place-id]") ?? []).find((element) => element.dataset.placeId === id);
+    card?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   }
 
   useEffect(() => { setEditablePlaces(places); }, [places]);
+  useEffect(() => {
+    if (previousCityRef.current !== filters.city && locationStatus === "locating") cancelNearby();
+    previousCityRef.current = filters.city;
+  }, [filters.city]);
   useEffect(() => {
     const query = window.matchMedia("(max-width: 900px)");
     const update = () => setIsMobile(query.matches);
@@ -203,9 +234,14 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
   }, [filters.city, hasRestoredCity, previewCity]);
   useEffect(() => {
     setVisibleCount(resultBatchSize);
-    setSelectedId(null);
     setEditingPlaceId(null);
   }, [filterKey]);
+  useEffect(() => {
+    if (!selectedId) return;
+    const index = matches.findIndex((place) => place.id === selectedId);
+    if (index < 0) setSelectedId(null);
+    else setVisibleCount((current) => Math.max(current, index + 1));
+  }, [matches, selectedId]);
   const matchingSpecialties = specialties.filter((specialty) => normalizePlaceSearch([
     specialty.label, ...getPlaceTypeAliases(specialty.category),
   ].join(" ")).includes(normalizePlaceSearch(specialtyQuery.trim())));
@@ -226,10 +262,9 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
   return <main className={`${base.page} ${styles.preview}`} onKeyDown={(event) => {
     if (event.key === "Escape" && isMobile && filtersExpanded && !sheet && !event.defaultPrevented) { event.preventDefault(); closeFilters(); }
   }}>
-    <a className={base.skipLink} href="#field-guide-results" onClick={() => {
-      setFiltersExpanded(false);
-      navigate(filters, "list");
-      requestAnimationFrame(() => document.getElementById("field-guide-results")?.focus({ preventScroll: true }));
+    <a className={base.skipLink} href="#field-guide-results" onClick={(event) => {
+      event.preventDefault();
+      showView("list");
     }}>Skip to places</a>
     <header className={styles.header}>
       <Link href={previewCity ? `/?city=${encodeURIComponent(previewCity)}` : "/"} className={styles.brand} aria-label="Field Guide home"><span>FG</span><strong>Field Guide</strong></Link>
@@ -248,12 +283,13 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
         </button>
       </div>
     </header>
+    <p className={base.srOnly} role="status" aria-live="polite" aria-atomic="true">{matches.length} {matches.length === 1 ? "place" : "places"}{nearbyActive && location ? " · nearest first" : ""}</p>
     {locationMessage ? <p className={`${styles.notice} ${styles.locationNotice}`} role="status">{locationMessage}</p> : null}
     <div className={styles.workspace} data-view={view} data-filters-expanded={filtersExpanded}>
       <section id="explorer-filters" className={styles.filters} aria-label="Find a place">
-        <label className={styles.search}><span aria-hidden="true">⌕</span><input ref={searchRef} aria-label="Search places, food, or areas" type="search" placeholder="Search places, food, or areas" value={filters.query} onChange={(event) => updateFilters({ ...filters, query: event.target.value })} /></label>
+        <label className={styles.search}><span aria-hidden="true">⌕</span><input ref={searchRef} aria-label="Search places, food, or areas" type="search" placeholder="Search places, food, or areas" value={filters.query} onChange={(event) => updateFilters({ ...filters, query: event.target.value }, "replace")} /></label>
         <div className={styles.primary}>
-          <button type="button" aria-pressed={nearbyActive} disabled={locationStatus === "locating"} onClick={toggleNearby}>{locationStatus === "locating" ? "Locating…" : "Nearby"}</button>
+          <button type="button" aria-pressed={nearbyActive} aria-label={locationStatus === "locating" ? "Cancel Nearby location request" : undefined} onClick={toggleNearby}>{locationStatus === "locating" ? "Locating… ×" : "Nearby"}</button>
           <button type="button" aria-pressed={filters.lovedOnly} onClick={() => updateFilters({ ...filters, ...toggleFieldGuideLoved(filters) })}>♡ Loved</button>
           <button type="button" aria-pressed={filters.status === "want_to_go"} onClick={() => updateFilters({ ...filters, ...toggleFieldGuideWantToGo(filters) })}>Want to go</button>
         </div>
@@ -270,13 +306,13 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
         </div>
         <div className={styles.filterFooter}>
           <button type="button" onClick={resetFilters}>Reset</button>
-          <button type="button" onClick={closeFilters}>Show {matches.length} {matches.length === 1 ? "place" : "places"}</button>
+          <span>{matches.length} {matches.length === 1 ? "place" : "places"}</span>
+          <div role="group" aria-label="Switch view"><button type="button" onClick={() => showView(oppositeView)}>{oppositeViewLabel}</button></div>
         </div>
       </section>
       <div className={styles.toolbar}>
-        <span className={styles.resultCount} role="status" aria-live="polite">{matches.length} {matches.length === 1 ? "place" : "places"}{nearbyActive && location ? " · nearest first" : ""}</span>
+        <span className={styles.resultCount}>{matches.length} {matches.length === 1 ? "place" : "places"}{nearbyActive && location ? " · nearest first" : ""}</span>
         <div className={styles.activeFilters} role="group" aria-label="Active filters">
-          <span className={base.srOnly} role="status" aria-live="polite">{matches.length} {matches.length === 1 ? "place" : "places"}</span>
           <button type="button" data-active={hasCategory} aria-label={hasCategory ? `Clear ${categoryLabel} category filter` : `All categories, ${matches.length} places. Open filters`} onClick={() => hasCategory ? updateFilters({ ...filters, group: "all", category: "all" }) : setFiltersExpanded(true)}>
             {categoryLabel} · {matches.length}{hasCategory ? " ×" : ""}
           </button>
@@ -288,13 +324,13 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
         </div>
         {hasRefinements ? <button className={styles.clear} type="button" onClick={clearFilters}>Clear</button> : null}
         <div className={styles.viewSwitch} role="group" aria-label="Browse places">
-          <button type="button" aria-pressed={view === "map"} onClick={() => navigate(filters, "map")}>Map</button>
-          <button type="button" aria-pressed={view === "list"} onClick={() => navigate(filters, "list")}>List</button>
+          <button type="button" onClick={() => showView(oppositeView)}>{oppositeViewLabel}</button>
         </div>
       </div>
       <section ref={mapRef} tabIndex={-1} className={styles.map} inert={isMobile && filtersExpanded} aria-label={`Map of ${filters.city}`}>
         <MapView places={matches} cityCenters={cityCenters} mapStyles={fieldGuideMapStyles} viewportCity={filters.city} followUserLocation={!previewCity && nearbyActive}
           selectedPlaceId={selectedPlace?.id ?? null} openPlaceId={selectedPlace?.id ?? null} requestLocationNonce={requestLocationNonce}
+          cancelLocationNonce={cancelLocationNonce} onViewList={() => showView("list")}
           onSelectPlace={selectPlace} onClosePlace={() => setSelectedId(null)} onNearbyCityDetected={(city) => { if (!previewCity && cities.includes(city) && city !== filters.city) changeCity(city, true); }}
           onUserLocationFound={(point) => { setLocation(point); setNearbyActive(true); }} onLocationStatusChange={(status, message) => { setLocationStatus(status); setLocationMessage(status === "error" ? message : ""); if (status === "error") setNearbyActive(false); }}
           showLocationMessage={false} showPlaceDetails={false} clusterMarkers />
@@ -308,7 +344,7 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
           />
         </div> : <div className={styles.legend}><span><i style={{ background: "#ef2b68" }} />Loved</span><span><i style={{ background: "#f59e0b" }} />Want to go</span><span><i style={{ background: "#48677f" }} />Been</span><span><i style={{ background: "#6f899e" }} />Saved</span></div>}
       </section>
-      <section className={styles.results} id="field-guide-results" tabIndex={-1} inert={isMobile && filtersExpanded} aria-label={`${filters.city} places`}>
+      <section ref={resultsRef} className={styles.results} id="field-guide-results" tabIndex={-1} inert={isMobile && filtersExpanded} aria-label={`${filters.city} places`}>
         {isLocalhost && !previewCity ? <div className={styles.editToolbar}>
           <span>{isEditMode ? "Editing" : ""}</span>
           <button type="button" aria-pressed={isEditMode} onClick={() => { setIsEditMode((current) => !current); setEditingPlaceId(null); setEditMessage(""); }}>{isEditMode ? "Done" : "Edit list"}</button>
@@ -318,6 +354,7 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
           {matches.slice(0, visibleCount).map((place) => <FieldGuidePlaceCard key={place.id} place={place}
             isSelected={place.id === selectedId || place.id === editingPlaceId}
             onSelect={() => selectFromList(place.id)} distanceKm={location ? getDistanceKm(location, place) : null}
+            details={selectedId === place.id && editingPlaceId !== place.id ? <div className={styles.listDetails}><FieldGuidePlaceDetail place={place} hideCategory={filters.category === place.category} distanceKm={location ? getDistanceKm(location, place) : null} onClose={() => closeListDetails(place.id)} onShowMap={() => showView("map")} /></div> : undefined}
             isEditable={isEditMode && (editingPlaceId === null || editingPlaceId === place.id)}
             isEditing={editingPlaceId === place.id}
             onEdit={() => { setEditingPlaceId((current) => current === place.id ? null : place.id); setEditMessage(""); }}

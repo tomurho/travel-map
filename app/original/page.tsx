@@ -7,6 +7,7 @@ import type {
   PlaceStatus,
 } from "@/lib/place";
 import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
+import { getPlaceRecordVersion } from "@/lib/place-record-version";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ function readLoved(value: string | undefined): LovedFilter {
 function toPublicPlace(place: Place): Place {
   return {
     id: place.id,
+    recordVersion: getPlaceRecordVersion(place),
     name: place.name,
     city: place.city,
     category: place.category,

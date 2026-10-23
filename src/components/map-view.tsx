@@ -13,6 +13,8 @@ import {
 } from "@react-google-maps/api";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
 import type { Place } from "@/lib/place";
+import { createLocationRequestGate } from "@/lib/location-request";
+import { subscribeToGoogleMapsAuthFailure } from "@/lib/google-maps-auth";
 
 type MapViewProps = {
   places: Place[];
@@ -21,6 +23,8 @@ type MapViewProps = {
   selectedPlaceId: string | null;
   openPlaceId: string | null;
   requestLocationNonce: number;
+  cancelLocationNonce?: number;
+  onViewList?: () => void;
   onSelectPlace: (placeId: string | null) => void;
   onClosePlace: () => void;
   onNearbyCityDetected: (city: string) => void;
@@ -228,6 +232,8 @@ export function MapView({
   selectedPlaceId,
   openPlaceId,
   requestLocationNonce,
+  cancelLocationNonce = 0,
+  onViewList,
   onSelectPlace,
   onClosePlace,
   onNearbyCityDetected,
@@ -239,6 +245,9 @@ export function MapView({
   viewportCity = places[0]?.city ?? "",
   followUserLocation = true,
 }: MapViewProps) {
+  const locationRequests = useRef(createLocationRequestGate());
+  const cancellationRef = useRef(cancelLocationNonce);
+  cancellationRef.current = cancelLocationNonce;
   const locationCityRef = useRef<string | null>(null);
   const locationZoomRef = useRef(13);
   const lastFramedLocationRef = useRef<google.maps.LatLngLiteral | null>(null);
@@ -251,6 +260,8 @@ export function MapView({
     "idle" | "locating" | "found" | "error"
   >("idle");
   const [locationMessage, setLocationMessage] = useState("");
+  const [authenticationFailed, setAuthenticationFailed] = useState(false);
+  useEffect(() => subscribeToGoogleMapsAuthFailure(window, () => setAuthenticationFailed(true)), []);
   const { isLoaded, loadError } = useJsApiLoader({
     id: "travel-map-google-maps",
     googleMapsApiKey,
@@ -331,11 +342,13 @@ export function MapView({
   }, []);
 
   useEffect(() => {
-    if (requestLocationNonce === 0 || locationStatus === "locating") {
-      return;
-    }
-
-    handleUseMyLocation();
+    locationRequests.current.cancel();
+    setLocationStatus("idle");
+    setLocationMessage("");
+  }, [cancelLocationNonce]);
+  useEffect(() => () => locationRequests.current.cancel(), []);
+  useEffect(() => {
+    if (requestLocationNonce !== 0) handleUseMyLocation();
   }, [requestLocationNonce]);
 
   function findNearbyCity(position: google.maps.LatLngLiteral) {
@@ -368,6 +381,9 @@ export function MapView({
   }
 
   function handleUseMyLocation() {
+    const isLatestRequest = locationRequests.current.begin();
+    const cancellation = cancellationRef.current;
+    const isCurrentRequest = () => isLatestRequest() && cancellation === cancellationRef.current;
     if (!navigator.geolocation) {
       setLocationStatus("error");
       setLocationMessage("Location is not available in this browser.");
@@ -384,6 +400,7 @@ export function MapView({
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!isCurrentRequest()) return;
         const nextLocation = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
@@ -411,6 +428,7 @@ export function MapView({
         }
       },
       (error) => {
+        if (!isCurrentRequest()) return;
         const nextLocationMessage =
           error.code === error.PERMISSION_DENIED
             ? "Location permission was denied."
@@ -427,20 +445,12 @@ export function MapView({
     );
   }
 
-  if (!googleMapsApiKey) {
+  if (!googleMapsApiKey || loadError || authenticationFailed) {
     return (
       <div className="map-status map-status-static">
-        <strong>Google Maps API key missing</strong>
-        <p>Add `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` in `.env.local` to render the map.</p>
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="map-status map-status-static">
-        <strong>Google Maps could not load</strong>
-        <p>Check the API key, enabled APIs, billing, and allowed referrers.</p>
+        <strong>The map could not load.</strong>
+        <p>You can still browse your saved places in List.</p>
+        {onViewList ? <button type="button" onClick={onViewList}>View list</button> : null}
       </div>
     );
   }

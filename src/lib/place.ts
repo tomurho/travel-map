@@ -48,6 +48,8 @@ export type CoordinateConfidence = "high" | "medium" | "low";
 
 export interface Place {
   id: string;
+  /** Server-generated edit version. This value is not stored in the catalog. */
+  recordVersion?: string;
   name: string;
   city: string;
   category: string;

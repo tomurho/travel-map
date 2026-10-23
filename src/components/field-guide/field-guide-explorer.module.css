@@ -69,10 +69,15 @@
 .map { grid-area: map; position: relative; min-width: 0; min-height: 0; background: #ece7df; border-left: 1px solid var(--fg-line); }
 .map > div:first-child { height: 100%; }
 .map :global(.map-location-control) { display: none; }
+.map :global(.map-status) button { min-height: 44px; border: 1px solid var(--fg-line); border-radius: 8px; padding: 8px 14px; background: var(--fg-paper); cursor: pointer; }
 .results { grid-area: results; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .editToolbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid var(--fg-line); font-size: 13px; }
 .editToolbar button { min-height: 44px; min-width: 60px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 .list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: 0 10px 12px; }
+.listDetails { padding: 0 10px 14px; }
+.listDetails > aside { position: relative; inset: auto; width: 100%; max-height: none; overflow: visible; border: 0; border-top: 1px solid var(--fg-line); border-radius: 0; padding: 12px 0 0; box-shadow: none; background: transparent; }
+.listDetails > aside h2 { font-size: 18px; }
+.listDetails > aside button { cursor: pointer; }
 .selected { position: absolute; bottom: 30px; left: 12px; right: 12px; margin-inline: auto; max-width: 430px; max-height: calc(100% - 52px); overflow-y: auto; overscroll-behavior: contain; padding: 14px; border: 1px solid var(--fg-line); border-radius: 12px; background: var(--fg-paper); box-shadow: 0 3px 16px #24232122; }
 .selected > aside { position: static; width: 100%; max-height: none; overflow: visible; gap: 10px; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 .selected > aside h2 { font-size: 18px; }
@@ -137,10 +142,12 @@
   .workspace[data-filters-expanded="true"] .filters { display: grid; position: absolute; z-index: 20; inset: 0 0 auto; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 12px; border-bottom: 1px solid var(--fg-line); border-radius: 0 0 14px 14px; background: var(--fg-paper); box-shadow: 0 6px 12px #24232118; }
   .workspace[data-filters-expanded="true"] .toolbar { visibility: hidden; }
   .workspace[data-filters-expanded="true"] .selected { display: none; }
-  .filterFooter { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; bottom: -12px; padding: 8px 0; background: var(--fg-paper); }
+  .filterFooter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; position: sticky; bottom: -12px; padding: 8px 0; background: var(--fg-paper); }
+  .filterFooter > span { margin-left: auto; font-size: 13px; }
+  .filterFooter > div { display: flex; gap: 6px; }
   .filterFooter button { min-height: 44px; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; }
-  .filterFooter button:first-child { text-decoration: underline; text-underline-offset: 3px; }
-  .filterFooter button:last-child { background: var(--fg-coral); color: white; }
+  .filterFooter > button { text-decoration: underline; text-underline-offset: 3px; }
+  .filterFooter > div button { min-width: 52px; background: var(--fg-coral); color: white; }
   .toolbar { border-top: 0; padding-top: 8px; padding-bottom: 8px; min-height: 60px; }
   .toolbar .resultCount, .toolbar .clear { display: none; }
   .activeFilters { display: flex; flex: 1; min-width: 0; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 2px; margin: -2px; }

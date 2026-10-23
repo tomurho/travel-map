@@ -20,6 +20,7 @@ function getStatusLabel(place: Place) {
 export function FieldGuidePlaceCard({
   distanceKm,
   editor,
+  details,
   isEditable,
   isEditing,
   isSelected,
@@ -29,6 +30,7 @@ export function FieldGuidePlaceCard({
 }: {
   distanceKm: number | null;
   editor?: ReactNode;
+  details?: ReactNode;
   isEditable?: boolean;
   isEditing?: boolean;
   isSelected: boolean;
@@ -45,8 +47,8 @@ export function FieldGuidePlaceCard({
       <div className={`${styles.placeCopy}${isEditable && !isEditing ? ` ${styles.placeCopyEditable}` : ""}`}>
         <div className={styles.placeTitleRow}>
           <button
-            aria-label={`Show ${place.name} on map`}
-            aria-pressed={isSelected}
+            aria-label={`${details ? "Hide" : "Show"} details for ${place.name}`}
+            aria-expanded={Boolean(details)}
             className={styles.placeNameLink}
             onClick={onSelect}
             type="button"
@@ -78,6 +80,7 @@ export function FieldGuidePlaceCard({
         ) : null}
       </div>
       {editor}
+      {details}
     </article>
   );
 }
@@ -87,11 +90,13 @@ export function FieldGuidePlaceDetail({
   onClose,
   place,
   hideCategory = false,
+  onShowMap,
 }: {
   distanceKm: number | null;
   onClose: () => void;
   place: Place;
   hideCategory?: boolean;
+  onShowMap?: () => void;
 }) {
   const notes = getPublicNotes(place);
 
@@ -126,6 +131,7 @@ export function FieldGuidePlaceDetail({
           >
             ×
           </button>
+          {onShowMap ? <button className={styles.mapsHandoff} type="button" onClick={onShowMap}>Show on map</button> : null}
           <a
             className={styles.mapsHandoff}
             href={getGoogleMapsHandoffUrl(place)}
