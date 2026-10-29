@@ -985,25 +985,6 @@
     "notes": []
   },
   {
-    "id": "place_kaohsiung_fuhi",
-    "name": "FUJI按摩椅 - 夢時代百貨店",
-    "city": "Kaohsiung",
-    "category": "Shop",
-    "status": "location",
-    "loved": null,
-    "district": "",
-    "address": "806, Taiwan, Kaohsiung City, Cianjhen District, Xingbang Village, Zhonghua 5th Rd, 789號地下2樓",
-    "latitude": 22.5947253,
-    "longitude": 120.3064171,
-    "tabelog": "",
-    "subway": "",
-    "googleMapsUrl": "https://maps.google.com/?cid=6058380249783795001&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
-    "googlePlaceId": "ChIJhY6ZinIDbjQROf2aDr2wE1Q",
-    "verifiedStatus": "Yes",
-    "lastChecked": "2026-09-29T11:14:01.549Z",
-    "notes": []
-  },
-  {
     "id": "place_kaohsiung_jenshin_coffee",
     "name": "Jenshin Coffee",
     "city": "Kaohsiung",
@@ -1115,6 +1096,25 @@
     "googlePlaceId": "ChIJDxu8RzUDbjQRfvuyE6oY56M",
     "verifiedStatus": "Yes",
     "lastChecked": "2026-09-29T11:14:01.549Z",
+    "notes": []
+  },
+  {
+    "id": "place_kaohsiung_fuhi_coffee_roasters",
+    "name": "福海咖啡FUHI Coffee Roasters",
+    "city": "Kaohsiung",
+    "category": "Café",
+    "status": "want_to_go",
+    "loved": null,
+    "district": "",
+    "address": "No. 15-1號, Lane 89, Fuxinger Rd, Lingya District, Kaohsiung City, Taiwan 802",
+    "latitude": 22.6218001,
+    "longitude": 120.3090193,
+    "tabelog": "",
+    "subway": "",
+    "googleMapsUrl": "https://maps.google.com/?cid=6596762438481356096&g_mp=Cidnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLlNlYXJjaFRleHQQAhgEIAA",
+    "googlePlaceId": "ChIJCW4APQAFbjQRQCVSlXxojFs",
+    "verifiedStatus": "Yes",
+    "lastChecked": "2026-10-29T10:31:44.639Z",
     "notes": []
   },
   {
