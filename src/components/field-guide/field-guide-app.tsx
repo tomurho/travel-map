@@ -53,7 +53,7 @@ function ExplorerSheet({ title, children, onClose }: { title: string; children: 
   </dialog>;
 }
 
-export function FieldGuideApp({ places, previewCity }: { places: Place[]; previewCity?: string }) {
+export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: { places: Place[]; previewCity?: string; sharedCatalogue?: boolean }) {
   const [editablePlaces, setEditablePlaces] = useState(places);
   const [rememberedCity, setRememberedCity] = useState<string | null>(null);
   const [hasRestoredCity, setHasRestoredCity] = useState(false);
@@ -201,6 +201,36 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
   }, [selectedPlace?.id, view]);
   useEffect(() => { setEditablePlaces(places); }, [places]);
   useEffect(() => {
+    if (!sharedCatalogue) return;
+    let stopped = false;
+    let pending = false;
+    const refresh = async () => {
+      if (document.visibilityState === "hidden" || pending) return;
+      pending = true;
+      try {
+        const response = await fetch("/api/catalogue", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!stopped && Array.isArray(payload.places))
+          setEditablePlaces(payload.places);
+      } catch {
+        /* Retain the last published map during a transient connection failure. */
+      } finally {
+        pending = false;
+      }
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      stopped = true;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [sharedCatalogue]);
+  useEffect(() => {
     if (previousCityRef.current !== filters.city && locationStatus === "locating") cancelNearby();
     previousCityRef.current = filters.city;
   }, [filters.city]);
@@ -342,7 +372,7 @@ export function FieldGuideApp({ places, previewCity }: { places: Place[]; previe
         </div> : <div className={styles.legend}><span><i style={{ background: "#ef2b68" }} />Loved</span><span><i style={{ background: "#f59e0b" }} />Want to go</span><span><i style={{ background: "#48677f" }} />Been</span><span><i style={{ background: "#6f899e" }} />Saved</span></div>}
       </section>
       <section ref={resultsRef} className={styles.results} id="field-guide-results" tabIndex={-1} inert={isMobile && filtersExpanded} aria-label={`${filters.city} places`}>
-        {isLocalhost && !previewCity && !isMobile ? <div className={styles.editToolbar}>
+        {isLocalhost && !sharedCatalogue && !previewCity && !isMobile ? <div className={styles.editToolbar}>
           <span>{isEditMode ? "Editing" : ""}</span>
           <button type="button" aria-pressed={isEditMode} onClick={() => { setIsEditMode((current) => !current); setEditingPlaceId(null); setEditMessage(""); }}>{isEditMode ? "Done" : "Edit list"}</button>
         </div> : null}

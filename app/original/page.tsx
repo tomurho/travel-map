@@ -6,7 +6,7 @@ import type {
   PlaceFilterState,
   PlaceStatus,
 } from "@/lib/place";
-import { readPlacesJsonSnapshot } from "@/lib/places-json-store";
+import { readPublicPlaces } from "@/lib/public-catalogue";
 import { toPublicPlace } from "@/lib/public-place";
 
 export const dynamic = "force-dynamic";
@@ -28,16 +28,14 @@ function readStatus(value: string | undefined): PlaceStatus | "all" {
 }
 
 function readLoved(value: string | undefined): LovedFilter {
-  return value === "loved" || value === "unrated"
-    ? value
-    : "all";
+  return value === "loved" || value === "unrated" ? value : "all";
 }
 
 export default async function OriginalPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const status = readStatus(readSearchParam(params.status));
   const loved = readLoved(readSearchParam(params.loved));
-  const places = readPlacesJsonSnapshot().places;
+  const places = await readPublicPlaces();
 
   const initialFilters: PlaceFilterState = {
     city: readSearchParam(params.city) ?? "all",
