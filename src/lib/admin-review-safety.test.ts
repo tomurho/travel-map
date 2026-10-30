@@ -29,7 +29,7 @@ function fixture() {
 
 test("public admin page passes no private catalogue into the client shell", () => {
   const page=readFileSync("app/admin/page.tsx","utf8");
-  assert.match(page,/<CatalogueAdmin\s*\/>/);
+  assert.match(page,/<CatalogueAdmin\s+publicUrl=/);
   assert.doesNotMatch(page,/readPlacesJsonSnapshot|getCatalogueStore/);
   assert.match(page,/isAdminEnabled/);
 });

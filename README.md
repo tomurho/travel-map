@@ -11,7 +11,9 @@ A personal, map-first travel field guide built with Next.js. It turns saved plac
 
 ## Manage places: Inbox → Review → Live
 
-Open `/admin` and sign in with the owner password. Add a **place name and city**;
+Run `pnpm dev` on this laptop, then open `http://localhost:3000/admin` and sign in
+with the owner password. Admin binds to loopback and is unavailable on the hosted
+site, including its APIs and older deployments. Add a **place name and city**;
 the app saves it in Inbox and finds Google Maps candidates. In Review, check the
 place and map pin, set the category, Saved/Want to go/Been status, rating, and notes.
 **Wrong place or pin** retains your personal edits while you choose another match.
@@ -25,8 +27,15 @@ history. Editing a draft does not change the live listing. Catalogue changes nee
 no GitHub commit or Vercel deployment. Public tabs refresh on focus. Public API
 responses exclude drafts, sources, and verification evidence.
 
-Production requires `DATABASE_URL`, `ADMIN_PASSWORD`, `ENABLE_ADMIN=true`,
-`CATALOGUE_ENABLED=true`, and `PUBLIC_SITE_URL=https://travel.tomurho.com`.
+The laptop's gitignored `.env.local` has the limited `DATABASE_URL`,
+`ADMIN_PASSWORD`, `ENABLE_ADMIN=true`, `CATALOGUE_ENABLED=true`, and
+`PUBLIC_SITE_URL=https://travel.tomurho.com`. Local publishing writes the shared
+catalogue and checks the real public map. The laptop must be running for Admin;
+the public map stays online independently.
+
+Vercel uses `ENABLE_ADMIN=false`, `DATABASE_URL`, and `CATALOGUE_ENABLED=true`.
+A project firewall blocks `/admin` and `/api/admin` on all hosted deployments.
+Server code also rejects Admin on Vercel even if the flag is accidentally enabled.
 `GOOGLE_PLACES_API_KEY` enables lookup; `OPENAI_API_KEY` enables screenshot intake.
 Keep secrets in Vercel's encrypted server environment, never `NEXT_PUBLIC_*`.
 The database application role needs only schema USAGE and SELECT/INSERT/UPDATE on
@@ -228,9 +237,10 @@ checks. It links the original audit for context. No catalog migration is needed.
 ## October 23 admin and map fixes
 
 `pnpm dev` and `pnpm start` bind to `127.0.0.1`. Open the browser through
-`http://localhost:3000` so the configured Maps referrer works. Production admin
-pages and every admin API require `ENABLE_ADMIN=true`; production also requires
-the existing admin password. Keep hosted admin disabled unless explicitly needed.
+`http://localhost:3000` so the configured Maps referrer works. Local production-mode
+tests require `ENABLE_ADMIN=true` and the existing admin password. Hosted Admin
+pages and APIs are always disabled. The remaining Sheet workflow notes below
+describe the retired interface; use the local Inbox → Review → Live interface.
 
 Run `pnpm setup:google-sheets` in a terminal to connect or repair Google Sheets.
 Only that command asks for a Google authorization code. HTTP requests return repair

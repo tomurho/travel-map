@@ -8,14 +8,19 @@ type AdminEnvironment = {
   adminPassword?: string;
   nodeEnv?: string;
   enableAdmin?: string;
+  vercel?: string;
 };
 
 export function isAdminEnabled(
   environment: AdminEnvironment = {
     nodeEnv: process.env.NODE_ENV,
     enableAdmin: process.env.ENABLE_ADMIN,
+    vercel: process.env.VERCEL,
   },
 ) {
+  // Hosted deployments never provide Admin, even if an old flag is enabled.
+  if (environment.vercel === "1" || environment.enableAdmin === "false")
+    return false;
   return (
     environment.nodeEnv !== "production" || environment.enableAdmin === "true"
   );
@@ -27,6 +32,7 @@ export function isAdminAuthorized(
     adminPassword: process.env.ADMIN_PASSWORD,
     nodeEnv: process.env.NODE_ENV,
     enableAdmin: process.env.ENABLE_ADMIN,
+    vercel: process.env.VERCEL,
   },
 ) {
   if (!isAdminEnabled(environment)) return false;
