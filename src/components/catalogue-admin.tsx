@@ -331,7 +331,7 @@ function ReviewEditor({
     </form>
   );
 }
-export function CatalogueAdmin() {
+export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
   const [entries, setEntries] = useState<CatalogueEntry[]>([]),
     [categories, setCategories] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false),
@@ -542,7 +542,7 @@ export function CatalogueAdmin() {
           <h1>Places admin</h1>
           <p>Add a place. Check the match. Publish it to the map.</p>
         </div>
-        <Link href="/">Open public map ↗</Link>
+        <Link href={publicUrl}>Open public map ↗</Link>
       </header>
       {!loaded ? (
         <section className={styles.panel}>

@@ -10,5 +10,5 @@ export default function AdminPage() {
   }
 
   // The page is public HTML. Load private records only through the authenticated API.
-  return <CatalogueAdmin />;
+  return <CatalogueAdmin publicUrl={process.env.PUBLIC_SITE_URL?.trim() || "/"} />;
 }
