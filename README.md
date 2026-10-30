@@ -9,6 +9,46 @@ A personal, map-first travel field guide built with Next.js. It turns saved plac
 3. Start the app with `pnpm dev`.
 4. Open **http://localhost:3000** (use the printed port if it differs). The server listens only on this laptop. Google Maps accepts the localhost browser origin. The Field Guide is the default route at `/`; the previous interface remains available at `/original` for comparison.
 
+## Manage places: Inbox → Review → Live
+
+Open `/admin` and sign in with the owner password. Add a **place name and city**;
+the app saves it in Inbox and finds Google Maps candidates. In Review, check the
+place and map pin, set the category, Saved/Want to go/Been status, rating, and notes.
+**Wrong place or pin** retains your personal edits while you choose another match.
+**Publish to live map** publishes the draft and checks the unauthenticated public
+catalogue before reporting **Live confirmed**. A failed check remains pending and
+can be retried without publishing again. Removal has an explicit preview and Undo.
+
+Admin and every public map route use the same Neon catalogue when
+`CATALOGUE_ENABLED=true`. Each place retains a draft, live version, and publication
+history. Editing a draft does not change the live listing. Catalogue changes need
+no GitHub commit or Vercel deployment. Public tabs refresh on focus. Public API
+responses exclude drafts, sources, and verification evidence.
+
+Production requires `DATABASE_URL`, `ADMIN_PASSWORD`, `ENABLE_ADMIN=true`,
+`CATALOGUE_ENABLED=true`, and `PUBLIC_SITE_URL=https://travel.tomurho.com`.
+`GOOGLE_PLACES_API_KEY` enables lookup; `OPENAI_API_KEY` enables screenshot intake.
+Keep secrets in Vercel's encrypted server environment, never `NEXT_PUBLIC_*`.
+The database application role needs only schema USAGE and SELECT/INSERT/UPDATE on
+`travel_catalogue`. It does not need DELETE, DDL, or database ownership.
+
+Migration previews by default: `pnpm catalogue:migrate -- --sheets /path/to/sheets.json`.
+Apply with `--apply`. `--database-stdin` accepts the owner connection privately
+through stdin. It seeds only an empty table, keeps a complete source backup under
+`.cache/catalogue-migration`, and compares every existing place field after readback.
+Pending Review/Capture rows are imported as private drafts/Inbox records. Existing
+IDs, aliases, closures, null/false ratings, notes, and verification evidence survive.
+For isolated development, use `CATALOGUE_LOCAL_PATH=/private/tmp/catalogue.json`;
+local checks say **Local preview confirmed**, never **Live confirmed**.
+
+**Export catalogue** downloads a complete owner-only JSON backup, including history.
+After cutover, the old admin API writers return 410. Old spreadsheet commands are
+legacy maintenance tools and do not publish to the shared catalogue. The bundled
+JSON remains a migration backup, not the live data source. Do not disable the shared
+catalogue or roll back to a pre-catalogue app after publishing new changes; that
+would serve an old snapshot. Restore a publication through Undo, or restore the
+database from a reviewed current backup.
+
 ## Browse the guide
 
 The main guide at `/` and `/field-guide` uses the approved compact mobile layout
@@ -83,7 +123,6 @@ The reviewed migration can be inspected with
 `--apply` writes only against the original reviewed dataset hash, with the atomic
 store's stale-write protection and backup. Rerunning after application is a no-op.
 The local audit is in `outputs/type-reconciliation-2026-09-07/applied/`.
-
 
 ## Import spreadsheet data
 

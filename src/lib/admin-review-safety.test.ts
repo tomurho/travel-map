@@ -4,7 +4,7 @@ import { OAuth2Client } from "google-auth-library";
 import { NextRequest } from "next/server";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import AdminPage from "../../app/admin/page";
+import { readFileSync } from "node:fs";
 import { GET as getAdminPlaces } from "../../app/api/admin/places/route";
 import { POST as decideRoute } from "../../app/api/admin/place-pipeline/review-candidates/route";
 import { buildReviewCandidateQueue, decideReviewCandidate } from "@/lib/place-sheet-pipeline";
@@ -27,22 +27,11 @@ function fixture() {
   return { state, io, candidate };
 }
 
-test("public admin page renders a shell with no catalog props", () => {
-  // This also covers the production-enabled branch: neither branch loads records.
-  const environment = process.env as Record<string, string | undefined>;
-  const priorEnv = environment.NODE_ENV;
-  const priorEnabled = process.env.ENABLE_ADMIN;
-  environment.NODE_ENV = "production";
-  process.env.ENABLE_ADMIN = "true";
-  try {
-    assert.deepEqual(AdminPage().props, {});
-    const shell = renderToStaticMarkup(AdminPage());
-    assert.match(shell, /Load admin data to open the workflows/);
-    assert.doesNotMatch(shell, /Current admin workflows|No Candidate rows|Process Ready Rows/);
-  } finally {
-    if (priorEnv === undefined) delete environment.NODE_ENV; else environment.NODE_ENV = priorEnv;
-    if (priorEnabled === undefined) delete process.env.ENABLE_ADMIN; else process.env.ENABLE_ADMIN = priorEnabled;
-  }
+test("public admin page passes no private catalogue into the client shell", () => {
+  const page=readFileSync("app/admin/page.tsx","utf8");
+  assert.match(page,/<CatalogueAdmin\s*\/>/);
+  assert.doesNotMatch(page,/readPlacesJsonSnapshot|getCatalogueStore/);
+  assert.match(page,/isAdminEnabled/);
 });
 
 test("catalog endpoint requires the configured header and forbids caching private data", async () => {

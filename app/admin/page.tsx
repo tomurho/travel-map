@@ -1,4 +1,4 @@
-import { AdminWorkflow } from "@/components/admin-workflow";
+import { CatalogueAdmin } from "@/components/catalogue-admin";
 import { isAdminEnabled } from "@/lib/admin-auth";
 import { notFound } from "next/navigation";
 
@@ -10,5 +10,5 @@ export default function AdminPage() {
   }
 
   // The page is public HTML. Load private records only through the authenticated API.
-  return <AdminWorkflow />;
+  return <CatalogueAdmin />;
 }
