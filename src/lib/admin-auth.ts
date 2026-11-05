@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 type AdminRequest = {
   headers: Pick<Headers, "get">;
+  url?: string;
 };
 
 type AdminEnvironment = {
@@ -36,6 +37,18 @@ export function isAdminAuthorized(
   },
 ) {
   if (!isAdminEnabled(environment)) return false;
+
+  // Admin is laptop-only. Local requests do not need an owner session.
+  if (request.url) {
+    const url = new URL(request.url);
+    if (["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
+      const origin = request.headers.get("origin");
+      return (
+        (!origin || origin === url.origin) &&
+        request.headers.get("sec-fetch-site") !== "cross-site"
+      );
+    }
+  }
 
   const configuredPassword = environment.adminPassword ?? "";
 

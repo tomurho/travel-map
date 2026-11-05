@@ -68,6 +68,10 @@ export async function POST(request: NextRequest) {
         {
           name: input.name,
           city: input.city,
+          mapsUrl:
+            typeof input.mapsUrl === "string"
+              ? input.mapsUrl.trim().slice(0, 3000)
+              : undefined,
           source:
             typeof input.source === "string"
               ? input.source.slice(0, 5000)

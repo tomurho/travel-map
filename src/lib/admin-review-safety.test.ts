@@ -34,15 +34,15 @@ test("public admin page passes no private catalogue into the client shell", () =
   assert.match(page,/isAdminEnabled/);
 });
 
-test("catalog endpoint requires the configured header and forbids caching private data", async () => {
+test("non-local catalog endpoint requires the configured header and forbids caching private data", async () => {
   const priorPassword = process.env.ADMIN_PASSWORD;
   process.env.ADMIN_PASSWORD = "fixture-password";
   try {
-    const denied = await getAdminPlaces(new NextRequest("http://localhost/api/admin/places"));
+    const denied = await getAdminPlaces(new NextRequest("https://admin.example.test/api/admin/places"));
     assert.equal(denied.status, 401);
     assert.equal((await denied.json()).places, undefined);
     assert.match(denied.headers.get("cache-control") ?? "", /private, no-store/);
-    const allowed = await getAdminPlaces(new NextRequest("http://localhost/api/admin/places", { headers: { "x-admin-password": "fixture-password" } }));
+    const allowed = await getAdminPlaces(new NextRequest("https://admin.example.test/api/admin/places", { headers: { "x-admin-password": "fixture-password" } }));
     assert.equal(allowed.status, 200);
     const records = (await allowed.json()).places;
     assert.ok(Array.isArray(records));

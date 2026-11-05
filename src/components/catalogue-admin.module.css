@@ -105,7 +105,7 @@
 }
 .intake {
   display: grid;
-  grid-template-columns: 2fr 1fr auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto;
   align-items: end;
   gap: 14px;
 }
@@ -243,20 +243,8 @@
 .wide {
   grid-column: 1/-1;
 }
-.shell .confirm {
-  flex-direction: row;
-  align-items: flex-start;
-  font-size: 14px;
-  line-height: 1.5;
-  gap: 10px;
-  padding: 12px 0;
-}
-.confirm input {
-  width: 20px;
-  height: 20px;
-  accent-color: #834050;
-  flex-shrink: 0;
-  margin: 0;
+.reviewFields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .actions {
   display: flex;
@@ -437,9 +425,6 @@
   }
   .header p {
     max-width: 240px;
-  }
-  .shell .confirm {
-    font-size: 14px;
   }
   .feedback p {
     font-size: 14px;

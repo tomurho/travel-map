@@ -218,6 +218,85 @@ test("lookup keeps unpublished changes private and does not erase notes or ratin
     f.cleanup();
   }
 });
+test("a supplied Maps link replaces the draft match, persists on retry, and keeps the live place and personal edits", async () => {
+  const f = fixture();
+  try {
+    const entry = saveCatalogueDraft(beginCatalogueEdit(seedCatalogueEntry(place())), {
+      notes: ["My draft note"], category: "Bakery",
+    }, true);
+    await f.store.create(entry);
+    const mapsUrl = "https://maps.app.goo.gl/owner-link";
+    const lookup = async (input: typeof entry.input, options: { mapsUrl?: string; query?: string; city?: string } = {}) => {
+      assert.equal(input.mapsUrl, mapsUrl);
+      assert.equal(options.mapsUrl, mapsUrl);
+      assert.equal(options.city, "Kaohsiung");
+      return [candidate];
+    };
+    const looked = await lookupCatalogueEntry(f.store, entry.id, entry.version, { mapsUrl, query: "Different name" }, lookup);
+    assert.equal(looked.input.mapsUrl, mapsUrl);
+    assert.equal(looked.draft?.googlePlaceId, candidate.googlePlaceId);
+    assert.deepEqual(looked.draft?.notes, ["My draft note"]);
+    assert.equal(looked.draft?.loved, true);
+    assert.equal(looked.draft?.category, "Bakery");
+    assert.equal(looked.confirmedMatch, null);
+    assert.deepEqual(looked.live, entry.live);
+    const retried = await lookupCatalogueEntry(f.store, looked.id, looked.version, {}, lookup);
+    assert.equal(retried.draft?.googlePlaceId, candidate.googlePlaceId);
+    const cleared = await lookupCatalogueEntry(f.store, retried.id, retried.version, { mapsUrl: "", query: "Other Cafe", city: "Kyoto" }, async (input, options) => {
+      assert.equal(options?.mapsUrl, "");
+      assert.equal(options?.query, "Other Cafe");
+      assert.equal(input.city, "Kyoto");
+      return [candidate];
+    });
+    assert.equal(cleared.input.mapsUrl, "");
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("a failed Maps link lookup remembers the supplied link and requires a fresh match check", async () => {
+  const f = fixture();
+  try {
+    const entry = ready();
+    await f.store.create(entry);
+    const mapsUrl = "https://maps.app.goo.gl/unresolved";
+    const looked = await lookupCatalogueEntry(f.store, entry.id, entry.version, { mapsUrl }, async () => {
+      throw new Error("Could not resolve this link.");
+    });
+    assert.equal(looked.input.mapsUrl, mapsUrl);
+    assert.equal(looked.lookupError, "Could not resolve this link.");
+    assert.equal(looked.confirmedMatch, null);
+    assert.equal(JSON.stringify(looked.draft), JSON.stringify(entry.draft));
+    assert.equal(getPublicCatalogue([looked]).places.length, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("a Maps link to a permanently closed venue cannot retain an old match confirmation", async () => {
+  const f = fixture();
+  try {
+    const entry = ready();
+    await f.store.create(entry);
+    const looked = await lookupCatalogueEntry(f.store, entry.id, entry.version,
+      { mapsUrl: "https://maps.app.goo.gl/closed" },
+      async () => [{ ...candidate, businessStatus: "CLOSED_PERMANENTLY" }]);
+    assert.equal(looked.confirmedMatch, null);
+    assert.match(looked.lookupError ?? "", /permanently closed/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("Google fills a missing area, keeps an entered area for the same venue, and replaces it for a different venue", () => {
+  const entry = ready();
+  const corrected = saveCatalogueDraft(entry, { district: "My area" }, false);
+  assert.equal(selectCatalogueCandidate(corrected, { ...candidate, district: "Google area" }).draft?.district, "My area");
+  const empty = saveCatalogueDraft(entry, { district: "" }, false);
+  assert.equal(selectCatalogueCandidate(empty, { ...candidate, district: "Google area" }).draft?.district, "Google area");
+  assert.equal(selectCatalogueCandidate(corrected, { ...candidate, googlePlaceId: "ChINewVenue", district: "New area" }).draft?.district, "New area");
+});
+
 test("a wrong match cannot be published by checking the confirmation again", async () => {
   const f = fixture();
   try {

@@ -487,7 +487,7 @@ test("admin authorization uses the header and fails closed in production", () =>
   );
 });
 
-test("place PATCH route rejects a wrong password and accepts the configured header", async () => {
+test("local place PATCH rejects cross-site requests and accepts local edits without a password", async () => {
   const previousPassword = process.env.ADMIN_PASSWORD;
   process.env.ADMIN_PASSWORD = "route-secret";
 
@@ -507,7 +507,7 @@ test("place PATCH route rejects a wrong password and accepts the configured head
         body,
         headers: {
           "Content-Type": "application/json",
-          "x-admin-password": "wrong",
+          origin: "https://example.com",
         },
         method: "PATCH",
       }),
@@ -518,7 +518,7 @@ test("place PATCH route rejects a wrong password and accepts the configured head
         body,
         headers: {
           "Content-Type": "application/json",
-          "x-admin-password": "route-secret",
+          origin: "http://localhost",
         },
         method: "PATCH",
       }),

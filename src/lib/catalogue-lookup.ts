@@ -4,6 +4,8 @@ import {
   type CatalogueInput,
 } from "@/lib/catalogue";
 import { extractGooglePlaceIdFromUrl } from "@/lib/google-place-admin-resolver";
+import { normalizeArea } from "@/lib/import";
+import { normalizePlaceCity } from "@/lib/place-city";
 import {
   fetchSupportedProviderUrl,
   parseSupportedProviderUrl,
@@ -17,9 +19,66 @@ type GoogleResult = {
   googleMapsUri?: string;
   types?: string[];
   businessStatus?: string;
+  addressComponents?: Array<{
+    longText?: string;
+    shortText?: string;
+    types?: string[];
+  }>;
 };
 const fields =
-  "id,displayName,formattedAddress,location,googleMapsUri,types,businessStatus";
+  "id,displayName,formattedAddress,addressComponents,location,googleMapsUri,types,businessStatus";
+
+function district(components: GoogleResult["addressComponents"] = [], city: string) {
+  const areaTypes = [
+    "sublocality_level_1", "sublocality", "neighborhood",
+    "administrative_area_level_3", "administrative_area_level_4",
+  ];
+  const name = (component: NonNullable<GoogleResult["addressComponents"]>[number]) =>
+    component.longText?.trim() || component.shortText?.trim() || "";
+  const cityKey = normalizePlaceCity(city).toLocaleLowerCase().replace(/\s+city$/, "");
+  const areas = components.filter((component) => {
+    const value = name(component);
+    return value && value.toLocaleLowerCase().replace(/\s+city$/, "") !== cityKey
+      && component.types?.some((type) => areaTypes.includes(type)
+        || type === "administrative_area_level_2" || type === "locality");
+  });
+  // Prefer an explicitly named district or ward over a smaller neighbourhood.
+  const namedDistrict = areas.find((component) =>
+    /\b(?:district|ward|borough)\b|[区區]$/i.test(name(component)));
+  const component = namedDistrict ?? areaTypes
+    .map((type) => areas.find((area) => area.types?.includes(type)))
+    .find(Boolean);
+  return component ? normalizeArea(normalizePlaceCity(city), name(component)) : "";
+}
+
+function mapsCid(value: string) {
+  const url = new URL(value);
+  const cid = url.searchParams.get("cid");
+  if (cid && /^\d{1,20}$/.test(cid)) return BigInt(cid).toString();
+  const feature = value.match(/(?:!|%21)1s0x[0-9a-f]+(?::|%3a)(0x[0-9a-f]{1,16})/i);
+  return feature ? BigInt(feature[1]).toString() : null;
+}
+
+function linkedMapsVenue(value: string, sourceCid: string | null) {
+  const url = new URL(value);
+  const cid = mapsCid(value) ?? sourceCid;
+  const name = url.pathname.match(/\/maps\/place\/([^/]+)/)?.[1];
+  if (!cid || !name) return null;
+  let query: string;
+  try {
+    query = decodeURIComponent(name.replace(/\+/g, " "));
+  } catch {
+    return null;
+  }
+  const coordinates = value.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/)
+    ?? value.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  const latitude = Number(coordinates?.[1]);
+  const longitude = Number(coordinates?.[2]);
+  const center = Number.isFinite(latitude) && Math.abs(latitude) <= 90
+    && Number.isFinite(longitude) && Math.abs(longitude) <= 180
+    ? { latitude, longitude } : null;
+  return { cid, query, center };
+}
 function category(types: string[] = []) {
   if (types.includes("cafe") || types.includes("coffee_shop")) return "Café";
   if (types.includes("bakery")) return "Bakery";
@@ -29,7 +88,7 @@ function category(types: string[] = []) {
   if (types.includes("tourist_attraction")) return "Sight";
   return "Shop";
 }
-function candidate(p: GoogleResult): CatalogueCandidate | null {
+function candidate(p: GoogleResult, city: string): CatalogueCandidate | null {
   if (
     !p.id ||
     !p.displayName?.text ||
@@ -47,7 +106,7 @@ function candidate(p: GoogleResult): CatalogueCandidate | null {
     googleMapsUrl: p.googleMapsUri,
     googlePlaceId: p.id,
     category: category(p.types),
-    district: "",
+    district: district(p.addressComponents, city),
     businessStatus: p.businessStatus,
   };
 }
@@ -68,9 +127,14 @@ export async function lookupCataloguePlaces(
     );
   const fetcher = options.fetcher ?? fetch;
   let placeId: string | null = null;
-  if (options.mapsUrl?.trim()) {
-    const url = parseSupportedProviderUrl(options.mapsUrl.trim());
-    if (!/google\./.test(url.hostname) && url.hostname !== "goo.gl")
+  let linkedVenue: ReturnType<typeof linkedMapsVenue> = null;
+  const mapsUrl = (options.mapsUrl ?? input.mapsUrl)?.trim();
+  if (mapsUrl) {
+    const url = parseSupportedProviderUrl(mapsUrl);
+    if (
+      !/google\./.test(url.hostname) &&
+      !["goo.gl", "maps.app.goo.gl"].includes(url.hostname)
+    )
       throw new CatalogueError("Use a Google Maps link.");
     placeId = extractGooglePlaceIdFromUrl(url.toString());
     if (!placeId) {
@@ -81,13 +145,16 @@ export async function lookupCataloguePlaces(
       );
       placeId = extractGooglePlaceIdFromUrl(response.url || url.toString());
       if (!placeId) {
-        const html = await response.text();
-        placeId = extractGooglePlaceIdFromUrl(html.slice(0, 1_000_000));
+        linkedVenue = linkedMapsVenue(response.url || url.toString(), mapsCid(url.toString()));
+        if (!linkedVenue) {
+          const html = await response.text();
+          placeId = extractGooglePlaceIdFromUrl(html.slice(0, 1_000_000));
+        }
       }
     }
-    if (!placeId)
+    if (!placeId && !linkedVenue)
       throw new CatalogueError(
-        "This Maps link could not be resolved. Search using the venue’s full name and choose the correct result.",
+        "This Maps link could not be resolved. Check the link, or clear it to search by name and city.",
       );
   }
   const response = await fetcher(
@@ -109,10 +176,13 @@ export async function lookupCataloguePlaces(
       ...(!placeId
         ? {
             body: JSON.stringify({
-              textQuery: [options.query?.trim() || input.name, input.city].join(
+              textQuery: linkedVenue?.query ?? [options.query?.trim() || input.name, input.city].join(
                 ", ",
               ),
               pageSize: 5,
+              ...(linkedVenue?.center ? {
+                locationBias: { circle: { center: linkedVenue.center, radius: 200 } },
+              } : {}),
             }),
           }
         : {}),
@@ -129,11 +199,16 @@ export async function lookupCataloguePlaces(
     places?: GoogleResult[];
   };
   const results = (placeId ? [payload] : (payload.places ?? []))
-    .map(candidate)
+    // A name and location help find the API record; only the link's exact CID
+    // can establish that it is the linked venue.
+    .filter((p) => !linkedVenue || (p.googleMapsUri && mapsCid(p.googleMapsUri) === linkedVenue.cid))
+    .map((place) => candidate(place, input.city))
     .filter((p): p is CatalogueCandidate => Boolean(p));
   if (!results.length)
     throw new CatalogueError(
-      "No matching places found. Try a fuller name or a Google Maps link.",
+      linkedVenue
+        ? "Google could not confirm the exact venue from this Maps link. Check the link, or clear it to search by name and city."
+        : "No matching places found. Try a fuller name or a Google Maps link.",
     );
   return results;
 }

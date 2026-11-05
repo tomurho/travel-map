@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { CatalogueEntry } from "@/lib/catalogue";
+import { catalogueLookupInput } from "@/lib/catalogue-lookup-input";
 import type { Place } from "@/lib/place";
+import { normalizePlaceCity } from "@/lib/place-city";
 import styles from "./catalogue-admin.module.css";
 
 type Tab = "inbox" | "review" | "live";
@@ -41,6 +43,7 @@ function label(entry: CatalogueEntry) {
 }
 function ReviewEditor({
   entry,
+  entries,
   categories,
   busy,
   onSave,
@@ -48,11 +51,11 @@ function ReviewEditor({
   onDirty,
 }: {
   entry: CatalogueEntry;
+  entries: CatalogueEntry[];
   categories: string[];
   busy: boolean;
   onSave: (
     patch: Record<string, unknown>,
-    confirm: boolean,
     publish: boolean,
   ) => void;
   onAction: (action: string, extra?: Record<string, unknown>) => void;
@@ -60,19 +63,35 @@ function ReviewEditor({
 }) {
   const draft = entry.draft!;
   const [form, setForm] = useState<Place>(draft);
-  const [confirmed, setConfirmed] = useState(Boolean(entry.confirmedMatch));
   const [rejected, setRejected] = useState(Boolean(entry.matchRejected));
+  const districts = useMemo(() => {
+    const city = normalizePlaceCity(form.city).toLocaleLowerCase();
+    return [...new Set(entries
+      .flatMap((e) => [e.draft, e.live])
+      .filter((place): place is Place => place !== null &&
+        normalizePlaceCity(place.city).toLocaleLowerCase() === city)
+      .map((place) => place.district.trim())
+      .filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }, [entries, form.city]);
   useEffect(() => {
-    onDirty(
-      JSON.stringify(form) !== JSON.stringify(draft) ||
-        confirmed !== Boolean(entry.confirmedMatch),
-    );
-  }, [form, confirmed, draft, entry.confirmedMatch, onDirty]);
+    onDirty(JSON.stringify(form) !== JSON.stringify(draft));
+  }, [form, draft, onDirty]);
   useEffect(() => () => onDirty(false), [onDirty]);
   const identity = (key: keyof Place, value: unknown) => {
     setForm((current) => ({ ...current, [key]: value }));
-    setConfirmed(false);
     setRejected(false);
+  };
+  const save = (publish: boolean) => {
+    const keys = [
+      "name", "city", "category", "district", "address", "latitude", "longitude",
+      "googleMapsUrl", "googlePlaceId", "status", "loved", "notes",
+    ] as const;
+    onSave(
+      Object.fromEntries(
+        keys.filter((key) => form[key] !== undefined).map((key) => [key, form[key]]),
+      ),
+      publish,
+    );
   };
   return (
     <form
@@ -80,30 +99,7 @@ function ReviewEditor({
       aria-label="Review place"
       onSubmit={(event) => {
         event.preventDefault();
-        const publish =
-          (event.nativeEvent as SubmitEvent).submitter?.getAttribute("name") ===
-          "publish";
-        const keys = [
-          "name",
-          "city",
-          "category",
-          "district",
-          "address",
-          "latitude",
-          "longitude",
-          "googleMapsUrl",
-          "googlePlaceId",
-          "status",
-          "loved",
-          "notes",
-        ] as const;
-        onSave(
-          Object.fromEntries(
-            keys.filter((k) => form[k] !== undefined).map((k) => [k, form[k]]),
-          ),
-          confirmed,
-          publish,
-        );
+        save(false);
       }}
     >
       <fieldset disabled={busy}>
@@ -160,7 +156,7 @@ function ReviewEditor({
         >
           Wrong place or pin
         </button>
-        <div className={styles.fieldGrid}>
+        <div className={`${styles.fieldGrid} ${styles.reviewFields}`}>
           <label>
             Category
             <input
@@ -179,48 +175,35 @@ function ReviewEditor({
             My status
             <select
               aria-label="My status"
-              value={form.status}
+              value={form.loved === true ? "loved" : form.status}
               onChange={(e) =>
-                setForm({ ...form, status: e.target.value as Place["status"] })
+                setForm({
+                  ...form,
+                  status: e.target.value === "loved"
+                    ? "been" : e.target.value as Place["status"],
+                  loved: e.target.value === "loved" ? true : null,
+                })
               }
             >
               <option value="location">Saved</option>
               <option value="want_to_go">Want to go</option>
               <option value="been">Been</option>
-            </select>
-          </label>
-          <label>
-            My rating
-            <select
-              aria-label="My rating"
-              value={
-                form.loved === null
-                  ? "unrated"
-                  : form.loved
-                    ? "loved"
-                    : "not-loved"
-              }
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  loved:
-                    e.target.value === "unrated"
-                      ? null
-                      : e.target.value === "loved",
-                })
-              }
-            >
-              <option value="unrated">Not rated</option>
               <option value="loved">Loved it</option>
-              <option value="not-loved">Not a favourite</option>
             </select>
           </label>
           <label>
             District or area
             <input
+              list="catalogue-districts"
+              placeholder="Choose or type an area"
               value={form.district}
               onChange={(e) => setForm({ ...form, district: e.target.value })}
             />
+            <datalist id="catalogue-districts">
+              {districts.map((district) => (
+                <option key={district} value={district} />
+              ))}
+            </datalist>
           </label>
         </div>
         <label>
@@ -292,27 +275,22 @@ function ReviewEditor({
           </div>
           <p>To use a different Google listing, choose another result below.</p>
         </details>
-        <label className={styles.confirm}>
-          <input
-            type="checkbox"
-            disabled={rejected}
-            checked={confirmed}
-            onChange={(e) => setConfirmed(e.target.checked)}
-          />
-          <span>I checked this is the correct place and map pin.</span>
-        </label>
         <div className={styles.publishSummary}>
           {entry.live
             ? "Publishing replaces the live details with this draft."
             : "Publishing adds this place to the public map."}{" "}
-          Your category, status, rating, and notes are included.
+          Your category, status, area, and notes are included.
+          Publishing confirms the place and map pin you reviewed above.
         </div>
         <div className={styles.actions}>
           <button
             className={styles.primary}
-            type="submit"
+            type="button"
             name="publish"
-            disabled={busy || !confirmed || rejected}
+            disabled={busy || rejected || form.businessStatus === "CLOSED_PERMANENTLY"}
+            onClick={(event) => {
+              if (event.currentTarget.form?.reportValidity()) save(true);
+            }}
           >
             {busy ? "Saving…" : "Publish to live map"}
           </button>
@@ -337,11 +315,11 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
   const [loaded, setLoaded] = useState(false),
     [configured, setConfigured] = useState(false),
     [storage, setStorage] = useState("shared");
-  const [password, setPassword] = useState(""),
-    [tab, setTab] = useState<Tab>("inbox"),
+  const [tab, setTab] = useState<Tab>("inbox"),
     [selected, setSelected] = useState<string | null>(null);
   const [name, setName] = useState(""),
     [city, setCity] = useState(""),
+    [intakeMapsUrl, setIntakeMapsUrl] = useState(""),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [mapsUrl, setMapsUrl] = useState(""),
@@ -466,17 +444,19 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
     cityHint: string,
     requestId: string,
     source?: string,
+    mapsUrl?: string,
   ) {
     const result = await call("/api/admin/catalogue", {
       name: rawName,
       city: cityHint,
       requestId,
       source,
+      mapsUrl,
     });
     const entry = result.entry as CatalogueEntry;
     replace(entry);
     setSelected(entry.id);
-    if (result.duplicate) {
+    if (result.duplicate && !mapsUrl?.trim()) {
       setTab(stage(entry));
       setMessage(
         "This place is already in your catalogue. Opened the existing entry.",
@@ -484,7 +464,7 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
       return;
     }
     setTab("inbox");
-    const looked = await mutate(entry, "lookup");
+    const looked = await mutate(entry, "lookup", mapsUrl?.trim() ? { mapsUrl } : {});
     setTab(stage(looked));
     if (looked.lookupError)
       setMessage("Saved in Inbox. You can retry the lookup.");
@@ -492,9 +472,10 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
   }
   const active = entries.find((e) => e.id === selected);
   useEffect(() => {
-    setQuery(active?.input.name ?? "");
-    setLookupCity(active?.input.city ?? "");
-    setMapsUrl("");
+    const defaults = active ? catalogueLookupInput(active) : null;
+    setQuery(defaults?.query ?? "");
+    setLookupCity(defaults?.city ?? "");
+    setMapsUrl(defaults?.mapsUrl ?? "");
   }, [selected]);
   const counts = {
     inbox: entries.filter((e) => !e.draft && !e.live && !e.archived).length,
@@ -546,35 +527,12 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
       </header>
       {!loaded ? (
         <section className={styles.panel}>
-          <h2>Sign in</h2>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run(async () => {
-                const response = await fetch("/api/admin/session", {
-                  method: "POST",
-                  headers: { "x-admin-password": password },
-                });
-                if (!response.ok)
-                  throw new Error("Enter the correct admin password.");
-                setPassword("");
-                await refresh();
-              });
-            }}
-          >
-            <label>
-              Admin password
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            <button className={styles.primary} disabled={busy}>
-              Sign in
-            </button>
-          </form>
+          <h2>{error ? "Could not load your places" : "Loading your places…"}</h2>
+          <p>
+            {error
+              ? "Check the error below, then refresh the saved state to try again."
+              : "Admin opens automatically on this laptop. No password is needed."}
+          </p>
         </section>
       ) : (
         <>
@@ -595,17 +553,6 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
             >
               Refresh
             </button>
-            <button
-              onClick={() =>
-                void run(async () => {
-                  await fetch("/api/admin/session", { method: "DELETE" });
-                  setEntries([]);
-                  setLoaded(false);
-                })
-              }
-            >
-              Sign out
-            </button>
           </div>
           {!configured ? (
             <section className={styles.panel}>
@@ -625,9 +572,16 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                   onSubmit={(event) => {
                     event.preventDefault();
                     void run(async () => {
-                      await addPlace(name, city, intakeId.current);
+                      await addPlace(
+                        name,
+                        city,
+                        intakeId.current,
+                        undefined,
+                        intakeMapsUrl.trim() || undefined,
+                      );
                       intakeId.current = crypto.randomUUID();
                       setName("");
+                      setIntakeMapsUrl("");
                     });
                   }}
                 >
@@ -665,13 +619,26 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                         ))}
                     </datalist>
                   </label>
+                  <label>
+                    Google Maps link (optional)
+                    <input
+                      type="url"
+                      maxLength={3000}
+                      value={intakeMapsUrl}
+                      placeholder="https://maps.google.com/…"
+                      onChange={(e) => {
+                        setIntakeMapsUrl(e.target.value);
+                        intakeId.current = crypto.randomUUID();
+                      }}
+                    />
+                  </label>
                   <button className={styles.primary} disabled={busy}>
                     {busy ? "Working…" : "Add and find match"}
                   </button>
                 </form>
                 <p className={styles.help}>
-                  Only name and city are needed. Nothing goes public until you
-                  publish it.
+                  A Maps link takes priority. Otherwise, we search by name and city.
+                  Nothing goes public until you publish it.
                 </p>
                 <details className={styles.screenshots}>
                   <summary>Add from screenshots</summary>
@@ -846,8 +813,6 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                         onClick={() => {
                           if (leaveDraft()) {
                             setSelected(entry.id);
-                            setQuery(entry.input.name);
-                            setMapsUrl("");
                           }
                         }}
                       >
@@ -894,15 +859,16 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                         <ReviewEditor
                           key={`${active.id}:${active.version}`}
                           entry={active}
+                          entries={entries}
                           categories={categories}
                           busy={busy}
                           onDirty={setDirty}
                           onAction={(a, x) => void act(a, x)}
-                          onSave={(patch, confirm, publish) =>
+                          onSave={(patch, publish) =>
                             void run(async () => {
                               const saved = await mutate(active, "save", {
                                 patch,
-                                confirmMatch: confirm,
+                                confirmMatch: publish,
                               });
                               if (publish) {
                                 const published = await mutate(
@@ -933,12 +899,13 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                             <>
                               <p>
                                 {active.live.category} ·{" "}
-                                {active.live.status === "been"
-                                  ? "Been"
-                                  : active.live.status === "want_to_go"
-                                    ? "Want to go"
-                                    : "Saved"}
-                                {active.live.loved ? " · Loved it" : ""}
+                                {active.live.loved
+                                  ? "Loved it"
+                                  : active.live.status === "been"
+                                    ? "Been"
+                                    : active.live.status === "want_to_go"
+                                      ? "Want to go"
+                                      : "Saved"}
                               </p>
                               {active.live.notes ? (
                                 <p className={styles.source}>
@@ -990,7 +957,11 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                               className={styles.primary}
                               disabled={busy}
                               onClick={() =>
-                                void act("lookup", { query: active.input.name })
+                                void act("lookup", {
+                                  query,
+                                  city: lookupCity,
+                                  mapsUrl,
+                                })
                               }
                             >
                               Find a match
@@ -1059,6 +1030,7 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                             aria-label="Find Maps match"
                             onSubmit={(event) => {
                               event.preventDefault();
+                              if (!leaveDraft()) return;
                               void act("lookup", {
                                 query,
                                 mapsUrl,
@@ -1066,10 +1038,24 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                               });
                             }}
                           >
+                            <p className={styles.help}>
+                              A Maps link takes priority over the name and city.
+                              Clear the link to search by name and city instead.
+                            </p>
+                            <label>
+                              Google Maps link (optional)
+                              <input
+                                type="url"
+                                maxLength={3000}
+                                value={mapsUrl}
+                                onChange={(e) => setMapsUrl(e.target.value)}
+                                placeholder="https://maps.google.com/…"
+                              />
+                            </label>
                             <label>
                               Search name
                               <input
-                                value={query || active.input.name}
+                                value={query}
                                 onChange={(e) => setQuery(e.target.value)}
                               />
                             </label>
@@ -1077,20 +1063,15 @@ export function CatalogueAdmin({ publicUrl = "/" }: { publicUrl?: string }) {
                               City
                               <input
                                 required
-                                value={lookupCity || active.input.city}
+                                value={lookupCity}
                                 onChange={(e) => setLookupCity(e.target.value)}
                               />
                             </label>
-                            <label>
-                              Google Maps link (optional)
-                              <input
-                                type="url"
-                                value={mapsUrl}
-                                onChange={(e) => setMapsUrl(e.target.value)}
-                                placeholder="https://maps.google.com/…"
-                              />
-                            </label>
-                            <button disabled={busy}>Search again</button>
+                            <button disabled={busy}>
+                              {mapsUrl.trim()
+                                ? "Use Maps link"
+                                : "Search name and city"}
+                            </button>
                           </form>
                           {active.candidates.map((c) => (
                             <div

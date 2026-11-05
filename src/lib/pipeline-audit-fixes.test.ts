@@ -227,7 +227,7 @@ test("capture-ready endpoint rejects unauthenticated and malformed requests befo
   const previous = process.env.ADMIN_PASSWORD;
   process.env.ADMIN_PASSWORD = "fixture-password";
   try {
-    const request = (body: unknown, password = "fixture-password") => new NextRequest("http://localhost/api/admin/place-pipeline/capture-ready", {
+    const request = (body: unknown, password = "fixture-password") => new NextRequest("https://admin.example.test/api/admin/place-pipeline/capture-ready", {
       method: "POST", headers: { "Content-Type": "application/json", "x-admin-password": password }, body: JSON.stringify(body),
     });
     assert.equal((await POST(request({}, "wrong"))).status, 401);

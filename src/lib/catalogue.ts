@@ -148,10 +148,10 @@ export function selectCatalogueCandidate(
       candidate.category ||
       "Shop",
     district:
-      candidate.district ||
       (editorial?.googlePlaceId === candidate.googlePlaceId
-        ? editorial?.district
+        ? editorial?.district?.trim()
         : "") ||
+      candidate.district ||
       "",
     address: candidate.address,
     latitude: candidate.latitude,

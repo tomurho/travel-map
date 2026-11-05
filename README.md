@@ -11,15 +11,25 @@ A personal, map-first travel field guide built with Next.js. It turns saved plac
 
 ## Manage places: Inbox → Review → Live
 
-Run `pnpm dev` on this laptop, then open `http://localhost:3000/admin` and sign in
-with the owner password. Admin binds to loopback and is unavailable on the hosted
+Run `pnpm dev` on this laptop, then open `http://localhost:3000/admin`. No password
+is needed. Admin binds to loopback and is unavailable on the hosted
 site, including its APIs and older deployments. Add a **place name and city**;
 the app saves it in Inbox and finds Google Maps candidates. In Review, check the
-place and map pin, set the category, Saved/Want to go/Been status, rating, and notes.
+place and map pin, then set the category, area, personal status, and notes.
 **Wrong place or pin** retains your personal edits while you choose another match.
+**My status** combines Saved, Want to go, Been, and Loved it in one control.
+District or area fills from Google's address details when available, suggests existing
+values for the selected city, and accepts new ones. A new lookup of the same venue
+keeps an area you already entered.
+Publishing confirms the reviewed venue and map pin; there is no separate checkbox.
 **Publish to live map** publishes the draft and checks the unauthenticated public
 catalogue before reporting **Live confirmed**. A failed check remains pending and
 can be retried without publishing again. Removal has an explicit preview and Undo.
+
+A supplied Google Maps link takes priority over the search name and city. Admin
+remembers the link and opens its result in Review, retaining your notes and status.
+Without a link, lookup uses the place name and city. Clear the link to use text
+search instead. An unresolved link shows an error rather than selecting a name match.
 
 Admin and every public map route use the same Neon catalogue when
 `CATALOGUE_ENABLED=true`. Each place retains a draft, live version, and publication
@@ -28,7 +38,7 @@ no GitHub commit or Vercel deployment. Public tabs refresh on focus. Public API
 responses exclude drafts, sources, and verification evidence.
 
 The laptop's gitignored `.env.local` has the limited `DATABASE_URL`,
-`ADMIN_PASSWORD`, `ENABLE_ADMIN=true`, `CATALOGUE_ENABLED=true`, and
+`ENABLE_ADMIN=true`, `CATALOGUE_ENABLED=true`, and
 `PUBLIC_SITE_URL=https://travel.tomurho.com`. Local publishing writes the shared
 catalogue and checks the real public map. The laptop must be running for Admin;
 the public map stays online independently.
@@ -196,10 +206,9 @@ reconciled. City aliases and whitespace-only differences are equivalent.
 Verification evidence stays together; sync does not guess which source is newer.
 Places absent from Published remain in the app.
 
-In Admin, enter the admin password if one is configured, then select **Load admin
-data**. The page opens without private catalog records; an authenticated request
-loads them without caching. Workflows appear after that request succeeds. On
-unprotected localhost, the initial data load can proceed automatically.
+On localhost, Admin loads data automatically without a password, even if an old
+`ADMIN_PASSWORD` remains configured. Private records load through the local API
+without caching. A failed load shows an error and a refresh action.
 
 Verify and Reject require the candidate version shown in the review queue. If a
 Sheet row changes, refresh the data and review it again. Local editors also check
@@ -238,7 +247,7 @@ checks. It links the original audit for context. No catalog migration is needed.
 
 `pnpm dev` and `pnpm start` bind to `127.0.0.1`. Open the browser through
 `http://localhost:3000` so the configured Maps referrer works. Local production-mode
-tests require `ENABLE_ADMIN=true` and the existing admin password. Hosted Admin
+tests require `ENABLE_ADMIN=true`. Hosted Admin
 pages and APIs are always disabled. The remaining Sheet workflow notes below
 describe the retired interface; use the local Inbox → Review → Live interface.
 
@@ -266,7 +275,7 @@ Staged writes use the same lock, backup, and atomic replacement as the catalog.
 Run the safe browser regressions with the local server running:
 `pnpm test:browser`. They use a Maps fixture and intercept admin APIs. They never
 write to live Sheets or call screenshot providers. For production checks, start
-with `ENABLE_ADMIN=true ADMIN_PASSWORD=browser-fixture pnpm start`; test responses
+with `ENABLE_ADMIN=true pnpm start`; test responses
 are mocked before page navigation.
 
 The seven approved duplicate merges are recorded in `src/data/place-id-aliases.json`.

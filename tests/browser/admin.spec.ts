@@ -147,6 +147,39 @@ async function add(page: Page) {
   await expect(page.getByRole("form", { name: "Review place" })).toBeVisible();
 }
 
+test("local Admin accepts requests without a password or session cookie", async ({ request }) => {
+  const response = await request.post("/api/admin/session");
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toEqual({ signedIn: true });
+});
+
+test("Admin shows loading and retry states without asking for a password", async ({ page }) => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  let failed = true;
+  await page.route("**/api/admin/catalogue", async (route) => {
+    if (failed) await pending;
+    await route.fulfill({
+      status: failed ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(failed
+        ? { error: "The catalogue is temporarily unavailable." }
+        : { configured: true, storage: "shared", entries: [], categories: [] }),
+    });
+  });
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Loading your places…" })).toBeVisible();
+  await expect(page.getByLabel("Admin password")).toHaveCount(0);
+  release();
+  await expect(page.getByRole("heading", { name: "Could not load your places" })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("The catalogue is temporarily unavailable.");
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toHaveCount(0);
+  failed = false;
+  await page.getByRole("button", { name: "Refresh saved state" }).click();
+  await expect(page.getByRole("form", { name: "Add place", exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+});
+
 test("name and city lead to Review; Publish updates shared public data and verifies delivery", async ({
   page,
 }) => {
@@ -158,18 +191,12 @@ test("name and city lead to Review; Publish updates shared public data and verif
     name: "Publish to live map",
     exact: true,
   });
-  await expect(publish).toBeDisabled();
+  await expect(publish).toBeEnabled();
   await review.getByLabel("Category", { exact: true }).fill("Bakery");
   await review
     .getByLabel("My status", { exact: true })
     .selectOption("want_to_go");
   await review.getByLabel("Notes", { exact: true }).fill("A new note");
-  await review
-    .getByRole("checkbox", {
-      name: "I checked this is the correct place and map pin.",
-      exact: true,
-    })
-    .check();
   await publish.click();
   await expect(
     page.getByText("Live confirmed. The public map serves this version.", {
@@ -197,7 +224,7 @@ test("editing a live place keeps its public notes and rating until publication",
     .click();
   await page.getByRole("button", { name: "Edit draft", exact: true }).click();
   const review = page.getByRole("form", { name: "Review place" });
-  await expect(review.getByLabel("My rating", { exact: true })).toHaveValue(
+  await expect(review.getByLabel("My status", { exact: true })).toHaveValue(
     "loved",
   );
   await review.getByLabel("Notes", { exact: true }).fill("Draft-only note");
@@ -217,12 +244,6 @@ test("a failed live check is pending, not reported as live, and can be retried",
   f.state.offline = true;
   await page.goto("/admin");
   await add(page);
-  await page
-    .getByRole("checkbox", {
-      name: "I checked this is the correct place and map pin.",
-      exact: true,
-    })
-    .check();
   await page
     .getByRole("button", { name: "Publish to live map", exact: true })
     .click();
@@ -276,7 +297,7 @@ test("removal updates public data and Undo restores the complete record", async 
     notes: ["Keep my note"],
   });
 });
-test("the narrow-screen review fits the viewport and keeps its confirmation gate", async ({
+test("the narrow-screen review fits the viewport and uses Publish as the review confirmation", async ({
   page,
 }) => {
   await fixture(page);
@@ -291,13 +312,8 @@ test("the narrow-screen review fits the viewport and keeps its confirmation gate
     name: "Publish to live map",
     exact: true,
   });
-  await expect(publish).toBeDisabled();
-  await page
-    .getByRole("checkbox", {
-      name: "I checked this is the correct place and map pin.",
-      exact: true,
-    })
-    .focus();
-  await page.keyboard.press("Space");
+  await expect(page.getByRole("form", { name: "Review place" }).getByRole("checkbox")).toHaveCount(0);
+  await publish.focus();
+  await expect(publish).toBeFocused();
   await expect(publish).toBeEnabled();
 });

@@ -216,7 +216,15 @@ export function extractGooglePlaceIdFromUrl(url: string) {
     // Regex fallback covers copied partial Maps URLs.
   }
 
-  const decodedUrl = decodeURIComponent(trimmedUrl);
+  // Provider HTML is not one encoded URI: it can contain literal percent signs
+  // or incomplete escapes. Decode valid runs without rejecting the whole page.
+  const decodedUrl = trimmedUrl.replace(/(?:%[0-9a-f]{2})+/gi, (encoded) => {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return encoded;
+    }
+  });
   const placeIdMatch =
     decodedUrl.match(/(?:query_place_id|place_id)=([^&]+)/) ??
     decodedUrl.match(/!1s(ChI[A-Za-z0-9_-]+)/) ??

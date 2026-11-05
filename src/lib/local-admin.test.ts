@@ -4,6 +4,32 @@ import { NextRequest } from "next/server";
 import { isAdminAuthorized, isAdminEnabled } from "@/lib/admin-auth";
 import { proxy } from "../../proxy";
 
+test("local Admin opens without a password in development and local production", () => {
+  for (const nodeEnv of ["development", "production"]) {
+    for (const adminPassword of [undefined, "old-owner-password"]) {
+      const environment = { nodeEnv, enableAdmin: "true", adminPassword };
+      for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
+        const request = new NextRequest(`http://${host}:3000/api/admin/catalogue`);
+        assert.equal(isAdminAuthorized(request, environment), true);
+        assert.equal(isAdminAuthorized(request, { ...environment, vercel: "1" }), false);
+        assert.equal(isAdminAuthorized(request, { ...environment, enableAdmin: "false" }), false);
+      }
+    }
+  }
+});
+
+test("local password-free access rejects cross-site requests and lookalike hosts", () => {
+  const environment = { nodeEnv: "production", enableAdmin: "true", adminPassword: "secret" };
+  const url = "http://localhost:3000/api/admin/catalogue";
+  assert.equal(isAdminAuthorized(new NextRequest(url, { headers: { origin: "http://localhost:3000", "sec-fetch-site": "same-origin" } }), environment), true);
+  assert.equal(isAdminAuthorized(new NextRequest(url, { headers: { origin: "https://example.com" } }), environment), false);
+  assert.equal(isAdminAuthorized(new NextRequest(url, { headers: { "sec-fetch-site": "cross-site" } }), environment), false);
+  for (const host of ["192.168.1.20", "travel.tomurho.com", "localhost.example.com"]) {
+    const request = new NextRequest(`http://${host}:3000/api/admin/catalogue`, { headers: { "x-forwarded-host": "localhost" } });
+    assert.equal(isAdminAuthorized(request, environment), false);
+  }
+});
+
 test("Vercel cannot enable Admin with a correct password or an enabled flag", () => {
   const environment = {
     nodeEnv: "production", enableAdmin: "true", vercel: "1", adminPassword: "secret",

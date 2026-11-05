@@ -15,6 +15,10 @@ import {
 } from "@/lib/catalogue";
 import type { CatalogueStore } from "@/lib/catalogue-store";
 import { lookupCataloguePlaces } from "@/lib/catalogue-lookup";
+import {
+  catalogueLookupInput,
+  type CatalogueLookupOptions,
+} from "@/lib/catalogue-lookup-input";
 
 export async function addCataloguePlace(
   store: CatalogueStore,
@@ -41,26 +45,32 @@ export async function lookupCatalogueEntry(
   store: CatalogueStore,
   id: string,
   expectedVersion: string,
-  options: { query?: string; mapsUrl?: string; city?: string } = {},
+  options: CatalogueLookupOptions = {},
   lookup = lookupCataloguePlaces,
 ) {
   const entry = await requireEntry(store, id, expectedVersion);
+  const lookupOptions = catalogueLookupInput(entry, options);
   const lookupInput = {
     ...entry.input,
-    city: options.city?.trim() || entry.draft?.city || entry.input.city,
+    city: lookupOptions.city,
+    mapsUrl: options.mapsUrl?.trim() ?? entry.input.mapsUrl,
   };
   let next: CatalogueEntry;
   try {
-    const candidates = await lookup(lookupInput, options);
+    const candidates = await lookup(lookupInput, lookupOptions);
     next = {
       ...entry,
       input: lookupInput,
       candidates,
+      confirmedMatch: lookupOptions.mapsUrl ? null : entry.confirmedMatch,
       lookupError: null,
       lookupCompleted: true,
     };
     // A suggestion is never a verified match. Existing editorial settings survive a new lookup.
-    if (!entry.draft && !entry.live) {
+    if (
+      (!entry.draft && !entry.live) ||
+      (lookupOptions.mapsUrl && (entry.draft || options.mapsUrl?.trim()))
+    ) {
       const first = candidates.find(
         (c) => c.businessStatus !== "CLOSED_PERMANENTLY",
       );
@@ -72,6 +82,8 @@ export async function lookupCatalogueEntry(
   } catch (error) {
     next = {
       ...entry,
+      input: lookupInput,
+      confirmedMatch: lookupOptions.mapsUrl ? null : entry.confirmedMatch,
       lookupError:
         error instanceof Error
           ? error.message

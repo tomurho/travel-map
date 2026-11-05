@@ -284,7 +284,7 @@ test("admin endpoints require preview hashes and retain authorization", async ()
       (await import("../../app/api/admin/place-pipeline/resolve-conflict/route")).POST,
     ];
     for (const POST of routes) {
-      const request = (password: string) => new NextRequest("http://localhost/api/admin/place-pipeline/test", {
+      const request = (password: string) => new NextRequest("https://admin.example.test/api/admin/place-pipeline/test", {
         method: "POST", headers: { "Content-Type": "application/json", "x-admin-password": password },
         body: JSON.stringify({ sheetId: "sheet", write: true, confirmWrite: true }),
       });
