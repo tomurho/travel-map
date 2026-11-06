@@ -31,3 +31,18 @@ latency, and four-times CPU slowdown at 390 × 844. Results are written to
 `docs/audits/2026-10-23-implementation/performance.json`. This is laptop emulation,
 not a physical-phone measurement. Startup ends when the map renderer and controls
 are present; tile completion is not measured.
+
+The UI improvement suite also covers searchable categories, preserving area and view,
+wrapped filter chips, natural search, Nearby cancellation and ordering, targeted empty
+recovery, and returning keyboard focus when a category selection removes an empty state.
+The public suite checks the explicit Google Maps handoff and the fine border around
+“Show on this map,” plus list scroll preservation and enlarged text.
+
+To include refresh failure and Retry, start a separate development server with
+`CATALOGUE_ENABLED=true`, `DATABASE_URL=''`, `CATALOGUE_LOCAL_PATH` pointing to a copied
+catalogue fixture, and a distinct `NEXT_BUILD_DIR`. The fixture can be created from
+`src/data/places.json` with `seedCatalogueEntry` from `src/lib/catalogue.ts`. Set
+`CATALOGUE_TEST_URL` to that server when running `ui-improvements.spec.ts`. Without
+that variable, only the shared-catalogue refresh test is skipped. Never point this test
+at a live database. Screenshots go to ignored `outputs/ui-ux-implementation-2026-11-06`.
+Use a different Playwright `--output` directory for each concurrent run.

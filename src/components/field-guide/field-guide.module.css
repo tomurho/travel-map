@@ -643,11 +643,11 @@
   gap: 7px;
 }
 
-.page .placeNameLink {
+.page .placeName {
   display: block;
   min-width: 0;
   min-height: 0;
-  padding: 8px 0 0;
+  padding: 0;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -660,20 +660,6 @@
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.placeNameLink:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.placeNameLink:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--fg-paper);
-  outline-offset: 1px;
-  box-shadow: 0 0 0 4px var(--fg-charcoal);
 }
 
 .placeCopy small {
@@ -803,6 +789,9 @@
 }
 
 .detailHeading p {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   margin: 0 0 3px;
   color: var(--fg-coral);
   font-size: 11px;
@@ -817,17 +806,6 @@
   font-size: 22px;
   font-weight: 600;
   line-height: 1.25;
-}
-
-.detailNameLink {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.detailNameLink:hover {
-  text-decoration-thickness: 2px;
 }
 
 .detailHeading span {
@@ -1077,21 +1055,40 @@
 
 .mobileViewSwitch { display: none; }
 
-.detailActions .mapsHandoff {
+.detailActions .showOnMap {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 44px;
-  border: 1px solid var(--fg-charcoal);
-  border-radius: 10px;
+  border: 1px solid var(--fg-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--fg-ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.detailActions .showOnMap:hover { background: var(--fg-maple-soft); }
+.externalMaps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--fg-coral);
+  border-radius: 8px;
   padding: 10px 14px;
-  background: var(--fg-charcoal);
+  background: var(--fg-coral);
   color: white;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
   text-decoration: none;
 }
-.detailActions .mapsHandoff:hover { background: #403e3a; }
+.externalMaps:hover { filter: brightness(.94); }
 .detailAddress { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .detailNotes { border-top: 1px solid var(--fg-line); padding-top: 12px; }
 .detailNotes h3 { margin: 0; font-size: 13px; font-weight: 600; }
@@ -1172,7 +1169,9 @@
 }
 
 /* Compact mobile place card; desktop keeps the full address and handoff. */
-.detailLayout, .detailCopy, .detailActions { display: contents; }
+.detailLayout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.detailCopy { display: grid; flex: 1 1 150px; align-content: start; gap: 6px; min-width: 0; }
+.detailActions { display: flex; flex: 0 1 auto; max-width: 100%; margin-left: auto; flex-direction: column; align-items: flex-end; gap: 8px; }
 .detailHeading .detailDistrict { display: inline; }
 .compactAddress, .compactMapsLabel, .compactNotes { display: none; }
 @media (max-width: 900px) {
@@ -1184,8 +1183,6 @@
   .detailHeading .redundantCategory, .detailHeading .detailDistrict,
   .fullAddress, .fullMapsLabel, .fullNotes { display: none; }
   .compactAddress, .compactMapsLabel, .compactNotes { display: block; }
-  .detailActions .mapsHandoff { min-width: 80px; padding: 8px 12px; border-color: var(--fg-line); border-radius: 8px; background: transparent; color: var(--fg-ink); font-weight: 500; }
-  .detailActions .mapsHandoff:hover { background: var(--fg-maple-soft); }
   .detailAddress { font-size: 13px; line-height: 1.45; }
   .detailDistance { padding: 0; border: 0; font-size: 12px; font-weight: 400; }
   .compactNotes { border-top: 1px solid var(--fg-line); font-size: 13px; }
@@ -1193,7 +1190,12 @@
   .compactNotes p { line-height: 1.5; }
 }
 
-/* The row toggles details. Venue links and Map have their own actions. */
-.placeStatus { margin: 5px 0 0; color: var(--fg-coral); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.page .placeRowToggle { display: grid; align-content: start; width: 100%; min-height: 24px; gap: 4px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit; line-height: 1.4; }
+/* The full place heading toggles details; its two map actions stay separate. */
+.placeStatus { display: flex; align-items: center; gap: 5px; margin: 5px 0 0; color: var(--fg-coral); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.page .placeRowToggle { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; width: 100%; min-height: 54px; gap: 12px; padding: 8px 0 0; border: 0; border-radius: 4px; background: transparent; color: inherit; cursor: pointer; text-align: left; font: inherit; line-height: 1.4; }
+.placeRowContent { display: grid; gap: 4px; min-width: 0; }
+.placeRowContent small { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.rowStatus { display: inline-flex; flex: 0 0 auto; }
+.rowChevron { width: 18px; height: 18px; fill: none; stroke: var(--fg-muted); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.placeRowToggle[aria-expanded="true"] .rowChevron { transform: rotate(180deg); }
 .placeCard:has(.placeRowToggle:focus-visible) { outline: 2px solid var(--fg-charcoal); outline-offset: -2px; }

@@ -28,10 +28,18 @@
     getCenter() { const sw = this.getSouthWest(), ne = this.getNorthEast(); return new LatLng((sw.lat() + ne.lat()) / 2, (sw.lng() + ne.lng()) / 2); }
     contains() { return true; }
   }
+  class Point {
+    constructor(x, y) { this.x = x; this.y = y; }
+    equals(other) { return other?.x === this.x && other?.y === this.y; }
+  }
+  class Size {
+    constructor(width, height) { this.width = width; this.height = height; }
+    equals(other) { return other?.width === this.width && other?.height === this.height; }
+  }
   const state = { calls: [], markers: [], map: null };
   window.__mapsMock = state;
   class MapFixture {
-    constructor(div, options) { this.div = div; this.zoom = options.zoom ?? 2; this.center = new LatLng(options.center ?? { lat: 0, lng: 0 }); this.offset = 0; state.map = this; div.dataset.mockMap = "true"; }
+    constructor(div, options) { this.div = div; this.zoom = options.zoom ?? 2; this.center = new LatLng(options.center ?? { lat: 0, lng: 0 }); this.offset = 0; state.map = this; div.dataset.mockMap = "true"; div.style.position = "relative"; div.style.overflow = "hidden"; div.style.isolation = "isolate"; }
     getDiv() { return this.div; }
     setOptions() {}
     getZoom() { return this.zoom; }
@@ -47,7 +55,7 @@
     idle() { queueMicrotask(() => { event.trigger(this, "idle"); state.markers.forEach((marker) => marker.draw()); }); }
   }
   class Marker {
-    constructor(options = {}) { this.position = new LatLng(options.position ?? { lat: 0, lng: 0 }); this.visible = true; this.button = document.createElement("button"); this.button.type = "button"; this.button.dataset.mockMarker = "true"; this.button.style.cssText = "position:absolute;width:18px;height:18px;min-height:18px;border-radius:50%;padding:0;border:2px solid white;background:#48677f"; this.button.onclick = (e) => { e.stopPropagation(); event.trigger(this, "click", e); }; state.markers.push(this); this.setTitle(options.title ?? ""); if (options.map) this.setMap(options.map); }
+    constructor(options = {}) { this.position = new LatLng(options.position ?? { lat: 0, lng: 0 }); this.visible = true; this.button = document.createElement("button"); this.button.type = "button"; this.button.dataset.mockMarker = "true"; this.button.style.cssText = "position:absolute;width:18px;height:18px;min-height:18px;border-radius:50%;padding:0;border:2px solid white;background:#48677f"; this.button.onclick = (e) => { e.stopPropagation(); event.trigger(this, "click", e); }; state.markers.push(this); this.setTitle(options.title ?? ""); this.setIcon(options.icon); if (options.map) this.setMap(options.map); }
     setMap(map) { this.map = map; if (map) map.getDiv().append(this.button); else this.button.remove(); this.draw(); }
     getMap() { return this.map; }
     getPosition() { return this.position; }
@@ -56,12 +64,13 @@
     setVisible(visible) { this.visible = visible; this.draw(); }
     setTitle(title) { this.button.title = title; this.button.setAttribute("aria-label", title); }
     setZIndex(value) { this.button.style.zIndex = value; }
-    setIcon() {}
+    setIcon(icon) { this.icon = icon; if (icon?.url) { this.button.style.width = `${icon.scaledSize?.width ?? 44}px`; this.button.style.height = `${icon.scaledSize?.height ?? 44}px`; this.button.style.border = "0"; this.button.style.background = `transparent url("${icon.url}") center / contain no-repeat`; } this.draw(); }
+    setShape(shape) { this.shape = shape; }
     setLabel() {}
     setAnimation() {}
     setOptions() {}
     addListener(name, callback) { return event.addListener(this, name, callback); }
-    draw() { if (!this.map) return; const scale = 2 ** this.map.zoom / 360 * 256; this.button.style.left = `${this.map.div.clientWidth / 2 + (this.position.lng() - this.map.center.lng()) * scale - 9}px`; this.button.style.top = `${this.map.div.clientHeight / 2 - (this.position.lat() - this.map.center.lat()) * scale - this.map.offset - 9}px`; this.button.style.display = this.visible ? "block" : "none"; }
+    draw() { if (!this.map) return; const scale = 2 ** this.map.zoom / 360 * 256; const x = this.icon?.anchor?.x ?? 9, y = this.icon?.anchor?.y ?? 9; this.button.style.left = `${this.map.div.clientWidth / 2 + (this.position.lng() - this.map.center.lng()) * scale - x}px`; this.button.style.top = `${this.map.div.clientHeight / 2 - (this.position.lat() - this.map.center.lat()) * scale - this.map.offset - y}px`; this.button.style.display = this.visible ? "block" : "none"; }
   }
   function OverlayView() {}
   // The clusterer copies enumerable prototype functions from OverlayView.
@@ -69,5 +78,5 @@
   OverlayView.prototype.getMap = function() { return this.map; };
   OverlayView.prototype.getProjection = function() { return {}; };
   OverlayView.prototype.addListener = function(name, callback) { return event.addListener(this, name, callback); };
-  window.google = { maps: { version: "fixture", Map: MapFixture, Marker, LatLng, LatLngBounds, OverlayView, event, SymbolPath: { CIRCLE: "circle" }, importLibrary: async () => window.google.maps } };
+  window.google = { maps: { version: "fixture", Map: MapFixture, Marker, LatLng, LatLngBounds, Point, Size, OverlayView, event, SymbolPath: { CIRCLE: "circle" }, importLibrary: async () => window.google.maps } };
 })();

@@ -9,13 +9,17 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/admin/**", (route) => route.abort());
 });
 
-test("The list Map action reveals street context above the card; ordinary switches preserve manual view", async ({ page }) => {
+test("Show on this map reveals street context above the card; ordinary switches preserve manual view", async ({ page }) => {
   await page.goto("/?city=Kyoto&view=list");
+  await expect.poll(() => page.evaluate("Boolean(window.__mapsMock.map)")).toBe(true);
+  await page.evaluate("window.__mapsMock.calls=[]");
   await page.getByRole("button", { name: "Show details for 120gバインミー京都", exact: true }).click();
-  await page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Map", exact: true }).click();
+  await page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Show on this map", exact: true }).click();
   await expect(page.locator('[data-mock-map="true"]')).toBeVisible();
   await expect.poll(() => page.evaluate("window.__mapsMock.map.zoom")).toBeGreaterThanOrEqual(17);
   await expect.poll(() => page.evaluate("window.__mapsMock.map.offset")).toBeGreaterThan(0);
+  // An asynchronous provider fit must not overwrite the selected street view.
+  expect(await page.evaluate("window.__mapsMock.calls.filter(call=>call.action==='fit')")).toEqual([]);
   const marker = page.getByRole("button", { name: /^120gバインミー京都,/ });
   await expect(marker).toBeVisible();
   const markerBounds = await marker.boundingBox();
@@ -23,17 +27,20 @@ test("The list Map action reveals street context above the card; ordinary switch
   expect(markerBounds && cardBounds && markerBounds.y + markerBounds.height < cardBounds.y).toBeTruthy();
   await page.evaluate("window.__mapsMock.map.setCenter({lat:35.02,lng:135.77}); window.__mapsMock.map.setZoom(14); window.__mapsMock.calls=[]");
   await page.getByRole("button", { name: "List", exact: true }).click();
-  await expect(page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Map", exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Show on this map", exact: true })).toBeVisible();
   await page.getByRole("group", { name: "Browse places" }).getByRole("button", { name: "Map", exact: true }).click();
   await expect.poll(() => page.evaluate("window.__mapsMock.map.zoom")).toBe(14);
   expect(await page.evaluate("window.__mapsMock.calls.filter(call=>['fit','center','zoom'].includes(call.action))")).toEqual([]);
   await expect(page.getByRole("complementary", { name: "Selected place: 120gバインミー京都" })).toBeVisible();
 });
 
-test("category selection closes filters, Escape restores focus, and Back restores the prior view", async ({ page }) => {
+test("Show places closes filters, Escape restores focus, and Back restores the prior view", async ({ page }) => {
   await page.goto("/?city=Kyoto");
   await page.getByRole("button", { name: /^Filters/ }).click();
-  await page.getByRole("button", { name: /^Bakery ·/ }).click();
+  await page.getByRole("button", { name: /^Choose category:/ }).click();
+  await page.getByRole("dialog", { name: "Choose a category" }).getByRole("button", { name: /^Bakery \d+$/ }).click();
+  await expect(page.getByRole("button", { name: /^Filters/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: /^Show \d+ places?$/ }).click();
   await expect(page.getByRole("button", { name: /^Filters/ })).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("region", { name: "Map of Kyoto" })).toBeFocused();
   await page.getByRole("button", { name: "List", exact: true }).click();
@@ -47,11 +54,12 @@ test("category selection closes filters, Escape restores focus, and Back restore
 
 test("map failure keeps List details available", async ({ page }) => {
   await page.goto("/?city=Kyoto");
+  await expect.poll(() => page.evaluate("typeof window.gm_authFailure")).toBe("function");
   await page.evaluate("window.gm_authFailure?.()");
   await expect(page.getByText("The map could not load.")).toBeVisible();
   await page.getByRole("button", { name: "View list", exact: true }).click();
   await page.getByRole("button", { name: "Show details for 120gバインミー京都", exact: true }).click();
-  await expect(page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Map", exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Show on this map", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Maps/ }).first()).toBeVisible();
 });
 
@@ -61,8 +69,7 @@ test("distant Nearby keeps city pins and explains the result", async ({ page, co
   await page.goto("/?city=Kyoto");
   await expect(page.locator('[data-mock-map="true"]')).toBeVisible();
   await page.evaluate("window.__mapsMock.calls=[]");
-  await page.getByRole("button", { name: /^Filters/ }).click();
-  await page.getByRole("button", { name: "Nearby", exact: true }).click();
+  await page.getByRole("group", { name: "Browse places" }).getByRole("button", { name: "Nearby", exact: true }).click();
   await expect(page.getByText("No saved city is near you. The current city stays on the map.")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Current city" })).toHaveValue("Kyoto");
   expect(await page.evaluate("window.__mapsMock.calls.filter(call=>['fit','center','zoom'].includes(call.action))")).toEqual([]);
@@ -110,10 +117,12 @@ test("desktop detail actions are readable and the public guide reflows with enla
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto("/?city=Kyoto&view=list");
   await page.getByRole("button", { name: "Show details for 120gバインミー京都", exact: true }).click();
-  const showMap = page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Map", exact: true });
+  const showMap = page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("button", { name: "Show on this map", exact: true });
   const colors = await showMap.evaluate((el) => ({ color: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }));
   expect(colors.color).not.toBe(colors.background);
-  await page.screenshot({ path: "docs/audits/2026-10-23-implementation/desktop-public-fixture.png", fullPage: false });
+  const border = await showMap.evaluate((el) => ({ width: getComputedStyle(el).borderTopWidth, style: getComputedStyle(el).borderTopStyle }));
+  expect(border).toEqual({ width: "1px", style: "solid" });
+  await page.screenshot({ path: "outputs/ui-ux-implementation-2026-11-06/desktop-public-fixture.png", fullPage: false });
   for (const size of [{ width: 390, height: 844 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(size);
     await page.evaluate(() => {
@@ -126,10 +135,10 @@ test("desktop detail actions are readable and the public guide reflows with enla
     const bounds = await showMap.boundingBox();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(size.width);
-    const title = await page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("link", { name: "Open 120gバインミー京都 in Google Maps (new tab)", exact: true }).boundingBox();
-    const overlaps = title && bounds && title.x < bounds.x + bounds.width && title.x + title.width > bounds.x && title.y < bounds.y + bounds.height && title.y + title.height > bounds.y;
+    const externalAction = await page.getByRole("article", { name: "120gバインミー京都, Loved", exact: true }).getByRole("link", { name: "Open 120gバインミー京都 in Google Maps (new tab)", exact: true }).boundingBox();
+    const overlaps = externalAction && bounds && externalAction.x < bounds.x + bounds.width && externalAction.x + externalAction.width > bounds.x && externalAction.y < bounds.y + bounds.height && externalAction.y + externalAction.height > bounds.y;
     expect(overlaps).toBe(false);
-    await page.screenshot({ path: `docs/audits/2026-10-23-implementation/public-${size.width}-enlarged-text.png`, fullPage: false });
+    await page.screenshot({ path: `outputs/ui-ux-implementation-2026-11-06/public-${size.width}-enlarged-text.png`, fullPage: false });
   }
 });
 
@@ -142,7 +151,10 @@ test("city markers update in one cluster batch when a category changes", async (
   // This fixture includes derived cluster markers. Per-marker redraws create
   // thousands of those markers for a city with fewer than 200 saved places.
   expect(before).toBeLessThan(100);
-  await page.getByRole("button", { name: /^Bakery ·/ }).click();
+  await page.getByRole("button", { name: /^Choose category:/ }).click();
+  await page.getByRole("dialog", { name: "Choose a category" }).getByRole("button", { name: /^Bakery \d+$/ }).click();
+  await expect(page.getByRole("button", { name: /^Filters/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: /^Show \d+ places?$/ }).click();
   await expect(page.getByRole("button", { name: "Clear Bakery category filter" })).toBeVisible();
   const after = Number(await page.evaluate("window.__mapsMock.markers.filter(marker=>marker.button.title.includes('places. Zoom in')).length"));
   expect(after - before).toBeLessThan(20);
@@ -158,18 +170,24 @@ test("the approved Taipei day trip has a public explanation", async ({ page }) =
 });
 
 
-test("one venue name opens Google Maps; the row toggles and its Map button reveals the web map", async ({ page, context }) => {
+test("the venue row toggles details and explicit actions open Google Maps or show this map", async ({ page, context }) => {
   await context.route("https://maps.google.com/**", (route) => route.fulfill({ contentType: "text/html", body: "<title>External Maps fixture</title>" }));
   await page.goto("/?city=Taipei&view=list&q=LANDED");
   const row = page.getByRole("article", { name: "LANDED, Want to go", exact: true });
   const toggle = row.getByRole("button", { name: "Show details for LANDED", exact: true });
+  await expect(row.getByRole("link")).toHaveCount(0);
+  await row.getByText("LANDED", { exact: true }).click();
+  await expect(row.getByRole("button", { name: "Hide details for LANDED", exact: true })).toHaveAttribute("aria-expanded", "true");
+  expect(context.pages()).toHaveLength(1);
+  await row.getByText("LANDED", { exact: true }).click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await toggle.focus();
   await page.keyboard.press("Enter");
   await expect(row.getByRole("button", { name: "Hide details for LANDED", exact: true })).toBeFocused();
   await expect(row.getByText("LANDED", { exact: true })).toHaveCount(1);
   await expect(row.getByText("Want to go", { exact: true })).toHaveCount(1);
   await expect(row.getByText("Wine bar · Songshan", { exact: true })).toHaveCount(1);
-  await expect(row.getByRole("button", { name: "Map", exact: true })).toHaveCount(1);
+  await expect(row.getByRole("button", { name: "Show on this map", exact: true })).toHaveCount(1);
   await expect(row.getByRole("button", { name: "Show on map", exact: true })).toHaveCount(0);
   const link = row.getByRole("link", { name: "Open LANDED in Google Maps (new tab)", exact: true });
   const mapsUrl = await link.getAttribute("href");
@@ -182,13 +200,39 @@ test("one venue name opens Google Maps; the row toggles and its Map button revea
   await row.getByRole("complementary").locator("p").first().click();
   await expect(row.getByRole("button", { name: "Show details for LANDED", exact: true })).toHaveAttribute("aria-expanded", "false");
   await row.click({ position: { x: 2, y: 2 } });
-  await expect(row.getByRole("button", { name: "Map", exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Show on this map", exact: true })).toBeVisible();
   await row.getByRole("button", { name: "Hide details for LANDED", exact: true }).press("Space");
   await expect(row.getByRole("button", { name: "Show details for LANDED", exact: true })).toHaveAttribute("aria-expanded", "false");
   await row.getByRole("button", { name: "Show details for LANDED", exact: true }).press("Enter");
-  await page.screenshot({ path: "docs/audits/2026-10-23-implementation/list-row-landed-mobile.png", fullPage: false });
-  await row.getByRole("button", { name: "Map", exact: true }).click();
+  await page.screenshot({ path: "outputs/ui-ux-implementation-2026-11-06/list-row-landed-mobile.png", fullPage: false });
+  await row.getByRole("button", { name: "Show on this map", exact: true }).click();
   await expect(page.getByRole("region", { name: "Map of Taipei" })).toBeFocused();
   await expect(page.getByRole("complementary", { name: "Selected place: LANDED", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate("window.__mapsMock.map.zoom")).toBeGreaterThanOrEqual(17);
+});
+
+test("list scrolling stays in place through details and a Map/List roundtrip", async ({ page }) => {
+  await page.goto("/?city=Kyoto&view=list");
+  await expect.poll(() => page.evaluate("Boolean(window.__mapsMock.map)")).toBe(true);
+  await page.evaluate(() => document.fonts.ready);
+  const results = page.getByRole("region", { name: "Kyoto places", exact: true });
+  const row = results.getByRole("article").nth(10);
+  const original = await row.evaluate((element) => {
+    const list = element.parentElement!;
+    list.scrollTop += element.getBoundingClientRect().top - list.getBoundingClientRect().top - 24;
+    return { top: element.getBoundingClientRect().top, scroll: list.scrollTop };
+  });
+  expect(original.scroll).toBeGreaterThan(300);
+  await row.getByRole("button", { name: /^Show details for/ }).click();
+  await expect.poll(() => row.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(original.top, 0);
+  await row.getByRole("button", { name: /^Hide details for/ }).click();
+  await expect.poll(() => row.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(original.top, 0);
+  await row.getByRole("button", { name: /^Show details for/ }).click();
+  const expandedScroll = await row.evaluate((element) => element.parentElement!.scrollTop);
+  await page.getByRole("group", { name: "Browse places" }).getByRole("button", { name: "Map", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Map of Kyoto" })).toBeVisible();
+  await page.getByRole("group", { name: "Browse places" }).getByRole("button", { name: "List", exact: true }).click();
+  await expect(row.getByRole("button", { name: /^Hide details for/ })).toBeVisible();
+  await expect.poll(() => row.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(original.top, 0);
+  await expect.poll(() => row.evaluate((element) => element.parentElement!.scrollTop)).toBeCloseTo(expandedScroll, 0);
 });

@@ -18,6 +18,8 @@ export type { CityCenter } from "@/lib/map-viewport";
 import type { Place } from "@/lib/place";
 import { createLocationRequestGate } from "@/lib/location-request";
 import { subscribeToGoogleMapsAuthFailure } from "@/lib/google-maps-auth";
+import { createPlaceMarkerSvg, getPlaceStatus, placeStatuses, type PlaceStatus } from "@/lib/place-status";
+import { PlaceStatusIcon } from "@/components/place-status-icon";
 
 type MapViewProps = {
   places: Place[];
@@ -96,33 +98,23 @@ function getStatusBadge(place: Place): StatusBadge | null {
   return null;
 }
 
-function getMarkerColor(place: Place) {
-  if (place.loved === true) {
-    return "#ef2b68";
+// Eight shared images/options cover the four statuses and selected states.
+// Reusing them avoids regenerating URLs or updating unchanged markers on render.
+const markerIcons = new Map<string, google.maps.Icon>();
+const placeMarkerShape: google.maps.MarkerShape = { type: "circle", coords: [22, 22, 22] };
+function getMarkerIcon(status: PlaceStatus, isActive: boolean): google.maps.Icon {
+  const key = `${status}:${isActive}`;
+  let icon = markerIcons.get(key);
+  if (!icon) {
+    icon = {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(createPlaceMarkerSvg(status, isActive))}`,
+      size: new google.maps.Size(44, 44),
+      scaledSize: new google.maps.Size(44, 44),
+      anchor: new google.maps.Point(22, 22),
+    };
+    markerIcons.set(key, icon);
   }
-
-  if (place.status === "want_to_go") {
-    return "#f59e0b";
-  }
-
-  if (place.status === "been") {
-    return "#48677f";
-  }
-
-  return "#6f899e";
-}
-
-function getMarkerAppearance(place: Place, isActive: boolean) {
-  const isSavedPlace = place.status === "location";
-  const isPriorityPlace = place.loved === true || place.status === "want_to_go";
-
-  return {
-    scale: isActive ? 12 : isPriorityPlace ? 7.8 : 6.3,
-    fillColor: getMarkerColor(place),
-    fillOpacity: 1,
-    strokeColor: isActive ? "#242321" : "#ffffff",
-    strokeWeight: isActive ? 3 : isSavedPlace ? 1.25 : 2,
-  };
+  return icon;
 }
 
 function getMarkerZIndex(place: Place, isActive: boolean) {
@@ -138,30 +130,7 @@ function getMarkerZIndex(place: Place, isActive: boolean) {
 }
 
 function StatusBadgeIcon({ icon }: { icon: "bookmark" | "heart" }) {
-  if (icon === "heart") {
-    return (
-      <svg
-        aria-hidden="true"
-        className="status-badge__icon"
-        viewBox="0 0 24 24"
-      >
-        <path
-          d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-          fill="currentColor"
-        />
-      </svg>
-    );
-  }
-
-  return (
-    <svg
-      aria-hidden="true"
-      className="status-badge__icon"
-      viewBox="0 0 24 24"
-    >
-      <path d="M6 3h12v18l-6-4-6 4V3z" fill="currentColor" />
-    </svg>
-  );
+  return <PlaceStatusIcon status={icon === "heart" ? "loved" : "want_to_go"} className="status-badge__icon" />;
 }
 
 
@@ -196,11 +165,12 @@ function PlaceMarker({ place, isActive, onSelectPlace, clusterer }: {
   return <MarkerF
     clusterer={clusterer}
     noClustererRedraw={Boolean(clusterer)}
-    title={`${place.name}, ${getStatusBadge(place)?.label ?? "Saved"}`}
+    title={`${place.name}, ${placeStatuses[getPlaceStatus(place)].label}`}
     onClick={() => onSelectPlace(place.id)}
     position={{ lat: place.latitude, lng: place.longitude }}
     zIndex={isActive ? 1000 : getMarkerZIndex(place, false)}
-    icon={{ path: google.maps.SymbolPath.CIRCLE, ...getMarkerAppearance(place, isActive) }}
+    icon={getMarkerIcon(getPlaceStatus(place), isActive)}
+    shape={placeMarkerShape}
   />;
 }
 
@@ -349,6 +319,12 @@ export function MapView({
     lastFramedLocationRef.current = null;
     if (framedResultsRef.current === frameKey) return;
     framedResultsRef.current = frameKey;
+    const selectionKey = selectedPlace ? `${selectedPlace.id}:${getCoordinateKey(selectedPlace)}` : null;
+    if (selectedPlace && (selectionRef.current !== selectionKey || handledRevealRef.current !== revealPlaceNonce)) {
+      // A real provider may finish fitBounds after the next animation frame.
+      // Let the pending place reveal own the initial viewport instead.
+      return;
+    }
     const visiblePlaces = showAllPlaces ? places : overviewPlaces;
 
     if (visiblePlaces.length === 0) {
@@ -374,7 +350,7 @@ export function MapView({
     }
 
     map.fitBounds(bounds, 72);
-  }, [cityCenters, followUserLocation, isLoaded, isVisible, locationStatus, map, overviewPlaces, places, placesKey, showAllPlaces, userLocation, viewportCity]);
+  }, [cityCenters, followUserLocation, isLoaded, isVisible, locationStatus, map, overviewPlaces, places, placesKey, revealPlaceNonce, selectedPlace, showAllPlaces, userLocation, viewportCity]);
 
   useEffect(() => {
     const selectionKey = selectedPlace ? `${selectedPlace.id}:${getCoordinateKey(selectedPlace)}` : null;

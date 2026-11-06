@@ -2,19 +2,12 @@ import { formatDistance } from "@/lib/geo";
 import { getGoogleMapsHandoffUrl, getPublicNotes, type Place } from "@/lib/place";
 import type { ReactNode } from "react";
 import { compactPlaceAddress } from "@/lib/place-card-address";
+import { getPlaceStatus, placeStatuses } from "@/lib/place-status";
+import { PlaceStatusIcon } from "@/components/place-status-icon";
 import styles from "./field-guide.module.css";
 
 function getStatusLabel(place: Place) {
-  if (place.loved) {
-    return "Loved";
-  }
-  if (place.status === "want_to_go") {
-    return "Want to go";
-  }
-  if (place.status === "been") {
-    return "Been";
-  }
-  return "Saved";
+  return placeStatuses[getPlaceStatus(place)].label;
 }
 
 export function FieldGuidePlaceCard({
@@ -49,28 +42,7 @@ export function FieldGuidePlaceCard({
       }}
     >
       <div className={`${styles.placeCopy}${isEditable && !isEditing ? ` ${styles.placeCopyEditable}` : ""}`}>
-        {details ? <p className={styles.placeStatus}>{place.loved ? "♥ " : null}{getStatusLabel(place)}</p> : null}
-        <div className={styles.placeTitleRow}>
-          <a
-            className={styles.placeNameLink}
-            href={getGoogleMapsHandoffUrl(place)}
-            rel="noopener noreferrer"
-            target="_blank"
-            aria-label={`Open ${place.name} in Google Maps (new tab)`}
-          >
-            {place.name}
-          </a>
-          {!details && place.loved ? (
-            <span className={styles.lovedMark} title="Loved">
-              <span aria-hidden="true">♥</span>
-              <span className={styles.srOnly}>Loved</span>
-            </span>
-          ) : !details && place.status === "want_to_go" ? (
-            <span className={styles.wantMark} title="Want to go">
-              <span className={styles.srOnly}>Want to go</span>
-            </span>
-          ) : null}
-        </div>
+        {details ? <p className={styles.placeStatus} style={{ color: placeStatuses[getPlaceStatus(place)].color }}><PlaceStatusIcon status={getPlaceStatus(place)} size={14} />{getStatusLabel(place)}</p> : null}
         <button
           aria-label={`${details ? "Hide" : "Show"} details for ${place.name}`}
           aria-expanded={Boolean(details)}
@@ -80,8 +52,18 @@ export function FieldGuidePlaceCard({
           onClick={onSelect}
           type="button"
         >
-          <small>{place.category}{place.district ? ` · ${place.district}` : ""}</small>
-          {distanceKm === null ? null : <span className={styles.distance}>{formatDistance(distanceKm)} away</span>}
+          <span className={styles.placeRowContent}>
+            <span className={styles.placeTitleRow}>
+              <span className={styles.placeName}>{place.name}</span>
+              {!details ? <span className={styles.rowStatus} style={{ color: placeStatuses[getPlaceStatus(place)].color }}>
+                <PlaceStatusIcon status={getPlaceStatus(place)} size={16} />
+                <span className={styles.srOnly}>{getStatusLabel(place)}</span>
+              </span> : null}
+            </span>
+            <small>{place.category}{place.district ? ` · ${place.district}` : ""}</small>
+            {distanceKm === null ? null : <span className={styles.distance}>{formatDistance(distanceKm)} away</span>}
+          </span>
+          <svg className={styles.rowChevron} aria-hidden="true" viewBox="0 0 20 20"><path d="m5 7.5 5 5 5-5" /></svg>
         </button>
         {isEditable && !isEditing ? (
           <button className={styles.rowEditButton} onClick={onEdit} type="button">
@@ -118,11 +100,11 @@ export function FieldGuidePlaceDetail({
         <div className={styles.detailCopy}>
           {variant === "map" ? <div className={styles.detailHeading}>
             <div>
-              <p>
-                {place.loved ? "♥ " : null}
+              <p style={{ color: placeStatuses[getPlaceStatus(place)].color }}>
+                <PlaceStatusIcon status={getPlaceStatus(place)} size={14} />
                 {getStatusLabel(place)}
               </p>
-              <h2><a className={styles.detailNameLink} href={getGoogleMapsHandoffUrl(place)} rel="noopener noreferrer" target="_blank" aria-label={`Open ${place.name} in Google Maps (new tab)`}>{place.name}</a></h2>
+              <h2>{place.name}</h2>
               <span className={hideCategory ? styles.redundantCategory : undefined}>
                 {place.category}
                 <span className={styles.detailDistrict}>{place.district ? ` · ${place.district}` : ""}</span>
@@ -143,7 +125,7 @@ export function FieldGuidePlaceDetail({
           >
             ×
           </button> : null}
-          {variant === "list" && onShowMap ? <button className={styles.mapsHandoff} type="button" onClick={onShowMap}>Map</button> : null}
+          {variant === "list" && onShowMap ? <button className={styles.showOnMap} type="button" onClick={onShowMap}>Show on this map</button> : null}
         </div>
       </div>
       {variant === "list" || distanceKm === null ? null : (
@@ -163,6 +145,11 @@ export function FieldGuidePlaceDetail({
         <summary>Your notes</summary>
         {notes.map((note, index) => <p key={index}>{note}</p>)}
       </details> : null}
+      <a className={styles.externalMaps}
+        href={getGoogleMapsHandoffUrl(place)} rel="noopener noreferrer" target="_blank"
+        aria-label={`Open ${place.name} in Google Maps (new tab)`}>
+        Open in Google Maps <span aria-hidden="true">↗</span>
+      </a>
     </aside>
   );
 }

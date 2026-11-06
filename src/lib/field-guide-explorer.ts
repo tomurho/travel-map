@@ -27,6 +27,13 @@ export const explorerGroups = [
 
 export type ExplorerGroup = (typeof explorerGroups)[number]["id"];
 export type ExplorerFilters = FieldGuideFilters & { group: ExplorerGroup };
+type NearbyOptions = { nearbyActive: boolean; userLocation: GeoPoint | null };
+
+export type ExplorerRecovery = {
+  kind: "area" | "query" | "loved" | "status" | "category" | "group";
+  filters: ExplorerFilters;
+  count: number;
+};
 
 export function getExplorerGroup(group: ExplorerGroup) {
   return explorerGroups.find((option) => option.id === group)!;
@@ -78,7 +85,7 @@ export function readExplorerFilters(
   return {
     city, group,
     category: groupPlaces.some((place) => place.category === category) ? category : "all",
-    area: groupPlaces.some((place) => normalizeExplorerArea(city, place.district) === area) ? area : "all",
+    area: cityPlaces.some((place) => normalizeExplorerArea(city, place.district) === area) ? area : "all",
     status: params.get("status") === "want_to_go" && !lovedOnly ? "want_to_go" : "all",
     lovedOnly, query: params.get("q") ?? "",
   };
@@ -98,16 +105,39 @@ export function buildExplorerQuery(filters: ExplorerFilters, view: "map" | "list
 
 export function filterExplorerPlaces(
   places: Place[], filters: ExplorerFilters,
-  nearby: { nearbyActive: boolean; userLocation: GeoPoint | null } = { nearbyActive: false, userLocation: null },
+  nearby: NearbyOptions = { nearbyActive: false, userLocation: null },
 ) {
-  const query = normalizePlaceSearch(filters.query.trim());
+  const queryTerms = normalizePlaceSearch(filters.query).split(/\s+/).filter(Boolean);
   const candidates = places.filter((place) => {
     if (!isPublicPlace(place) || normalizePlaceCity(place.city) !== filters.city || !matchesExplorerGroup(place, filters.group)) return false;
     if (filters.area !== "all" && normalizeExplorerArea(filters.city, place.district) !== normalizeExplorerArea(filters.city, filters.area)) return false;
     const labels = explorerGroups.filter((group) => group.id !== "all" && matchesExplorerGroup(place, group.id)).map((group) => group.label);
-    return !query || normalizePlaceSearch([place.name, place.category, place.district, ...labels, ...getPlaceTypeAliases(place.category)].join(" ")).includes(query);
+    const searchable = normalizePlaceSearch([place.name, place.category, place.district, ...labels, ...getPlaceTypeAliases(place.category)].join(" "));
+    return queryTerms.every((term) => searchable.includes(term));
   });
   return filterAndSortFieldGuidePlaces(candidates, { ...filters, area: "all", query: "" }, nearby);
+}
+
+export function getExplorerRecovery(
+  places: Place[], filters: ExplorerFilters,
+  nearby: NearbyOptions = { nearbyActive: false, userLocation: null },
+): ExplorerRecovery | null {
+  if (filterExplorerPlaces(places, filters, nearby).length) return null;
+
+  // Suggest one explicit relaxation. Keep the city and every other choice intact.
+  const candidates: Array<Omit<ExplorerRecovery, "count">> = [];
+  if (filters.area !== "all") candidates.push({ kind: "area", filters: { ...filters, area: "all" } });
+  if (filters.query.trim()) candidates.push({ kind: "query", filters: { ...filters, query: "" } });
+  if (filters.lovedOnly) candidates.push({ kind: "loved", filters: { ...filters, lovedOnly: false } });
+  if (filters.status !== "all") candidates.push({ kind: "status", filters: { ...filters, status: "all" } });
+  if (filters.category !== "all") candidates.push({ kind: "category", filters: { ...filters, category: "all" } });
+  if (filters.group !== "all") candidates.push({ kind: "group", filters: { ...filters, group: "all" } });
+
+  for (const candidate of candidates) {
+    const count = filterExplorerPlaces(places, candidate.filters, nearby).length;
+    if (count) return { ...candidate, count };
+  }
+  return null;
 }
 
 export function getExplorerSpecialties(places: Place[], filters: ExplorerFilters) {

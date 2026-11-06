@@ -4,11 +4,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { MapView } from "@/components/map-view";
+import { PlaceStatusIcon } from "@/components/place-status-icon";
+import { placeStatuses, type PlaceStatus } from "@/lib/place-status";
 import { toggleFieldGuideLoved, toggleFieldGuideWantToGo } from "@/lib/field-guide";
 import { getDistanceKm, type GeoPoint } from "@/lib/geo";
 import {
   buildExplorerQuery, filterExplorerPlaces, getExplorerAreas, getExplorerGroup,
-  getExplorerSpecialties, matchesExplorerGroup, explorerGroups, readExplorerFilters, specialtyLabel,
+  getExplorerSpecialties, getExplorerRecovery, matchesExplorerGroup, explorerGroups, readExplorerFilters, specialtyLabel,
   type ExplorerFilters, type ExplorerGroup,
 } from "@/lib/field-guide-explorer";
 import { getCategories, getCities, isPublicPlace } from "@/lib/filtering";
@@ -30,13 +32,17 @@ function ExplorerSheet({ title, children, onClose }: { title: string; children: 
   useLayoutEffect(() => {
     const dialog = dialogRef.current!;
     const previousFocus = document.activeElement as HTMLElement | null;
+    const previousRegion = previousFocus?.closest<HTMLElement>("section[tabindex='-1']");
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     dialog.showModal();
     return () => {
       dialog.close();
       document.body.style.overflow = previousOverflow;
-      previousFocus?.focus({ preventScroll: true });
+      // The empty-state trigger can disappear in the same commit as this sheet.
+      requestAnimationFrame(() => {
+        if (!dialog.isConnected) (previousFocus?.isConnected ? previousFocus : previousRegion)?.focus({ preventScroll: true });
+      });
     };
   }, []);
   return <dialog ref={dialogRef} className={styles.sheet} aria-labelledby="explorer-sheet-title"
@@ -76,9 +82,14 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
   const view = searchParams.get("view") === "list" ? "list" : "map";
   const oppositeView = view === "map" ? "list" : "map";
   const oppositeViewLabel = oppositeView === "map" ? "Map" : "List";
-  const [sheet, setSheet] = useState<"groups" | "specialties" | null>(null);
+  const [sheet, setSheet] = useState<"categories" | null>(null);
   const [specialtyQuery, setSpecialtyQuery] = useState("");
+  const [allChipsExpanded, setAllChipsExpanded] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [retryRefreshNonce, setRetryRefreshNonce] = useState(0);
   const [revealPlaceNonce, setRevealPlaceNonce] = useState(0);
+  const [revealListNonce, setRevealListNonce] = useState(0);
   const [selectedBottomInset, setSelectedBottomInset] = useState(0);
   const selectedCardRef = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -93,25 +104,30 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
   const filterToggleRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const focusSearchOnOpen = useRef(false);
-  const stripRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const listAnchorRef = useRef<{ id: string; top: number } | null>(null);
+  const pendingListRevealRef = useRef<string | null>(null);
   const mapRef = useRef<HTMLElement>(null);
   const resultsRef = useRef<HTMLElement>(null);
   const previousCityRef = useRef(filters.city);
 
   const group = getExplorerGroup(filters.group);
   const matches = useMemo(() => filterExplorerPlaces(publicPlaces, filters, { nearbyActive, userLocation: location }), [publicPlaces, filters, nearbyActive, location]);
-  const specialties = useMemo(() => getExplorerSpecialties(publicPlaces, filters), [publicPlaces, filters]);
-  const totalInGroup = useMemo(() => filterExplorerPlaces(publicPlaces, { ...filters, category: "all" }).length, [publicPlaces, filters]);
-  const groupCounts = useMemo(() => new Map(explorerGroups.map((option) => [option.id, cityPlaces.filter((place) => matchesExplorerGroup(place, option.id)).length])), [cityPlaces]);
-  const areas = useMemo(() => getExplorerAreas(publicPlaces, filters), [publicPlaces, filters]);
+  const specialties = useMemo(() => getExplorerSpecialties(publicPlaces, { ...filters, group: "all", category: "all" }), [publicPlaces, filters]);
+  const categoryGroups = useMemo(() => explorerGroups.filter((option) => option.id !== "all").map((option) => ({
+    ...option,
+    specialties: specialties.filter((specialty) => cityPlaces.some((place) => place.category === specialty.category && matchesExplorerGroup(place, option.id))),
+  })), [specialties, cityPlaces]);
+  const recovery = useMemo(() => matches.length ? null : getExplorerRecovery(publicPlaces, filters, { nearbyActive, userLocation: location }), [matches.length, publicPlaces, filters, nearbyActive, location]);
+  const areas = useMemo(() => getExplorerAreas(publicPlaces, { ...filters, group: "all" }), [publicPlaces, filters]);
   const selectedPlace = matches.find((place) => place.id === selectedId) ?? null;
   const cityCenters = useMemo(() => getCityCenters(publicPlaces), [publicPlaces]);
-  const hasRefinements = filters.category !== "all" || filters.area !== "all" || filters.status !== "all" || filters.lovedOnly || !!filters.query;
   const filterKey = buildExplorerQuery(filters, "map");
   const hasCategory = filters.group !== "all" || filters.category !== "all";
   const categoryLabel = filters.category === "all" ? group.label : specialtyLabel(filters.category);
   const activeFilterCount = Number(hasCategory) + Number(filters.area !== "all") + Number(filters.lovedOnly || filters.status !== "all") + Number(!!filters.query) + Number(nearbyActive);
+  const resultLabel = `${matches.length} ${matches.length === 1 ? "place" : "places"}`;
+  const nearbyLabel = locationStatus === "locating" ? "Locating… ×" : "Nearby";
 
   function closeFilters() {
     setFiltersExpanded(false);
@@ -142,25 +158,16 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
     setSheet(null);
   }
   function selectPlace(id: string | null) {
+    pendingListRevealRef.current = id;
+    setRevealListNonce((current) => current + 1);
     setVisibleCount((count) => Math.max(count, matches.findIndex((place) => place.id === id) + 1));
     setSelectedId(id);
   }
-  function changeGroup(next: ExplorerGroup) {
-    updateFilters({ ...filters, group: next, category: "all", area: "all" });
+  function selectCategory(category: string, nextGroup: ExplorerGroup = "all") {
+    updateFilters({ ...filters, group: nextGroup, category });
     setSheet(null);
   }
-  function selectSpecialty(category: string) {
-    updateFilters({ ...filters, category });
-    setSheet(null);
-    if (isMobile) {
-      setFiltersExpanded(false);
-      focusView(view);
-    }
-  }
-  function clearFilters() {
-    updateFilters({ ...filters, group: groupCounts.get(filters.group) ? filters.group : "all", category: "all", area: "all", query: "", status: "all", lovedOnly: false });
-  }
-  function openSpecialties() { setSpecialtyQuery(""); setSheet("specialties"); }
+  function openCategories() { setSpecialtyQuery(""); setSheet("categories"); }
   function cancelNearby() {
     setCancelLocationNonce((current) => current + 1);
     setNearbyActive(false);
@@ -173,7 +180,10 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
     setRequestLocationNonce((current) => current + 1);
   }
   function selectFromList(id: string) {
-    selectPlace(selectedId === id ? null : id);
+    const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-place-id]") ?? []).find((element) => element.dataset.placeId === id);
+    listAnchorRef.current = row ? { id, top: row.getBoundingClientRect().top } : null;
+    pendingListRevealRef.current = null;
+    setSelectedId(selectedId === id ? null : id);
   }
   function showView(nextView: "map" | "list") {
     setFiltersExpanded(false);
@@ -204,32 +214,45 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
     if (!sharedCatalogue) return;
     let stopped = false;
     let pending = false;
+    let controller: AbortController | null = null;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
       if (document.visibilityState === "hidden" || pending) return;
       pending = true;
+      setRefreshing(true);
+      controller = new AbortController();
+      timeout = setTimeout(() => controller?.abort(), 20_000);
       try {
         const response = await fetch("/api/catalogue", {
           cache: "no-store",
-          signal: AbortSignal.timeout(20_000),
+          signal: controller.signal,
         });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error("Catalogue refresh failed");
         const payload = await response.json();
-        if (!stopped && Array.isArray(payload.places))
+        if (!Array.isArray(payload.places)) throw new Error("Invalid catalogue response");
+        if (!stopped) {
           setEditablePlaces(payload.places);
+          setRefreshFailed(false);
+        }
       } catch {
-        /* Retain the last published map during a transient connection failure. */
+        if (!stopped) setRefreshFailed(true);
       } finally {
+        clearTimeout(timeout);
         pending = false;
+        if (!stopped) setRefreshing(false);
       }
     };
+    if (retryRefreshNonce > 0) void refresh();
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       stopped = true;
+      controller?.abort();
+      clearTimeout(timeout);
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [sharedCatalogue]);
+  }, [sharedCatalogue, retryRefreshNonce]);
   useEffect(() => {
     if (previousCityRef.current !== filters.city && locationStatus === "locating") cancelNearby();
     previousCityRef.current = filters.city;
@@ -261,6 +284,7 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
   useEffect(() => {
     setVisibleCount(resultBatchSize);
     setEditingPlaceId(null);
+    setAllChipsExpanded(false);
   }, [filterKey]);
   useEffect(() => {
     if (!selectedId) return;
@@ -268,22 +292,48 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
     if (index < 0) setSelectedId(null);
     else setVisibleCount((current) => Math.max(current, index + 1));
   }, [matches, selectedId]);
-  const matchingSpecialties = specialties.filter((specialty) => normalizePlaceSearch([
-    specialty.label, ...getPlaceTypeAliases(specialty.category),
-  ].join(" ")).includes(normalizePlaceSearch(specialtyQuery.trim())));
+  const categoryQuery = normalizePlaceSearch(specialtyQuery.trim()).split(/\s+/).filter(Boolean);
+  const matchingGroups = categoryGroups.map((option) => ({ ...option, specialties: option.specialties.filter((specialty) => {
+    const text = normalizePlaceSearch([option.label, specialty.label, ...getPlaceTypeAliases(specialty.category)].join(" "));
+    return categoryQuery.every((word) => text.includes(word));
+  }) })).filter((option) => option.specialties.length);
 
-  useEffect(() => {
-    const strip = stripRef.current;
-    const selected = strip?.querySelector<HTMLElement>('[aria-pressed="true"]');
-    if (strip && selected) strip.scrollLeft = Math.max(0, selected.offsetLeft - strip.offsetLeft - 8);
-  }, [filters.group, filters.category]);
-  useEffect(() => {
-    if (!listRef.current) return;
+  useLayoutEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+    listAnchorRef.current = null;
+    pendingListRevealRef.current = null;
+  }, [filterKey, nearbyActive, location]);
+  useLayoutEffect(() => {
     const list = listRef.current;
-    const selected = Array.from(list.querySelectorAll<HTMLElement>("[data-place-id]")).find((element) => element.dataset.placeId === selectedId);
-    if (selected) list.scrollTop += selected.getBoundingClientRect().top - list.getBoundingClientRect().top;
-    else list.scrollTop = 0;
-  }, [filters, selectedId, view]);
+    if (!list || (isMobile && view !== "list")) return;
+    const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-place-id]"));
+    const anchor = listAnchorRef.current;
+    if (anchor) {
+      const row = rows.find((element) => element.dataset.placeId === anchor.id);
+      if (row) list.scrollTop += row.getBoundingClientRect().top - anchor.top;
+      listAnchorRef.current = null;
+      return;
+    }
+    const selected = rows.find((element) => element.dataset.placeId === pendingListRevealRef.current);
+    if (!selected) return;
+    const rowBounds = selected.getBoundingClientRect(), listBounds = list.getBoundingClientRect();
+    if (rowBounds.top < listBounds.top || rowBounds.height > listBounds.height) list.scrollTop += rowBounds.top - listBounds.top;
+    else if (rowBounds.bottom > listBounds.bottom) list.scrollTop += rowBounds.bottom - listBounds.bottom;
+    pendingListRevealRef.current = null;
+  }, [selectedId, view, isMobile, visibleCount, revealListNonce]);
+
+  const filterChips = [
+    ...(hasCategory ? [{ key: "category", label: categoryLabel, aria: `Clear ${categoryLabel} category filter`, clear: () => updateFilters({ ...filters, group: "all", category: "all" }) }] : []),
+    ...(filters.lovedOnly ? [{ key: "loved", label: "♡ Loved", aria: "Clear Loved filter", clear: () => updateFilters({ ...filters, lovedOnly: false }) }] : []),
+    ...(filters.status !== "all" ? [{ key: "status", label: "Want to go", aria: "Clear Want to go filter", clear: () => updateFilters({ ...filters, status: "all" }) }] : []),
+    ...(filters.area !== "all" ? [{ key: "area", label: filters.area, aria: `Clear ${filters.area} area filter`, clear: () => updateFilters({ ...filters, area: "all" }) }] : []),
+    ...(filters.query ? [{ key: "query", label: `“${filters.query}”`, aria: `Clear search: ${filters.query}`, clear: () => updateFilters({ ...filters, query: "" }) }] : []),
+  ];
+  const visibleChips = allChipsExpanded ? filterChips : filterChips.slice(0, 3);
+  const recoveryLabel = recovery ? ({ area: "Show all areas", query: "Remove search", loved: "Show all personal statuses", status: "Show all personal statuses", category: "Show all specialties", group: "Show all categories" }[recovery.kind]) : "Clear all";
+  const emptyTitle = recovery?.kind === "area" ? `No matching places in ${filters.area}` : "No matching places";
+  const emptyDescription = recovery ? "Broaden one filter and keep your other choices." : "Try another category or clear all filters to explore this city.";
+  const recoverResults = () => recovery ? updateFilters(recovery.filters) : resetFilters();
 
   return <main className={`${base.page} ${styles.preview}`} onKeyDown={(event) => {
     if (event.key === "Escape" && isMobile && filtersExpanded && !sheet && !event.defaultPrevented) { event.preventDefault(); closeFilters(); }
@@ -311,6 +361,7 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
     </header>
     <p className={base.srOnly} role="status" aria-live="polite" aria-atomic="true">{matches.length} {matches.length === 1 ? "place" : "places"}{nearbyActive && location ? " · nearest first" : ""}</p>
     {locationMessage ? <p className={`${styles.notice} ${styles.locationNotice}`} data-error={locationStatus === "error"} role="status">{locationMessage}</p> : null}
+    {refreshFailed ? <div className={styles.refreshNotice} role="status"><p><strong>Couldn’t refresh places.</strong> Showing your last loaded places.</p><button type="button" disabled={refreshing} onClick={() => setRetryRefreshNonce((current) => current + 1)}>{refreshing ? "Retrying…" : "Retry"}</button></div> : null}
     <div className={styles.workspace} data-view={view} data-filters-expanded={filtersExpanded}>
       <section id="explorer-filters" className={styles.filters} aria-label="Find a place">
         <label className={styles.search}><span aria-hidden="true">⌕</span><input ref={searchRef} aria-label="Search places, food, or areas" type="search" placeholder="Search places, food, or areas" value={filters.query} onChange={(event) => updateFilters({ ...filters, query: event.target.value }, "replace")} /></label>
@@ -320,38 +371,27 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
           <button type="button" aria-pressed={filters.status === "want_to_go"} onClick={() => updateFilters({ ...filters, ...toggleFieldGuideWantToGo(filters) })}>Want to go</button>
         </div>
         <div className={styles.selectors}>
-          <button type="button" aria-label={`Browse group: ${group.label}`} aria-haspopup="dialog" onClick={() => setSheet("groups")}><span>{group.label}</span><span aria-hidden="true">⌄</span></button>
+          <button type="button" aria-label={`Choose category: ${categoryLabel}`} aria-haspopup="dialog" onClick={openCategories}><span>{categoryLabel}</span><span aria-hidden="true">⌄</span></button>
           {areas.length ? <select aria-label="Area" value={filters.area} onChange={(event) => updateFilters({ ...filters, area: event.target.value })}><option value="all">All areas</option>{areas.map((area) => <option key={area}>{area}</option>)}</select> : null}
         </div>
-        <div className={styles.specialties}>
-          <div ref={stripRef} className={styles.strip} role="group" aria-label={`${group.label} specialties`}>
-            <button type="button" aria-pressed={filters.category === "all"} onClick={() => selectSpecialty("all")}>{filters.group === "food" ? "All food" : "All"} · {totalInGroup}</button>
-            {specialties.map((specialty) => <button key={specialty.category} type="button" aria-pressed={filters.category === specialty.category} onClick={() => selectSpecialty(specialty.category)}>{specialty.label} · {specialty.count}</button>)}
-          </div>
-          {specialties.length > 3 ? <button type="button" className={styles.more} aria-label="More specialties" aria-haspopup="dialog" onClick={openSpecialties}>More ⌄</button> : null}
-        </div>
         <div className={styles.filterFooter}>
-          <button type="button" onClick={resetFilters}>Reset</button>
-          <span>{matches.length} {matches.length === 1 ? "place" : "places"}</span>
-          <div role="group" aria-label="Switch view"><button type="button" onClick={() => showView(oppositeView)}>{oppositeViewLabel}</button></div>
+          <button type="button" onClick={resetFilters}>Clear all</button>
+          <button className={styles.showResults} type="button" onClick={() => { setFiltersExpanded(false); focusView(view); }}>Show {resultLabel}</button>
         </div>
       </section>
-      <div className={styles.toolbar}>
-        <span className={styles.resultCount}>{matches.length} {matches.length === 1 ? "place" : "places"}{nearbyActive && location ? " · nearest first" : ""}</span>
-        <div className={styles.activeFilters} role="group" aria-label="Active filters">
-          <button type="button" data-active={hasCategory} aria-label={hasCategory ? `Clear ${categoryLabel} category filter` : `All categories, ${matches.length} places. Open filters`} onClick={() => hasCategory ? updateFilters({ ...filters, group: "all", category: "all" }) : setFiltersExpanded(true)}>
-            {categoryLabel} · {matches.length}{hasCategory ? " ×" : ""}
-          </button>
-          {filters.lovedOnly ? <button type="button" data-active="true" aria-label="Clear Loved filter" onClick={() => updateFilters({ ...filters, lovedOnly: false })}>♡ Loved ×</button> : null}
-          {filters.status !== "all" ? <button type="button" data-active="true" aria-label="Clear Want to go filter" onClick={() => updateFilters({ ...filters, status: "all" })}>Want to go ×</button> : null}
-          {filters.area !== "all" ? <button type="button" data-active="true" aria-label={`Clear ${filters.area} area filter`} onClick={() => updateFilters({ ...filters, area: "all" })}>{filters.area} ×</button> : null}
-          {filters.query ? <button type="button" data-active="true" title={filters.query} aria-label={`Clear search: ${filters.query}`} onClick={() => updateFilters({ ...filters, query: "" })}>“{filters.query}” ×</button> : null}
-          {nearbyActive ? <button type="button" data-active="true" aria-label="Turn off Nearby" onClick={toggleNearby}>{locationStatus === "locating" ? "Locating…" : "Nearby"} ×</button> : null}
+      <div className={styles.toolbar} inert={isMobile && filtersExpanded}>
+        <div className={styles.resultSummary}>
+          <span className={styles.resultCount}>{resultLabel}{activeFilterCount ? <small> · {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"}</small> : null}{nearbyActive && location ? <small className={styles.sortLabel}>Nearest first</small> : null}</span>
+          {activeFilterCount ? <button className={styles.clear} type="button" onClick={resetFilters}>Clear all</button> : null}
+          <div className={styles.browseActions} role="group" aria-label="Browse places">
+            <button type="button" aria-pressed={nearbyActive} aria-label={locationStatus === "locating" ? "Cancel Nearby location request" : undefined} onClick={toggleNearby}>{nearbyLabel}</button>
+            <button type="button" onClick={() => showView(oppositeView)}>{oppositeViewLabel}</button>
+          </div>
         </div>
-        {hasRefinements ? <button className={styles.clear} type="button" onClick={clearFilters}>Clear</button> : null}
-        <div className={styles.viewSwitch} role="group" aria-label="Browse places">
-          <button type="button" onClick={() => showView(oppositeView)}>{oppositeViewLabel}</button>
-        </div>
+        {filterChips.length ? <div className={styles.activeFilters} role="group" aria-label="Active filters">
+          {visibleChips.map((chip) => <button key={chip.key} type="button" data-active="true" title={chip.label} aria-label={chip.aria} onClick={chip.clear}>{chip.label} ×</button>)}
+          {filterChips.length > 3 ? <button type="button" aria-expanded={allChipsExpanded} onClick={() => setAllChipsExpanded((current) => !current)}>{allChipsExpanded ? "Show fewer" : `+${filterChips.length - 3} more`}</button> : null}
+        </div> : null}
       </div>
       <section ref={mapRef} tabIndex={-1} className={styles.map} inert={isMobile && filtersExpanded} aria-label={`Map of ${filters.city}`}>
         <MapView places={matches} cityCenters={cityCenters} mapStyles={fieldGuideMapStyles} viewportCity={filters.city} followUserLocation={!previewCity && nearbyActive}
@@ -361,7 +401,7 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
           onSelectPlace={selectPlace} onClosePlace={() => setSelectedId(null)} onNearbyCityDetected={(city) => { if (!previewCity && cities.includes(city) && city !== filters.city) changeCity(city, true); }}
           onUserLocationFound={(point) => { setLocation(point); setNearbyActive(true); }} onLocationStatusChange={(status, message) => { setLocationStatus(status); setLocationMessage(status === "locating" ? "" : message); if (status === "error") setNearbyActive(false); }}
           showLocationMessage={false} showPlaceDetails={false} clusterMarkers />
-        {!matches.length ? <div className={styles.mapEmpty}><strong>No matching places</strong><button type="button" onClick={clearFilters}>Clear filters</button></div> : null}
+        {!matches.length ? <div className={styles.mapEmpty}><strong>{emptyTitle}</strong><button type="button" onClick={recoverResults}>{recoveryLabel}{recovery ? ` · ${recovery.count}` : ""}</button></div> : null}
         {selectedPlace ? <div ref={selectedCardRef} className={styles.selected}>
           <FieldGuidePlaceDetail
             place={selectedPlace}
@@ -369,7 +409,7 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
             distanceKm={location ? getDistanceKm(location, selectedPlace) : null}
             onClose={() => setSelectedId(null)}
           />
-        </div> : <div className={styles.legend}><span><i style={{ background: "#ef2b68" }} />Loved</span><span><i style={{ background: "#f59e0b" }} />Want to go</span><span><i style={{ background: "#48677f" }} />Been</span><span><i style={{ background: "#6f899e" }} />Saved</span></div>}
+        </div> : <div className={styles.legend}>{Object.entries(placeStatuses).map(([status, details]) => <span key={status} style={{ color: details.color }}><PlaceStatusIcon status={status as PlaceStatus} size={15} />{details.label}</span>)}</div>}
       </section>
       <section ref={resultsRef} className={styles.results} id="field-guide-results" tabIndex={-1} inert={isMobile && filtersExpanded} aria-label={`${filters.city} places`}>
         {isLocalhost && !sharedCatalogue && !previewCity && !isMobile ? <div className={styles.editToolbar}>
@@ -393,22 +433,24 @@ export function FieldGuideApp({ places, previewCity, sharedCatalogue = false }: 
                 setEditingPlaceId(null); setEditMessage(`Saved ${savedPlace.name}.`);
               }} /> : undefined} />)}
           {visibleCount < matches.length ? <button type="button" className={base.showMore} onClick={() => setVisibleCount((current) => current + resultBatchSize)}>Show {Math.min(resultBatchSize, matches.length - visibleCount)} more</button> : null}
-          {!matches.length ? <div className={styles.empty}><h2>No matching places</h2><p>Try another specialty, area, or search.</p><button type="button" onClick={clearFilters}>Clear filters</button></div> : null}
+          {!matches.length ? <div className={styles.empty}><h2>{emptyTitle}</h2><p>{emptyDescription}</p><button type="button" onClick={recoverResults}>{recoveryLabel}{recovery ? ` · ${recovery.count} ${recovery.count === 1 ? "place" : "places"}` : ""}</button><button className={styles.emptyAlternative} type="button" onClick={openCategories}>Choose another category</button></div> : null}
         </div>
       </section>
     </div>
-    {sheet === "groups" ? <ExplorerSheet title={`Explore ${filters.city}`} onClose={() => setSheet(null)}>
-      <p className={styles.sheetIntro}>Choose a group, then explore its specialties.</p>
-      <div className={styles.options}>{explorerGroups.map((option) => <button type="button" key={option.id} aria-pressed={filters.group === option.id} disabled={!groupCounts.get(option.id)} onClick={() => changeGroup(option.id)}><span>{option.label}</span><span>{groupCounts.get(option.id) || "No places yet"}</span></button>)}</div>
-      {previewCity ? <Link className={styles.mainLink} href={`/?city=${encodeURIComponent(previewCity)}`}>Return to the main guide ↗</Link> : null}
-    </ExplorerSheet> : null}
-    {sheet === "specialties" ? <ExplorerSheet title={`${group.label} specialties`} onClose={() => setSheet(null)}>
-      <input className={styles.sheetSearch} type="search" aria-label="Find a specialty" placeholder="Find a specialty" value={specialtyQuery} onChange={(event) => setSpecialtyQuery(event.target.value)} />
+    {sheet === "categories" ? <ExplorerSheet title="Choose a category" onClose={() => setSheet(null)}>
+      <input className={styles.sheetSearch} type="search" aria-label="Find a category" placeholder="Find a category" value={specialtyQuery} onChange={(event) => setSpecialtyQuery(event.target.value)} />
       <div className={styles.options}>
-        <button type="button" aria-pressed={filters.category === "all"} onClick={() => selectSpecialty("all")}><span>{group.id === "all" ? group.label : `All ${group.label.toLowerCase()}`}</span><span>{totalInGroup}</span></button>
-        {matchingSpecialties.map((specialty) => <button key={specialty.category} type="button" aria-pressed={filters.category === specialty.category} onClick={() => selectSpecialty(specialty.category)}><span>{specialty.label}</span><span>{specialty.count}</span></button>)}
-        {!matchingSpecialties.length ? <p className={styles.sheetIntro}>No specialties match that search.</p> : null}
+        <button type="button" aria-pressed={!hasCategory} onClick={() => selectCategory("all")}><span>All categories</span><span>{specialties.reduce((total, specialty) => total + specialty.count, 0)}</span></button>
       </div>
+      {matchingGroups.map((option) => <section className={styles.categoryGroup} key={option.id} aria-label={option.label}>
+        <h3>{option.label}</h3>
+        <div className={styles.options}>
+          {!specialtyQuery.trim() && option.specialties.length > 1 ? <button type="button" aria-pressed={filters.group === option.id && filters.category === "all"} onClick={() => selectCategory("all", option.id)}><span>All {option.label.toLowerCase()}</span><span>{option.specialties.reduce((total, specialty) => total + specialty.count, 0)}</span></button> : null}
+          {option.specialties.map((specialty) => <button key={specialty.category} type="button" aria-pressed={filters.category === specialty.category} onClick={() => selectCategory(specialty.category)}><span>{specialty.label}</span><span>{specialty.count}</span></button>)}
+        </div>
+      </section>)}
+      {!matchingGroups.length ? <p className={styles.sheetIntro}>No categories match that search.</p> : null}
+      {previewCity ? <Link className={styles.mainLink} href={`/?city=${encodeURIComponent(previewCity)}`}>Return to the main guide ↗</Link> : null}
     </ExplorerSheet> : null}
   </main>;
 }
